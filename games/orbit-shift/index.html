@@ -1965,6 +1965,8 @@
       if (!["playing", "paused", "dying", "respawning", "levelclear"].includes(state.mode)) return;
       state.mode = "gameover";
       stopMusic();
+      hideAllOverlays();
+      els.levelBanner.classList.remove("show");
       state.best = Math.max(state.best, Math.floor(state.score));
       storage.set("orbitShiftBest", state.best);
       els.best.textContent = state.best;
@@ -2351,7 +2353,7 @@
       meteorWhoosh();
     }
 
-    function recordMeteorResolved(meteor, reason = "dodged") {
+    function recordMeteorResolved(meteor, reason = "dodged", deferCompletion = false) {
       if (!isMeteorOnslaughtLevel() || !meteor || meteor.resolved) return false;
 
       // Fragment children are extra danger created by collisions, not extra
@@ -2372,7 +2374,7 @@
 
       updateCampaignHud();
 
-      if (state.levelPasses >= state.gatesToClear && state.mode === "playing") {
+      if (!deferCompletion && state.levelPasses >= state.gatesToClear && state.mode === "playing") {
         completeLevel();
         return true;
       }
@@ -2424,6 +2426,12 @@
       spawnMeteorFragment(a,  .42);
       spawnMeteorFragment(b, -.42);
       spawnMeteorFragment(b,  .42);
+
+      // Both original meteors still belong to the stage quota. Resolve them as
+      // one batch so a collision cannot leave meteorSpawned ahead of
+      // levelPasses, while fragment children remain bonus hazards only.
+      recordMeteorResolved(a, "collision", true);
+      recordMeteorResolved(b, "collision");
 
       state.flash = Math.max(state.flash, .35);
       state.shake = state.reducedMotion ? 0 : Math.max(state.shake, 6);
@@ -3733,6 +3741,8 @@
     }
 
     function handlePrimaryInput(event) {
+      // Gameplay taps must never consume controls from pause or other overlays.
+      if (state.mode !== "playing") return;
       const target = event.target;
       if (target && (target.tagName === "BUTTON" || target.closest?.("button"))) return;
       reverse();
