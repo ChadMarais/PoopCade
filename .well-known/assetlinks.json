@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.twoplay.poopcade",
+      "sha256_cert_fingerprints": [
+        "A9:DB:4A:6D:22:0D:D8:09:7A:CD:7F:21:8E:D7:FB:F0:6D:E8:2A:B9:D6:4C:AB:6F:9C:42:E5:3E:FF:34:16:F7"
+      ]
+    }
+  }
+]
