@@ -651,6 +651,34 @@
       text-transform: uppercase;
     }
 
+    .menu-nav {
+      margin-bottom: 12px;
+      text-align: left;
+    }
+
+    .hub-link {
+      display: inline-flex;
+      min-height: 38px;
+      align-items: center;
+      padding: 0 11px;
+      border: 1px solid rgba(255,255,255,.1);
+      border-radius: 11px;
+      color: var(--muted);
+      background: rgba(255,255,255,.025);
+      font-size: 11px;
+      font-weight: 850;
+      letter-spacing: .08em;
+      text-decoration: none;
+      text-transform: uppercase;
+      transition: color .15s ease, border-color .15s ease, background .15s ease;
+    }
+
+    .hub-link:hover {
+      border-color: rgba(88,231,255,.3);
+      color: var(--cyan);
+      background: rgba(88,231,255,.05);
+    }
+
     h1 {
       margin: 0;
       font-size: clamp(42px, 10vw, 76px);
@@ -729,6 +757,13 @@
       color: white;
       background: rgba(255,255,255,.04);
       cursor: pointer;
+    }
+
+    .secondary-link {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-decoration: none;
     }
 
     .stats {
@@ -866,6 +901,7 @@
 
   <div class="overlay" id="startOverlay">
     <div class="panel">
+      <div class="menu-nav"><a class="hub-link" href="/">← Poopcade</a></div>
       <div class="eyebrow">One-button campaign</div>
       <h1>ORBIT<br>//SHIFT</h1>
       <p class="subtitle">
@@ -944,8 +980,9 @@
         <span id="scoreSaveMessage">Sign in to save your score.</span>
         <a id="scoreSaveLink" href="/account/" hidden>Sign in</a>
       </div>
-      <button class="primary" id="retryBtn">RESTART CAMPAIGN</button>
+      <button class="primary" id="retryBtn">PLAY AGAIN</button>
       <button class="secondary" id="menuBtn">MAIN MENU</button>
+      <a class="secondary secondary-link" href="/leaderboard/orbit-shift/">LEADERBOARD</a>
     </div>
   </div>
 
@@ -1857,8 +1894,62 @@
     function showMenu() {
       state.mode = "menu";
       stopMusic();
+      if (state.respawnTimer) clearTimeout(state.respawnTimer);
+      if (state.levelBannerTimer) clearTimeout(state.levelBannerTimer);
+      if (state.styleBannerTimer) clearTimeout(state.styleBannerTimer);
+      if (state.toastTimer) clearTimeout(state.toastTimer);
+      state.respawnTimer = null;
+      state.levelBannerTimer = null;
+      state.styleBannerTimer = null;
+      state.toastTimer = null;
+      state.playerAngle = -Math.PI / 2;
+      state.playerDirection = 1;
+      state.playerSpeed = 2.55;
+      state.score = 0;
+      state.level = 1;
+      state.lives = 1;
+      state.levelPasses = 0;
+      state.gatesToClear = levelObjective(1);
+      state.combo = 1;
+      state.bestCombo = 1;
+      state.passes = 0;
+      state.elapsed = 0;
+      state.runElapsed = 0;
+      state.spawnTimer = .55;
+      state.nextSpawn = .55;
+      state.walls = [];
+      state.particles = [];
+      state.sparks = [];
+      state.powerups = [];
+      state.meteors = [];
+      state.meteorSpawned = 0;
+      state.meteorSpawnTimer = 0;
+      state.bombPulse = 0;
+      state.activePowerups = { shield: 0, phase: 0, slow: 0, double: 0, wide: 0 };
+      state.gateBoostStacks = 0;
+      state.gateBoostScale = 1;
+      state.invulnerable = 0;
+      state.shake = 0;
+      state.flash = 0;
+      state.breakShown = false;
+      state.lastReverseAt = performance.now();
+      state.reversePulse = 0;
+      state.styleOrbitProgress = 0;
+      state.styleCount = 0;
+      state.stylePulse = 0;
+      state.clientRunId = null;
+      state.submissionStarted = true;
+      els.scoreSaveStatus.hidden = true;
+      els.scoreSaveStatus.dataset.state = "idle";
+      els.scoreSaveMessage.textContent = "Sign in to save your score.";
+      els.scoreSaveLink.hidden = true;
+      els.styleBanner.classList.remove("show");
+      els.toast.classList.remove("show");
       hideAllOverlays();
       els.levelBanner.classList.remove("show");
+      updateHud();
+      updateCampaignHud();
+      updatePowerHud();
       els.startOverlay.classList.remove("hidden");
     }
 
@@ -1905,33 +1996,37 @@
         styleBonuses: state.styleCount,
         durationMs: Math.max(1, Math.round(state.runElapsed * 1000))
       };
+      const showSubmissionResult = (message, status = "idle", showSignIn = false) => {
+        if (state.mode !== "gameover" || state.clientRunId !== submission.clientRunId) return;
+        setScoreSaveStatus(message, status, showSignIn);
+      };
 
       const api = window.PoopcadeAPI;
       if (!api || !submission.clientRunId) {
-        setScoreSaveStatus("Score couldn't be saved.", "error");
+        showSubmissionResult("Score couldn't be saved.", "error");
         return;
       }
 
       try {
         const user = await api.getCurrentUser();
         if (!user) {
-          setScoreSaveStatus("Sign in to save your score.", "idle", true);
+          showSubmissionResult("Sign in to save your score.", "idle", true);
           return;
         }
 
-        setScoreSaveStatus("Saving score…");
+        showSubmissionResult("Saving score…");
         const result = await api.submitOrbitShiftRun(submission);
         if (result?.skipped) {
-          setScoreSaveStatus("Sign in to save your score.", "idle", true);
+          showSubmissionResult("Sign in to save your score.", "idle", true);
         } else if (result?.accepted && result.newPersonalBest) {
-          setScoreSaveStatus(`NEW PERSONAL BEST · ${Number(result.personalBest).toLocaleString()}`, "best");
+          showSubmissionResult(`NEW PERSONAL BEST · ${Number(result.personalBest).toLocaleString()}`, "best");
         } else if (result?.accepted) {
-          setScoreSaveStatus(`Score saved · Best ${Number(result.personalBest).toLocaleString()}`, "saved");
+          showSubmissionResult(`Score saved · Best ${Number(result.personalBest).toLocaleString()}`, "saved");
         } else {
-          setScoreSaveStatus("Score couldn't be saved.", "error");
+          showSubmissionResult("Score couldn't be saved.", "error");
         }
       } catch {
-        setScoreSaveStatus("Score couldn't be saved.", "error");
+        showSubmissionResult("Score couldn't be saved.", "error");
       }
     }
 
