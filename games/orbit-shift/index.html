@@ -1,0 +1,3683 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#070713" />
+  <title>ORBIT//SHIFT — Time Warp Meteors</title>
+  <style>
+    :root {
+      --bg: #070713;
+      --panel: rgba(14, 15, 35, 0.78);
+      --text: #f7f8ff;
+      --muted: #a7abc8;
+      --cyan: #58e7ff;
+      --pink: #ff4fd8;
+      --violet: #8b6cff;
+      --gold: #ffd166;
+      --danger: #ff4f6d;
+      --good: #6ef7b1;
+    }
+
+    * { box-sizing: border-box; }
+    html, body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at 50% 44%, rgba(84, 62, 180, .18), transparent 36%),
+        radial-gradient(circle at 15% 15%, rgba(32, 201, 255, .10), transparent 28%),
+        linear-gradient(180deg, #09091a, var(--bg));
+      color: var(--text);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      touch-action: manipulation;
+      user-select: none;
+    }
+
+    button, input { font: inherit; }
+
+    #game {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+    }
+
+    .grain {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      opacity: .10;
+      mix-blend-mode: soft-light;
+      background-image:
+        repeating-radial-gradient(circle at 0 0, transparent 0, rgba(255,255,255,.18) 1px, transparent 2px);
+      background-size: 7px 7px;
+    }
+
+    .hud {
+      position: fixed;
+      z-index: 3;
+      top: max(16px, env(safe-area-inset-top));
+      left: max(16px, env(safe-area-inset-left));
+      right: max(16px, env(safe-area-inset-right));
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      gap: 14px;
+      align-items: start;
+      pointer-events: none;
+    }
+
+    .hud-card {
+      min-width: 110px;
+      padding: 10px 13px;
+      border: 1px solid rgba(255,255,255,.10);
+      border-radius: 16px;
+      background: rgba(10, 10, 26, .50);
+      backdrop-filter: blur(12px);
+      box-shadow: 0 12px 36px rgba(0,0,0,.16);
+    }
+
+    .hud-card.right { justify-self: end; text-align: right; }
+
+    .label {
+      color: var(--muted);
+      font-size: 11px;
+      letter-spacing: .16em;
+      text-transform: uppercase;
+    }
+
+    .value {
+      margin-top: 2px;
+      font-size: clamp(20px, 4vw, 31px);
+      font-weight: 900;
+      line-height: 1;
+      letter-spacing: -.04em;
+      text-shadow: 0 0 18px rgba(88,231,255,.24);
+    }
+
+    .combo {
+      justify-self: center;
+      text-align: center;
+      transform-origin: top center;
+      transition: transform .14s ease;
+    }
+
+    .combo.pop { transform: scale(1.14); }
+
+    .combo .value {
+      color: var(--gold);
+      text-shadow: 0 0 20px rgba(255, 209, 102, .34);
+    }
+
+    .session {
+      position: fixed;
+      z-index: 3;
+      left: max(16px, env(safe-area-inset-left));
+      bottom: max(14px, env(safe-area-inset-bottom));
+      color: rgba(255,255,255,.48);
+      font-size: 12px;
+      pointer-events: none;
+    }
+
+    .power-hud {
+      position: fixed;
+      z-index: 4;
+      top: max(91px, calc(env(safe-area-inset-top) + 78px));
+      left: 50%;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 7px;
+      width: min(92vw, 560px);
+      transform: translateX(-50%);
+      pointer-events: none;
+    }
+
+    .power-chip {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      min-height: 30px;
+      padding: 6px 10px;
+      border: 1px solid rgba(255,255,255,.14);
+      border-radius: 999px;
+      background: rgba(10, 10, 27, .76);
+      box-shadow: 0 8px 24px rgba(0,0,0,.24);
+      backdrop-filter: blur(12px);
+      color: white;
+      font-size: 11px;
+      font-weight: 850;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+    }
+
+    .power-chip i {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: var(--power-color);
+      box-shadow: 0 0 13px var(--power-color);
+    }
+
+    .power-chip b {
+      color: var(--power-color);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .campaign-hud {
+      position: fixed;
+      z-index: 4;
+      top: max(91px, calc(env(safe-area-inset-top) + 78px));
+      left: max(16px, env(safe-area-inset-left));
+      width: min(238px, 42vw);
+      padding: 9px 11px 10px;
+      border: 1px solid rgba(255,255,255,.12);
+      border-radius: 15px;
+      background: rgba(9, 10, 27, .72);
+      box-shadow: 0 10px 30px rgba(0,0,0,.24);
+      backdrop-filter: blur(12px);
+      pointer-events: none;
+    }
+
+    .campaign-row {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .campaign-level {
+      color: var(--level-accent, var(--cyan));
+      font-size: 12px;
+      font-weight: 950;
+      letter-spacing: .09em;
+      text-transform: uppercase;
+    }
+
+    .campaign-lives {
+      color: white;
+      font-size: 12px;
+      font-weight: 900;
+      letter-spacing: .05em;
+    }
+
+    .campaign-name {
+      margin-top: 3px;
+      overflow: hidden;
+      color: rgba(255,255,255,.62);
+      font-size: 10px;
+      letter-spacing: .08em;
+      text-overflow: ellipsis;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+
+    .level-track {
+      height: 5px;
+      margin-top: 8px;
+      overflow: hidden;
+      border-radius: 999px;
+      background: rgba(255,255,255,.09);
+    }
+
+    .level-fill {
+      height: 100%;
+      width: 0%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, var(--level-accent, var(--cyan)), var(--level-secondary, var(--pink)));
+      box-shadow: 0 0 12px var(--level-accent, var(--cyan));
+      transition: width .22s ease;
+    }
+
+    .level-banner {
+      position: fixed;
+      z-index: 7;
+      left: 50%;
+      top: 50%;
+      width: min(88vw, 520px);
+      padding: 20px 24px;
+      border: 1px solid rgba(255,255,255,.16);
+      border-radius: 22px;
+      background: rgba(7, 8, 23, .88);
+      box-shadow: 0 30px 90px rgba(0,0,0,.52);
+      backdrop-filter: blur(15px);
+      text-align: center;
+      transform: translate(-50%, -45%) scale(.92);
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+      transition: opacity .22s ease, transform .22s ease, visibility .22s ease;
+    }
+
+    .level-banner.show {
+      opacity: 1;
+      visibility: visible;
+      transform: translate(-50%, -50%) scale(1);
+      pointer-events: auto;
+      cursor: pointer;
+    }
+
+    .level-banner small {
+      color: var(--level-accent, var(--cyan));
+      font-size: 11px;
+      font-weight: 900;
+      letter-spacing: .22em;
+      text-transform: uppercase;
+    }
+
+    .level-banner strong {
+      display: block;
+      margin-top: 7px;
+      font-size: clamp(28px, 7vw, 47px);
+      letter-spacing: -.045em;
+    }
+
+    .level-banner span {
+      display: block;
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .level-start-btn {
+      width: 100%;
+      min-height: 44px;
+      margin-top: 15px;
+      border: 1px solid color-mix(in srgb, var(--level-accent, var(--cyan)) 62%, white 8%);
+      border-radius: 13px;
+      color: white;
+      background: color-mix(in srgb, var(--level-accent, var(--cyan)) 15%, rgba(10,10,29,.88));
+      font-size: 12px;
+      font-weight: 950;
+      letter-spacing: .13em;
+      text-transform: uppercase;
+      cursor: pointer;
+    }
+
+    .level-start-btn:active {
+      transform: scale(.985);
+    }
+
+    @media (max-width: 420px) {
+      .level-banner {
+        top: 47%;
+        width: min(82vw, 300px);
+        padding: 14px 16px;
+        border-radius: 18px;
+      }
+
+      .level-banner strong {
+        margin-top: 5px;
+        font-size: clamp(24px, 8vw, 34px);
+      }
+
+      .level-banner span {
+        font-size: 11px;
+        line-height: 1.35;
+      }
+
+      .level-start-btn {
+        min-height: 42px;
+        margin-top: 11px;
+        font-size: 11px;
+      }
+    }
+
+    .difficulty-wrap {
+      margin: 20px 0 14px;
+      text-align: left;
+    }
+
+    .difficulty-title {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 12px;
+      margin-bottom: 8px;
+    }
+
+    .difficulty-title strong {
+      font-size: 12px;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+    }
+
+    .difficulty-title span {
+      color: var(--muted);
+      font-size: 10px;
+    }
+
+    .difficulty-picker {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 7px;
+    }
+
+    .difficulty-btn {
+      min-height: 53px;
+      padding: 8px 7px;
+      border: 1px solid rgba(255,255,255,.10);
+      border-radius: 13px;
+      color: white;
+      background: rgba(255,255,255,.035);
+      cursor: pointer;
+      transition: transform .14s ease, border-color .14s ease, background .14s ease;
+    }
+
+    .difficulty-btn:hover {
+      transform: translateY(-1px);
+      border-color: rgba(255,255,255,.22);
+    }
+
+    .difficulty-btn.active {
+      border-color: var(--level-accent, var(--cyan));
+      background: color-mix(in srgb, var(--level-accent, var(--cyan)) 14%, rgba(255,255,255,.035));
+      box-shadow: inset 0 0 18px color-mix(in srgb, var(--level-accent, var(--cyan)) 10%, transparent);
+    }
+
+    .difficulty-btn strong {
+      display: block;
+      font-size: 12px;
+      letter-spacing: .07em;
+      text-transform: uppercase;
+    }
+
+    .difficulty-btn span {
+      display: block;
+      margin-top: 3px;
+      color: var(--muted);
+      font-size: 9px;
+      line-height: 1.2;
+    }
+
+    .difficulty-btn.active span { color: rgba(255,255,255,.78); }
+
+    .start-level-wrap {
+      margin: 12px 0 16px;
+      text-align: left;
+    }
+
+    .start-level-control {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .start-level-control input {
+      width: 100%;
+      min-height: 46px;
+      padding: 0 14px;
+      border: 1px solid rgba(255,255,255,.11);
+      border-radius: 13px;
+      outline: none;
+      color: white;
+      background: rgba(255,255,255,.045);
+      font: inherit;
+      font-weight: 900;
+    }
+
+    .start-level-control input:focus {
+      border-color: var(--level-accent, var(--cyan));
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--level-accent, var(--cyan)) 12%, transparent);
+    }
+
+    .start-level-note {
+      min-width: 116px;
+      color: var(--muted);
+      font-size: 10px;
+      line-height: 1.3;
+    }
+
+    .difficulty-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      margin-left: 6px;
+      padding: 2px 6px;
+      border: 1px solid color-mix(in srgb, var(--level-accent, var(--cyan)) 45%, transparent);
+      border-radius: 999px;
+      color: var(--level-accent, var(--cyan));
+      background: color-mix(in srgb, var(--level-accent, var(--cyan)) 9%, transparent);
+      font-size: 9px;
+      font-weight: 900;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      vertical-align: middle;
+    }
+
+    .style-banner {
+      position: fixed;
+      z-index: 8;
+      left: 50%;
+      top: 34%;
+      width: min(88vw, 540px);
+      text-align: center;
+      transform: translate(-50%, -50%) scale(.68) rotate(-3deg);
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+    }
+
+    .style-banner.show {
+      visibility: visible;
+      animation: styleBurst .9s cubic-bezier(.16,.85,.24,1) both;
+    }
+
+    .style-banner small {
+      display: block;
+      color: rgba(255,255,255,.72);
+      font-size: 11px;
+      font-weight: 950;
+      letter-spacing: .32em;
+      text-transform: uppercase;
+    }
+
+    .style-banner strong {
+      display: block;
+      margin-top: 2px;
+      color: var(--level-accent, var(--cyan));
+      font-size: clamp(38px, 10vw, 78px);
+      font-style: italic;
+      font-weight: 1000;
+      letter-spacing: -.065em;
+      line-height: .92;
+      text-shadow:
+        0 0 8px rgba(255,255,255,.55),
+        0 0 22px var(--level-accent, var(--cyan)),
+        5px 6px 0 color-mix(in srgb, var(--level-secondary, var(--pink)) 65%, transparent);
+    }
+
+    .style-banner span {
+      display: inline-block;
+      margin-top: 10px;
+      padding: 5px 10px;
+      border: 1px solid rgba(255,255,255,.17);
+      border-radius: 999px;
+      color: white;
+      background: rgba(6,7,19,.72);
+      backdrop-filter: blur(8px);
+      font-size: 11px;
+      font-weight: 950;
+      letter-spacing: .08em;
+    }
+
+    @keyframes styleBurst {
+      0% { opacity: 0; transform: translate(-50%, -50%) scale(.55) rotate(-8deg); filter: blur(6px); }
+      22% { opacity: 1; transform: translate(-50%, -50%) scale(1.16) rotate(2deg); filter: blur(0); }
+      48% { opacity: 1; transform: translate(-50%, -50%) scale(.98) rotate(-1deg); }
+      76% { opacity: 1; transform: translate(-50%, -50%) scale(1.02) rotate(0deg); }
+      100% { opacity: 0; transform: translate(-50%, -58%) scale(.92) rotate(0deg); }
+    }
+
+    .power-guide {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
+      margin: 18px 0 20px;
+      text-align: left;
+    }
+
+    .power-guide-item {
+      display: grid;
+      grid-template-columns: 34px 1fr;
+      gap: 9px;
+      align-items: center;
+      min-height: 58px;
+      padding: 9px;
+      border: 1px solid rgba(255,255,255,.09);
+      border-radius: 14px;
+      background: rgba(255,255,255,.035);
+    }
+
+    .power-guide-icon {
+      display: grid;
+      place-items: center;
+      width: 34px;
+      height: 34px;
+      border: 1px solid var(--power-color);
+      border-radius: 11px;
+      color: var(--power-color);
+      background: rgba(8,9,25,.75);
+      box-shadow: inset 0 0 13px color-mix(in srgb, var(--power-color) 18%, transparent);
+      font-weight: 950;
+    }
+
+    .power-guide-item strong {
+      display: block;
+      font-size: 11px;
+      letter-spacing: .05em;
+      text-transform: uppercase;
+    }
+
+    .power-guide-item span {
+      display: block;
+      margin-top: 2px;
+      color: var(--muted);
+      font-size: 10px;
+      line-height: 1.25;
+    }
+
+    .toast {
+      position: fixed;
+      z-index: 4;
+      left: 50%;
+      top: 23%;
+      max-width: min(88vw, 460px);
+      padding: 10px 16px;
+      border: 1px solid rgba(255,255,255,.14);
+      border-radius: 999px;
+      background: rgba(8, 9, 25, .82);
+      box-shadow: 0 18px 50px rgba(0,0,0,.34);
+      color: white;
+      font-size: 13px;
+      font-weight: 900;
+      letter-spacing: .08em;
+      text-align: center;
+      text-transform: uppercase;
+      transform: translate(-50%, -8px) scale(.96);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .18s ease, transform .18s ease;
+    }
+
+    .toast.show {
+      opacity: 1;
+      transform: translate(-50%, 0) scale(1);
+    }
+
+    .top-actions {
+      position: fixed;
+      z-index: 6;
+      right: max(16px, env(safe-area-inset-right));
+      bottom: max(14px, env(safe-area-inset-bottom));
+      display: flex;
+      gap: 9px;
+    }
+
+    .icon-btn {
+      width: 44px;
+      height: 44px;
+      border: 1px solid rgba(255,255,255,.11);
+      border-radius: 14px;
+      color: white;
+      background: rgba(13,14,34,.68);
+      backdrop-filter: blur(12px);
+      cursor: pointer;
+      transition: transform .15s ease, background .15s ease;
+    }
+
+    .icon-btn:hover { transform: translateY(-2px); background: rgba(28,29,57,.84); }
+    .icon-btn:active { transform: translateY(0) scale(.96); }
+
+    .overlay {
+      position: fixed;
+      z-index: 5;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      background: rgba(4, 4, 14, .44);
+      backdrop-filter: blur(8px);
+      transition: opacity .22s ease, visibility .22s ease;
+    }
+
+    .overlay.hidden {
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+    }
+
+    .panel {
+      width: min(520px, 100%);
+      padding: clamp(24px, 5vw, 42px);
+      border: 1px solid rgba(255,255,255,.12);
+      border-radius: 28px;
+      background:
+        linear-gradient(180deg, rgba(29, 28, 64, .92), rgba(10, 10, 29, .94));
+      box-shadow:
+        0 40px 120px rgba(0,0,0,.56),
+        inset 0 1px 0 rgba(255,255,255,.08);
+      text-align: center;
+    }
+
+    .eyebrow {
+      margin-bottom: 12px;
+      color: var(--cyan);
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: .22em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(42px, 10vw, 76px);
+      line-height: .88;
+      letter-spacing: -.07em;
+      font-weight: 1000;
+      background: linear-gradient(135deg, #fff 12%, var(--cyan) 52%, var(--pink));
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      filter: drop-shadow(0 0 22px rgba(88,231,255,.14));
+    }
+
+    h2 {
+      margin: 0 0 8px;
+      font-size: clamp(28px, 6vw, 42px);
+      letter-spacing: -.045em;
+    }
+
+    .subtitle {
+      margin: 20px auto 0;
+      max-width: 390px;
+      color: var(--muted);
+      line-height: 1.55;
+      font-size: 15px;
+    }
+
+    .controls {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 9px;
+      margin: 25px 0;
+    }
+
+    .control {
+      padding: 13px 8px;
+      border: 1px solid rgba(255,255,255,.09);
+      border-radius: 15px;
+      background: rgba(255,255,255,.035);
+    }
+
+    .control strong {
+      display: block;
+      margin-bottom: 4px;
+      font-size: 14px;
+    }
+
+    .control span {
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .primary {
+      width: 100%;
+      min-height: 54px;
+      border: 0;
+      border-radius: 17px;
+      cursor: pointer;
+      color: #0a0a18;
+      font-weight: 950;
+      letter-spacing: .03em;
+      background: linear-gradient(135deg, var(--cyan), #a5f3ff 46%, var(--pink));
+      box-shadow: 0 14px 34px rgba(88,231,255,.18);
+      transition: transform .15s ease, filter .15s ease;
+    }
+
+    .primary:hover { transform: translateY(-2px); filter: brightness(1.07); }
+    .primary:active { transform: scale(.985); }
+
+    .secondary {
+      margin-top: 10px;
+      width: 100%;
+      min-height: 46px;
+      border: 1px solid rgba(255,255,255,.11);
+      border-radius: 15px;
+      color: white;
+      background: rgba(255,255,255,.04);
+      cursor: pointer;
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 9px;
+      margin: 20px 0;
+    }
+
+    .stat {
+      padding: 13px 8px;
+      border: 1px solid rgba(255,255,255,.08);
+      border-radius: 15px;
+      background: rgba(255,255,255,.03);
+    }
+
+    .stat b { display: block; font-size: 23px; }
+    .stat small { color: var(--muted); }
+
+    .hint {
+      margin-top: 13px;
+      color: rgba(255,255,255,.46);
+      font-size: 11px;
+    }
+
+    .break-text {
+      color: var(--muted);
+      line-height: 1.55;
+    }
+
+    #startOverlay { overflow-y: auto; }
+    #startOverlay .panel { margin: auto 0; }
+
+    @media (max-width: 520px) {
+      .hud { grid-template-columns: 1fr auto 1fr; gap: 6px; }
+      .hud-card { min-width: 88px; padding: 9px 10px; }
+      .label { font-size: 9px; }
+      .controls { gap: 6px; }
+      .panel { border-radius: 24px; padding: 24px 20px; }
+      .control { padding: 11px 5px; }
+      .power-hud {
+        top: max(131px, calc(env(safe-area-inset-top) + 120px));
+        width: 94vw;
+      }
+      .power-chip { padding: 5px 8px; font-size: 9px; }
+      .campaign-hud {
+        top: max(77px, calc(env(safe-area-inset-top) + 66px));
+        left: 50%;
+        width: min(88vw, 310px);
+        transform: translateX(-50%);
+      }
+      .power-guide { grid-template-columns: 1fr; max-height: none; overflow: visible; }
+      #startOverlay .power-guide { grid-template-columns: repeat(2, 1fr); }
+      #startOverlay .power-guide-item { grid-template-columns: 28px 1fr; gap: 6px; padding: 7px; }
+      #startOverlay .power-guide-icon { width: 28px; height: 28px; }
+      .stats { grid-template-columns: repeat(2, 1fr); }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; }
+    }
+  </style>
+</head>
+<body>
+  <canvas id="game" aria-label="Orbit Shift game"></canvas>
+  <div class="grain"></div>
+
+  <div class="hud" id="hud">
+    <div class="hud-card">
+      <div class="label">Score</div>
+      <div class="value" id="score">0</div>
+    </div>
+    <div class="hud-card combo" id="comboCard">
+      <div class="label">Flow</div>
+      <div class="value" id="combo">x1</div>
+    </div>
+    <div class="hud-card right">
+      <div class="label">Best</div>
+      <div class="value" id="best">0</div>
+    </div>
+  </div>
+
+  <div class="campaign-hud" aria-live="polite">
+    <div class="campaign-row">
+      <div class="campaign-level">Level <span id="level">1</span></div>
+      <div class="campaign-lives">Lives <span id="lives">◆</span></div>
+    </div>
+    <div class="campaign-name"><span id="levelName">Neon Genesis</span><span class="difficulty-badge" id="difficultyBadge">Medium · ×1.00</span></div>
+    <div class="level-track" aria-label="Level progress">
+      <div class="level-fill" id="levelProgress"></div>
+    </div>
+  </div>
+
+  <div class="power-hud" id="powerHud" aria-live="polite"></div>
+  <div class="toast" id="toast" aria-live="polite"></div>
+  <div class="level-banner" id="levelBanner" aria-live="polite" role="dialog" aria-modal="true">
+    <small id="levelBannerEyebrow">Level 1</small>
+    <strong id="levelBannerTitle">Neon Genesis</strong>
+    <span id="levelBannerText">Clear the gates. Hold the orbit.</span>
+    <button class="level-start-btn" id="levelStartBtn" type="button">TAP TO START</button>
+  </div>
+  <div class="style-banner" id="styleBanner" aria-live="polite">
+    <small>Full orbit</small>
+    <strong>STYLE +</strong>
+    <span id="styleBannerPoints">+250</span>
+  </div>
+  <div class="session" id="session">Session 00:00</div>
+
+  <div class="top-actions">
+    <button class="icon-btn" id="soundBtn" title="Toggle sound" aria-label="Toggle sound">🔊</button>
+    <button class="icon-btn" id="pauseBtn" title="Pause" aria-label="Pause">Ⅱ</button>
+  </div>
+
+  <div class="overlay" id="startOverlay">
+    <div class="panel">
+      <div class="eyebrow">One-button campaign</div>
+      <h1>ORBIT<br>//SHIFT</h1>
+      <p class="subtitle">
+        Thread the moving gaps. Reverse direction at the perfect moment.
+        Chain near-misses, grab wild power-ups, and ride the escalating synthwave storm.
+      </p>
+      <div class="controls">
+        <div class="control"><strong>Tap</strong><span>Reverse orbit</span></div>
+        <div class="control"><strong>Clear</strong><span>Earn +1 life</span></div>
+        <div class="control"><strong>P</strong><span>Pause safely</span></div>
+      </div>
+      <div class="difficulty-wrap">
+        <div class="difficulty-title">
+          <strong>Difficulty</strong>
+          <span>Higher risk = higher score</span>
+        </div>
+        <div class="difficulty-picker" role="group" aria-label="Difficulty">
+          <button class="difficulty-btn" type="button" data-difficulty="easy">
+            <strong>Easy</strong><span>More space · ×0.80 score</span>
+          </button>
+          <button class="difficulty-btn active" type="button" data-difficulty="medium" aria-pressed="true">
+            <strong>Medium</strong><span>Core balance · ×1.00 score</span>
+          </button>
+          <button class="difficulty-btn" type="button" data-difficulty="hard">
+            <strong>Hard</strong><span>Tighter & faster · ×1.35 score</span>
+          </button>
+        </div>
+      </div>
+      <div class="start-level-wrap">
+        <div class="difficulty-title">
+          <strong>Start at level</strong>
+          <span>Testing / practice</span>
+        </div>
+        <div class="start-level-control">
+          <input id="startLevelInput" type="number" min="1" max="99" step="1" value="1" inputmode="numeric" aria-label="Start at level">
+          <span class="start-level-note">Try 7 for meteor onslaught · 8+ for mixed hazards</span>
+        </div>
+      </div>
+      <div class="power-guide" aria-label="Power-up guide">
+        <div class="power-guide-item" style="--power-color:#6ef7b1">
+          <div class="power-guide-icon">◇</div><div><strong>Shield</strong><span>Blocks one hit. Stack up to three.</span></div>
+        </div>
+        <div class="power-guide-item" style="--power-color:#c38cff">
+          <div class="power-guide-icon">✦</div><div><strong>Phase</strong><span>Pass safely through gates and meteors.</span></div>
+        </div>
+        <div class="power-guide-item" style="--power-color:#58e7ff">
+          <div class="power-guide-icon">◷</div><div><strong>Time Warp</strong><span>Slows gates, meteors and fragments.</span></div>
+        </div>
+        <div class="power-guide-item" style="--power-color:#ffd166">
+          <div class="power-guide-icon">×2</div><div><strong>Score Rush</strong><span>Doubles all points earned.</span></div>
+        </div>
+        <div class="power-guide-item" style="--power-color:#ff8b5c">
+          <div class="power-guide-icon">↔</div><div><strong>Gate Boost</strong><span>Widens gaps +25%. Stack up to three.</span></div>
+        </div>
+        <div class="power-guide-item" style="--power-color:#ff5d5d">
+          <div class="power-guide-icon">✹</div><div><strong>Bomb</strong><span>Detonates visible hazards. Gates count as passed.</span></div>
+        </div>
+      </div>
+      <button class="primary" id="startBtn">START CAMPAIGN</button>
+      <div class="hint">You start with one life. Every cleared level awards another. Complete a full orbit without reversing for a STYLE bonus.</div>
+    </div>
+  </div>
+
+  <div class="overlay hidden" id="gameOverOverlay">
+    <div class="panel">
+      <div class="eyebrow">Run complete</div>
+      <h2 id="resultTitle">Signal lost</h2>
+      <p class="subtitle" id="resultText">You held the orbit.</p>
+      <div class="stats">
+        <div class="stat"><b id="finalScore">0</b><small>Score</small></div>
+        <div class="stat"><b id="finalCombo">1</b><small>Best flow</small></div>
+        <div class="stat"><b id="finalPasses">0</b><small>Gates</small></div>
+        <div class="stat"><b id="finalLevel">1</b><small>Level</small></div>
+      </div>
+      <button class="primary" id="retryBtn">RESTART CAMPAIGN</button>
+      <button class="secondary" id="menuBtn">MAIN MENU</button>
+    </div>
+  </div>
+
+  <div class="overlay hidden" id="pauseOverlay">
+    <div class="panel">
+      <div class="eyebrow">Paused</div>
+      <h2>Orbit frozen</h2>
+      <p class="subtitle">Your run is safe. Resume when you are ready.</p>
+      <div class="power-guide" aria-label="Power-up reminder">
+        <div class="power-guide-item" style="--power-color:#6ef7b1"><div class="power-guide-icon">◇</div><div><strong>Shield</strong><span>Blocks one hit. Stack up to three.</span></div></div>
+        <div class="power-guide-item" style="--power-color:#c38cff"><div class="power-guide-icon">✦</div><div><strong>Phase</strong><span>Gates cannot hit you.</span></div></div>
+        <div class="power-guide-item" style="--power-color:#58e7ff"><div class="power-guide-icon">◷</div><div><strong>Time Warp</strong><span>Slows incoming gates.</span></div></div>
+        <div class="power-guide-item" style="--power-color:#ffd166"><div class="power-guide-icon">×2</div><div><strong>Score Rush</strong><span>Doubles every point.</span></div></div>
+        <div class="power-guide-item" style="--power-color:#ff8b5c"><div class="power-guide-icon">↔</div><div><strong>Gate Boost</strong><span>Gaps +25% per stack, up to +75%.</span></div></div>
+        <div class="power-guide-item" style="--power-color:#ff5d5d"><div class="power-guide-icon">✹</div><div><strong>Bomb</strong><span>Blows up visible hazards. Gates count as passed.</span></div></div>
+      </div>
+      <button class="primary" id="resumeBtn">RESUME</button>
+      <button class="secondary" id="quitBtn">END RUN</button>
+    </div>
+  </div>
+
+  <div class="overlay hidden" id="breakOverlay">
+    <div class="panel">
+      <div class="eyebrow">Healthy checkpoint</div>
+      <h2>Time for a quick reset?</h2>
+      <p class="break-text">
+        You have been playing for a while. Stretch your hands, look away from the screen,
+        and grab some water. Your score will still be here.
+      </p>
+      <button class="primary" id="breakBtn">TAKE A BREAK</button>
+      <button class="secondary" id="continueBtn">CONTINUE THIS RUN</button>
+    </div>
+  </div>
+
+  <script>
+  (() => {
+    "use strict";
+
+    const canvas = document.getElementById("game");
+    const ctx = canvas.getContext("2d", { alpha: true });
+
+    const els = {
+      score: document.getElementById("score"),
+      combo: document.getElementById("combo"),
+      comboCard: document.getElementById("comboCard"),
+      best: document.getElementById("best"),
+      level: document.getElementById("level"),
+      lives: document.getElementById("lives"),
+      levelName: document.getElementById("levelName"),
+      difficultyBadge: document.getElementById("difficultyBadge"),
+      difficultyButtons: [...document.querySelectorAll(".difficulty-btn")],
+      startLevelInput: document.getElementById("startLevelInput"),
+      levelProgress: document.getElementById("levelProgress"),
+      levelBanner: document.getElementById("levelBanner"),
+      levelBannerEyebrow: document.getElementById("levelBannerEyebrow"),
+      levelBannerTitle: document.getElementById("levelBannerTitle"),
+      levelBannerText: document.getElementById("levelBannerText"),
+      levelStartBtn: document.getElementById("levelStartBtn"),
+      styleBanner: document.getElementById("styleBanner"),
+      styleBannerPoints: document.getElementById("styleBannerPoints"),
+      powerHud: document.getElementById("powerHud"),
+      toast: document.getElementById("toast"),
+      session: document.getElementById("session"),
+      startOverlay: document.getElementById("startOverlay"),
+      gameOverOverlay: document.getElementById("gameOverOverlay"),
+      pauseOverlay: document.getElementById("pauseOverlay"),
+      breakOverlay: document.getElementById("breakOverlay"),
+      startBtn: document.getElementById("startBtn"),
+      retryBtn: document.getElementById("retryBtn"),
+      menuBtn: document.getElementById("menuBtn"),
+      resumeBtn: document.getElementById("resumeBtn"),
+      quitBtn: document.getElementById("quitBtn"),
+      breakBtn: document.getElementById("breakBtn"),
+      continueBtn: document.getElementById("continueBtn"),
+      soundBtn: document.getElementById("soundBtn"),
+      pauseBtn: document.getElementById("pauseBtn"),
+      finalScore: document.getElementById("finalScore"),
+      finalCombo: document.getElementById("finalCombo"),
+      finalPasses: document.getElementById("finalPasses"),
+      finalLevel: document.getElementById("finalLevel"),
+      resultTitle: document.getElementById("resultTitle"),
+      resultText: document.getElementById("resultText")
+    };
+
+    const TAU = Math.PI * 2;
+    const storage = {
+      get(key, fallback) {
+        try {
+          const value = localStorage.getItem(key);
+          return value === null ? fallback : JSON.parse(value);
+        } catch {
+          return fallback;
+        }
+      },
+      set(key, value) {
+        try { localStorage.setItem(key, JSON.stringify(value)); } catch {}
+      }
+    };
+
+    const LEVELS = [
+      {
+        name: "Neon Genesis",
+        subtitle: "Clean gaps. Bright signals. Learn the rhythm.",
+        pattern: "stars",
+        bg: "#070713",
+        bg2: "#15113a",
+        accent: "#58e7ff",
+        secondary: "#ff4fd8",
+        wall: "#ff4f6d",
+        marker: "#ffd166",
+        bpm: 124,
+        roots: [110, 87.31, 130.81, 98],
+        arp: [1, 1.5, 2, 1.25, 1.5, 2, 2.5, 1.5],
+        wave: "triangle",
+        bassWave: "sawtooth",
+        kick: [0, 4, 8, 12],
+        snare: [4, 12],
+        gapBase: 1.38,
+        rotation: .22,
+        doubleChance: 0
+      },
+      {
+        name: "Laser Grid",
+        subtitle: "The arena accelerates and the gaps begin to drift.",
+        pattern: "grid",
+        bg: "#041018",
+        bg2: "#082f3c",
+        accent: "#54ffcf",
+        secondary: "#4ca6ff",
+        wall: "#ff6b7a",
+        marker: "#e9ff70",
+        bpm: 132,
+        roots: [82.41, 98, 73.42, 110],
+        arp: [1, 2, 1.5, 2.5, 1.25, 2, 3, 1.5],
+        wave: "square",
+        bassWave: "triangle",
+        kick: [0, 3, 7, 8, 11, 14],
+        snare: [4, 12],
+        gapBase: 1.22,
+        rotation: .34,
+        doubleChance: .08
+      },
+      {
+        name: "Crimson Pulse",
+        subtitle: "Tighter windows and deceptive double exits.",
+        pattern: "rings",
+        bg: "#17060d",
+        bg2: "#3a0c25",
+        accent: "#ff6b9e",
+        secondary: "#ffb84d",
+        wall: "#ff355d",
+        marker: "#ffe66d",
+        bpm: 138,
+        roots: [98, 116.54, 87.31, 130.81],
+        arp: [1, 1.1892, 1.5, 2, 1.5, 2.378, 2, 1.1892],
+        wave: "sawtooth",
+        bassWave: "square",
+        kick: [0, 2, 6, 8, 10, 14],
+        snare: [4, 12],
+        gapBase: 1.08,
+        rotation: .46,
+        doubleChance: .18
+      },
+      {
+        name: "Circuit Storm",
+        subtitle: "Rotating gates begin to fight your muscle memory.",
+        pattern: "hex",
+        bg: "#07120a",
+        bg2: "#173b20",
+        accent: "#8cff66",
+        secondary: "#d6ff4d",
+        wall: "#ff795e",
+        marker: "#a8ffef",
+        bpm: 144,
+        roots: [73.42, 110, 92.5, 82.41],
+        arp: [1, 1.5, 2.25, 3, 2, 1.25, 2.5, 1.5],
+        wave: "square",
+        bassWave: "sawtooth",
+        kick: [0, 3, 5, 8, 11, 13],
+        snare: [4, 10, 12],
+        gapBase: .96,
+        rotation: .58,
+        doubleChance: .25
+      },
+      {
+        name: "Solar Rupture",
+        subtitle: "High speed, narrow gates and almost no quiet moments.",
+        pattern: "flare",
+        bg: "#190d02",
+        bg2: "#4a2104",
+        accent: "#ffd166",
+        secondary: "#ff7438",
+        wall: "#ff3f55",
+        marker: "#fff3a5",
+        bpm: 150,
+        roots: [110, 130.81, 146.83, 98],
+        arp: [1, 2, 3, 2.5, 1.5, 3, 4, 2],
+        wave: "sawtooth",
+        bassWave: "square",
+        kick: [0, 2, 4, 6, 8, 10, 12, 14],
+        snare: [4, 12],
+        gapBase: .86,
+        rotation: .70,
+        doubleChance: .32
+      },
+      {
+        name: "Event Horizon",
+        subtitle: "The void bends every rule you have learned.",
+        pattern: "void",
+        bg: "#030308",
+        bg2: "#1f0b35",
+        accent: "#c38cff",
+        secondary: "#58e7ff",
+        wall: "#ff4fd8",
+        marker: "#ffffff",
+        bpm: 158,
+        roots: [65.41, 77.78, 92.5, 69.3],
+        arp: [1, 1.4142, 2, 2.8284, 1.5, 3, 2.25, 1.4142],
+        wave: "triangle",
+        bassWave: "sawtooth",
+        kick: [0, 2, 5, 7, 8, 10, 13, 15],
+        snare: [4, 7, 12, 15],
+        gapBase: .76,
+        rotation: .84,
+        doubleChance: .40
+      },
+      {
+        name: "Meteor Onslaught",
+        subtitle: "Final stage. No gates. Survive the barrage.",
+        pattern: "onslaught",
+        bg: "#080307",
+        bg2: "#35110b",
+        accent: "#ff6b3d",
+        secondary: "#ffd166",
+        wall: "#ff4f6d",
+        marker: "#ffffff",
+        bpm: 170,
+        roots: [73.42, 87.31, 110, 82.41],
+        arp: [1, 2, 1.5, 3, 2.25, 1.25, 3.5, 2],
+        wave: "square",
+        bassWave: "sawtooth",
+        kick: [0, 2, 4, 7, 8, 10, 12, 15],
+        snare: [4, 6, 12, 14],
+        gapBase: .72,
+        rotation: .92,
+        doubleChance: .44
+      }
+    ];
+
+    const DIFFICULTIES = {
+      easy: {
+        label: "Easy",
+        score: .80,
+        wallSpeed: .88,
+        gapBonus: .12,
+        rotation: .82,
+        spawnClearance: 1.16,
+        spawnDelay: 1.11
+      },
+      medium: {
+        label: "Medium",
+        score: 1.00,
+        wallSpeed: 1.00,
+        gapBonus: 0,
+        rotation: 1.00,
+        spawnClearance: 1.00,
+        spawnDelay: 1.00
+      },
+      hard: {
+        label: "Hard",
+        score: 1.35,
+        wallSpeed: 1.12,
+        gapBonus: -.08,
+        rotation: 1.18,
+        spawnClearance: .91,
+        spawnDelay: .91
+      }
+    };
+
+    const state = {
+      mode: "menu",
+      width: 0,
+      height: 0,
+      dpr: 1,
+      centerX: 0,
+      centerY: 0,
+      orbitRadius: 165,
+      outerRadius: 450,
+      viewportSpeedScale: 1,
+      viewportGeometryScale: 1,
+      innerArenaScale: 1,
+      compactArena: false,
+      playerAngle: -Math.PI / 2,
+      playerDirection: 1,
+      playerSpeed: 2.55,
+      playerSize: 9,
+      score: 0,
+      best: storage.get("orbitShiftBest", 0),
+      difficulty: storage.get("orbitShiftDifficulty", "medium"),
+      level: 1,
+      startLevel: 1,
+      practiceMode: false,
+      lives: 1,
+      levelPasses: 0,
+      gatesToClear: 8,
+      invulnerable: 0,
+      combo: 1,
+      bestCombo: 1,
+      passes: 0,
+      elapsed: 0,
+      runElapsed: 0,
+      lastTime: performance.now(),
+      spawnTimer: 0,
+      nextSpawn: 1.15,
+      walls: [],
+      particles: [],
+      sparks: [],
+      powerups: [],
+      meteors: [],
+      meteorSpawned: 0,
+      meteorSpawnTimer: 0,
+      bombPulse: 0,
+      activePowerups: { shield: 0, phase: 0, slow: 0, double: 0, wide: 0 },
+      gateBoostStacks: 0,
+      gateBoostScale: 1,
+      powerSpawnTimer: 5,
+      stars: [],
+      shake: 0,
+      flash: 0,
+      sound: storage.get("orbitShiftSound", true),
+      reducedMotion: window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+      audio: null,
+      audioNodes: null,
+      noiseBuffer: null,
+      musicTimer: null,
+      musicStep: 0,
+      musicNextTime: 0,
+      toastTimer: null,
+      levelBannerTimer: null,
+      respawnTimer: null,
+      powerHudTick: 0,
+      breakShown: false,
+      sessionStart: Date.now(),
+      lastReverseAt: 0,
+      reversePulse: 0,
+      styleOrbitProgress: 0,
+      styleCount: 0,
+      styleBannerTimer: null,
+      stylePulse: 0
+    };
+
+    els.best.textContent = state.best;
+    state.gatesToClear = levelGoal(1);
+    if (!DIFFICULTIES[state.difficulty]) state.difficulty = "medium";
+    applyLevelTheme();
+    setDifficulty(state.difficulty);
+    updateSoundButton();
+    updateCampaignHud();
+    updatePowerHud();
+
+    function resize() {
+      const oldWidth = state.width;
+      const oldHeight = state.height;
+      const oldOrbitRadius = state.orbitRadius;
+      const oldOuterRadius = state.outerRadius;
+      const hadArena = state.width > 0 && oldOuterRadius > oldOrbitRadius;
+
+      state.dpr = Math.min(window.devicePixelRatio || 1, 2);
+      state.width = window.innerWidth;
+      state.height = window.innerHeight;
+      canvas.width = Math.floor(state.width * state.dpr);
+      canvas.height = Math.floor(state.height * state.dpr);
+      canvas.style.width = state.width + "px";
+      canvas.style.height = state.height + "px";
+      ctx.setTransform(state.dpr, 0, 0, state.dpr, 0, 0);
+
+      state.centerX = state.width / 2;
+      state.centerY = state.height / 2 + Math.min(32, state.height * 0.035);
+
+      const shortSide = Math.min(state.width, state.height);
+      const legacyOrbit = Math.max(96, Math.min(178, shortSide * 0.22));
+      const legacyOuter = Math.hypot(state.width, state.height) * 0.62;
+
+      // The original arena works beautifully on tablets, Fold inner screens and desktop,
+      // but on narrow phone screens most of a large incoming ring lives off-canvas.
+      // Below ~700 CSS px wide we progressively fit the arena to the visible viewport.
+      const responsiveBlend = clamp((700 - state.width) / 140, 0, 1);
+      const edgePad = state.width <= 420 ? 10 : 14;
+      const visibleRadius = Math.max(
+        116,
+        Math.min(
+          state.centerX - edgePad,
+          state.width - state.centerX - edgePad,
+          state.centerY - edgePad,
+          state.height - state.centerY - edgePad
+        )
+      );
+
+      // On compact phone screens the ring should still enter from outside the
+      // left/right viewport edges, just like it does on the large arena. The
+      // speed compensation below preserves reaction time despite the shorter field.
+      const compactSpawnFactor = state.width <= 420 ? 1.38 : 1.22;
+      const fittedOuter = visibleRadius * compactSpawnFactor;
+      state.outerRadius = lerp(legacyOuter, Math.min(legacyOuter, fittedOuter), responsiveBlend);
+
+      if (responsiveBlend > 0) {
+        const compactOrbitRatio = lerp(.46, .42, clamp((520 - state.width) / 180, 0, 1));
+        const fittedOrbit = state.outerRadius * compactOrbitRatio;
+        state.orbitRadius = lerp(legacyOrbit, clamp(fittedOrbit, 66, 136), responsiveBlend);
+      } else {
+        state.orbitRadius = legacyOrbit;
+      }
+
+      // Intentional arena shrink:
+      //  - every screen size uses an inner play circle 20% smaller than the
+      //    responsive base geometry.
+      const compactness = clamp((700 - state.width) / 280, 0, 1);
+      state.innerArenaScale = .80;
+      state.orbitRadius *= state.innerArenaScale;
+
+      const inboundTravel = Math.max(1, state.outerRadius - state.orbitRadius);
+
+      // Keep reaction time sane on a smaller physical arena. This only compensates
+      // for viewport geometry; Easy/Medium/Hard still apply on top of it.
+      state.viewportSpeedScale = responsiveBlend > 0
+        ? lerp(1, clamp(inboundTravel / 155, .58, 1), responsiveBlend)
+        : 1;
+
+      state.viewportGeometryScale =
+        clamp(state.outerRadius / 300, .68, 1)
+        * state.innerArenaScale
+        * lerp(1, .90, compactness);
+      state.compactArena = responsiveBlend > .55;
+      state.playerSize = Math.max(5.2, Math.min(9.5, state.orbitRadius * 0.058));
+
+      // If the user folds/unfolds or rotates mid-run, preserve each gate's relative
+      // progress through the arena rather than leaving it at the old pixel radius.
+      if (hadArena && state.walls.length) {
+        const oldTravel = Math.max(1, oldOuterRadius - oldOrbitRadius);
+        const newTravel = Math.max(1, state.outerRadius - state.orbitRadius);
+        for (const wall of state.walls) {
+          const p = (wall.radius - oldOrbitRadius) / oldTravel;
+          const prevP = (wall.prevRadius - oldOrbitRadius) / oldTravel;
+          wall.radius = state.orbitRadius + p * newTravel;
+          wall.prevRadius = state.orbitRadius + prevP * newTravel;
+        }
+      }
+
+      if (oldWidth > 0 && oldHeight > 0 && state.meteors.length) {
+        const sx = state.width / oldWidth;
+        const sy = state.height / oldHeight;
+        const sv = Math.sqrt(Math.max(.25, sx * sy));
+        for (const meteor of state.meteors) {
+          meteor.x *= sx;
+          meteor.y *= sy;
+          meteor.vx *= sv;
+          meteor.vy *= sv;
+        }
+      }
+
+      createStars();
+    }
+
+    function createStars() {
+      const count = Math.floor((state.width * state.height) / 10500);
+      state.stars = Array.from({ length: count }, () => ({
+        x: Math.random() * state.width,
+        y: Math.random() * state.height,
+        r: Math.random() * 1.4 + .2,
+        a: Math.random() * .55 + .1,
+        tw: Math.random() * 2 + .5
+      }));
+    }
+
+    function angleDelta(a, b) {
+      let d = (a - b + Math.PI) % TAU - Math.PI;
+      if (d < -Math.PI) d += TAU;
+      return d;
+    }
+
+    function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
+    function lerp(a, b, t) { return a + (b - a) * t; }
+    function rand(min, max) { return Math.random() * (max - min) + min; }
+
+    function currentTheme() {
+      return LEVELS[(Math.max(1, state.level) - 1) % LEVELS.length];
+    }
+
+    function currentDifficulty() {
+      return DIFFICULTIES[state.difficulty] || DIFFICULTIES.medium;
+    }
+
+    function scoreMultiplier() {
+      return currentDifficulty().score * (state.activePowerups.double > 0 ? 2 : 1);
+    }
+
+    function awardPoints(basePoints) {
+      const points = Math.round(basePoints * scoreMultiplier());
+      state.score += points;
+      return points;
+    }
+
+    function setDifficulty(key) {
+      if (!DIFFICULTIES[key] || state.mode !== "menu") return;
+      state.difficulty = key;
+      storage.set("orbitShiftDifficulty", key);
+      for (const button of els.difficultyButtons) {
+        const active = button.dataset.difficulty === key;
+        button.classList.toggle("active", active);
+        button.setAttribute("aria-pressed", active ? "true" : "false");
+      }
+      updateCampaignHud();
+    }
+
+    function levelCycle() {
+      return Math.floor((Math.max(1, state.level) - 1) / LEVELS.length);
+    }
+
+    function levelGoal(level = state.level) {
+      return Math.min(22, 7 + level * 2);
+    }
+
+    function colorAlpha(hex, alpha) {
+      const value = hex.replace("#", "");
+      const full = value.length === 3 ? value.split("").map(c => c + c).join("") : value;
+      const number = Number.parseInt(full, 16);
+      const r = (number >> 16) & 255;
+      const g = (number >> 8) & 255;
+      const b = number & 255;
+      return `rgba(${r},${g},${b},${alpha})`;
+    }
+
+    function applyLevelTheme() {
+      const theme = currentTheme();
+      document.documentElement.style.setProperty("--level-accent", theme.accent);
+      document.documentElement.style.setProperty("--level-secondary", theme.secondary);
+      document.documentElement.style.setProperty("--cyan", theme.accent);
+      document.documentElement.style.setProperty("--pink", theme.secondary);
+      document.documentElement.style.setProperty("--bg", theme.bg);
+      document.body.style.background = `radial-gradient(circle at 50% 44%, ${colorAlpha(theme.secondary, .17)}, transparent 36%), radial-gradient(circle at 15% 15%, ${colorAlpha(theme.accent, .11)}, transparent 28%), linear-gradient(180deg, ${theme.bg2}, ${theme.bg})`;
+      document.querySelector('meta[name="theme-color"]').setAttribute("content", theme.bg);
+      createStars();
+    }
+
+    function initAudio() {
+      if (state.audio) return;
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return;
+
+      state.audio = new AudioCtx();
+      const master = state.audio.createGain();
+      const compressor = state.audio.createDynamicsCompressor();
+      const music = state.audio.createGain();
+      const sfx = state.audio.createGain();
+
+      master.gain.value = state.sound ? .97 : .0001;
+      music.gain.value = .0001;
+      sfx.gain.value = .9;
+      compressor.threshold.value = -18;
+      compressor.knee.value = 18;
+      compressor.ratio.value = 5;
+      compressor.attack.value = .004;
+      compressor.release.value = .22;
+
+      music.connect(master);
+      sfx.connect(master);
+      master.connect(compressor).connect(state.audio.destination);
+      state.audioNodes = { master, music, sfx };
+
+      const length = Math.floor(state.audio.sampleRate * .4);
+      state.noiseBuffer = state.audio.createBuffer(1, length, state.audio.sampleRate);
+      const data = state.noiseBuffer.getChannelData(0);
+      for (let i = 0; i < length; i++) data[i] = Math.random() * 2 - 1;
+    }
+
+    function setMasterSound(enabled) {
+      if (!state.audioNodes || !state.audio) return;
+      const now = state.audio.currentTime;
+      const gain = state.audioNodes.master.gain;
+      gain.cancelScheduledValues(now);
+      gain.setValueAtTime(Math.max(.0001, gain.value), now);
+      gain.exponentialRampToValueAtTime(enabled ? .97 : .0001, now + .08);
+    }
+
+    function setMusicLevel(active) {
+      if (!state.audioNodes || !state.audio) return;
+      const now = state.audio.currentTime;
+      const gain = state.audioNodes.music.gain;
+      gain.cancelScheduledValues(now);
+      gain.setValueAtTime(Math.max(.0001, gain.value), now);
+      gain.exponentialRampToValueAtTime(active && state.sound ? .62 : .0001, now + .16);
+    }
+
+    function tone(freq, duration = .08, type = "sine", gain = .035, slide = 0) {
+      if (!state.sound) return;
+      initAudio();
+      if (!state.audio || !state.audioNodes) return;
+      if (state.audio.state === "suspended") state.audio.resume();
+
+      const now = state.audio.currentTime;
+      const osc = state.audio.createOscillator();
+      const amp = state.audio.createGain();
+      osc.type = type;
+      osc.frequency.setValueAtTime(freq, now);
+      if (slide) osc.frequency.exponentialRampToValueAtTime(Math.max(40, freq + slide), now + duration);
+      amp.gain.setValueAtTime(0.0001, now);
+      amp.gain.exponentialRampToValueAtTime(gain, now + .01);
+      amp.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+      osc.connect(amp).connect(state.audioNodes.sfx);
+      osc.start(now);
+      osc.stop(now + duration + .02);
+    }
+
+    function meteorWhoosh() {
+      if (!state.sound) return;
+      initAudio();
+      if (!state.audio || !state.audioNodes) return;
+      if (state.audio.state === "suspended") state.audio.resume();
+
+      const now = state.audio.currentTime;
+      const osc = state.audio.createOscillator();
+      const filter = state.audio.createBiquadFilter();
+      const amp = state.audio.createGain();
+
+      osc.type = "sawtooth";
+      osc.frequency.setValueAtTime(980, now);
+      osc.frequency.exponentialRampToValueAtTime(105, now + .52);
+      filter.type = "bandpass";
+      filter.frequency.setValueAtTime(1800, now);
+      filter.frequency.exponentialRampToValueAtTime(330, now + .52);
+      filter.Q.value = 1.1;
+      amp.gain.setValueAtTime(.0001, now);
+      amp.gain.exponentialRampToValueAtTime(.055, now + .035);
+      amp.gain.exponentialRampToValueAtTime(.0001, now + .58);
+      osc.connect(filter).connect(amp).connect(state.audioNodes.sfx);
+      osc.start(now);
+      osc.stop(now + .62);
+
+      if (state.noiseBuffer) {
+        const noise = state.audio.createBufferSource();
+        const noiseFilter = state.audio.createBiquadFilter();
+        const noiseAmp = state.audio.createGain();
+        noise.buffer = state.noiseBuffer;
+        noiseFilter.type = "lowpass";
+        noiseFilter.frequency.setValueAtTime(2100, now);
+        noiseFilter.frequency.exponentialRampToValueAtTime(430, now + .42);
+        noiseAmp.gain.setValueAtTime(.0001, now);
+        noiseAmp.gain.exponentialRampToValueAtTime(.042, now + .025);
+        noiseAmp.gain.exponentialRampToValueAtTime(.0001, now + .46);
+        noise.connect(noiseFilter).connect(noiseAmp).connect(state.audioNodes.sfx);
+        noise.start(now);
+        noise.stop(now + .5);
+      }
+    }
+
+    function bombBlastSound() {
+      if (!state.sound) return;
+      initAudio();
+      if (!state.audio || !state.audioNodes) return;
+      if (state.audio.state === "suspended") state.audio.resume();
+
+      const now = state.audio.currentTime;
+      const osc = state.audio.createOscillator();
+      const filter = state.audio.createBiquadFilter();
+      const amp = state.audio.createGain();
+
+      osc.type = "sawtooth";
+      osc.frequency.setValueAtTime(120, now);
+      osc.frequency.exponentialRampToValueAtTime(42, now + .48);
+      filter.type = "lowpass";
+      filter.frequency.setValueAtTime(1250, now);
+      filter.frequency.exponentialRampToValueAtTime(180, now + .55);
+      amp.gain.setValueAtTime(.0001, now);
+      amp.gain.exponentialRampToValueAtTime(.16, now + .018);
+      amp.gain.exponentialRampToValueAtTime(.0001, now + .62);
+      osc.connect(filter).connect(amp).connect(state.audioNodes.sfx);
+      osc.start(now);
+      osc.stop(now + .68);
+
+      if (state.noiseBuffer) {
+        const noise = state.audio.createBufferSource();
+        const noiseFilter = state.audio.createBiquadFilter();
+        const noiseAmp = state.audio.createGain();
+        noise.buffer = state.noiseBuffer;
+        noiseFilter.type = "lowpass";
+        noiseFilter.frequency.setValueAtTime(3400, now);
+        noiseFilter.frequency.exponentialRampToValueAtTime(260, now + .55);
+        noiseAmp.gain.setValueAtTime(.0001, now);
+        noiseAmp.gain.exponentialRampToValueAtTime(.12, now + .012);
+        noiseAmp.gain.exponentialRampToValueAtTime(.0001, now + .58);
+        noise.connect(noiseFilter).connect(noiseAmp).connect(state.audioNodes.sfx);
+        noise.start(now);
+        noise.stop(now + .62);
+      }
+
+      setTimeout(() => tone(62, .28, "square", .05, -18), 55);
+    }
+
+    function musicVoice(freq, when, duration, type, gain, cutoff = 1600) {
+      if (!state.audio || !state.audioNodes) return;
+      const osc = state.audio.createOscillator();
+      const filter = state.audio.createBiquadFilter();
+      const amp = state.audio.createGain();
+      osc.type = type;
+      osc.frequency.setValueAtTime(freq, when);
+      filter.type = "lowpass";
+      filter.frequency.setValueAtTime(cutoff, when);
+      filter.Q.value = .8;
+      amp.gain.setValueAtTime(.0001, when);
+      amp.gain.exponentialRampToValueAtTime(gain, when + .012);
+      amp.gain.exponentialRampToValueAtTime(.0001, when + duration);
+      osc.connect(filter).connect(amp).connect(state.audioNodes.music);
+      osc.start(when);
+      osc.stop(when + duration + .03);
+    }
+
+    function musicKick(when, strength = 1) {
+      if (!state.audio || !state.audioNodes) return;
+      const osc = state.audio.createOscillator();
+      const amp = state.audio.createGain();
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(138, when);
+      osc.frequency.exponentialRampToValueAtTime(43, when + .12);
+      amp.gain.setValueAtTime(.0001, when);
+      amp.gain.exponentialRampToValueAtTime(.18 * strength, when + .004);
+      amp.gain.exponentialRampToValueAtTime(.0001, when + .18);
+      osc.connect(amp).connect(state.audioNodes.music);
+      osc.start(when);
+      osc.stop(when + .2);
+    }
+
+    function musicNoise(when, duration, gain, highpass) {
+      if (!state.audio || !state.audioNodes || !state.noiseBuffer) return;
+      const src = state.audio.createBufferSource();
+      const filter = state.audio.createBiquadFilter();
+      const amp = state.audio.createGain();
+      src.buffer = state.noiseBuffer;
+      filter.type = "highpass";
+      filter.frequency.value = highpass;
+      amp.gain.setValueAtTime(gain, when);
+      amp.gain.exponentialRampToValueAtTime(.0001, when + duration);
+      src.connect(filter).connect(amp).connect(state.audioNodes.music);
+      src.start(when);
+      src.stop(when + duration + .02);
+    }
+
+    function scheduleMusicStep(step, when) {
+      const theme = currentTheme();
+      const beat = step % 16;
+      const bar = Math.floor(step / 16) % 4;
+      const intensity = clamp(.34 + state.level * .045 + state.combo / 55, .34, 1);
+      const root = theme.roots[bar % theme.roots.length];
+      const arpRatios = theme.arp;
+
+      if (theme.kick.includes(beat)) {
+        const downbeat = beat === 0 ? 1.12 : .72 + state.level * .015;
+        musicKick(when, downbeat);
+      }
+      if (intensity > .70 && (beat === 6 || beat === 14)) musicKick(when, .32);
+      if (beat % (theme.pattern === "void" ? 1 : 2) === 0) {
+        musicNoise(when, .03, .012 + intensity * .008, theme.pattern === "flare" ? 3800 : 5200);
+      }
+      if (theme.snare.includes(beat)) {
+        musicNoise(when, theme.pattern === "rings" ? .15 : .10, .034, theme.pattern === "grid" ? 1900 : 1450);
+      }
+
+      const bassPattern = theme.pattern === "grid"
+        ? [0, 3, 7, 8, 11, 15]
+        : theme.pattern === "void"
+          ? [0, 2, 5, 8, 10, 13]
+          : [0, 3, 6, 8, 11, 14];
+
+      if (bassPattern.includes(beat)) {
+        const octave = (beat === 6 || beat === 14 || theme.pattern === "flare") ? 2 : 1;
+        musicVoice(root * octave, when, .15, theme.bassWave, .036 + intensity * .015, theme.pattern === "hex" ? 720 : 540);
+      }
+
+      const arp = root * 2 * arpRatios[beat % arpRatios.length];
+      const arpDuration = theme.pattern === "rings" ? .13 : theme.pattern === "void" ? .07 : .085;
+      musicVoice(arp, when, arpDuration, theme.wave, .012 + intensity * .008, theme.pattern === "flare" ? 3000 : 2400);
+
+      if (beat === 0) {
+        const chord = bar % 2 === 0 ? [1, 1.2599, 1.4983] : [1, 1.1892, 1.4983];
+        for (const ratio of chord) {
+          musicVoice(root * ratio * 2, when, theme.pattern === "void" ? 1.05 : 1.55, theme.wave, .0085, theme.pattern === "grid" ? 1750 : 1250);
+        }
+      }
+    }
+
+    function startMusic() {
+      if (!state.sound) return;
+      initAudio();
+      if (!state.audio || !state.audioNodes) return;
+      if (state.audio.state === "suspended") state.audio.resume();
+      if (!state.musicTimer) {
+        state.musicStep = 0;
+        state.musicNextTime = state.audio.currentTime + .06;
+        state.musicTimer = setInterval(() => {
+          if (!state.audio) return;
+          while (state.musicNextTime < state.audio.currentTime + .18) {
+            scheduleMusicStep(state.musicStep, state.musicNextTime);
+            state.musicStep = (state.musicStep + 1) % 64;
+            state.musicNextTime += 60 / currentTheme().bpm / 4;
+          }
+        }, 35);
+      }
+      setMusicLevel(state.mode === "playing");
+    }
+
+    function stopMusic() {
+      setMusicLevel(false);
+      if (state.musicTimer) {
+        clearInterval(state.musicTimer);
+        state.musicTimer = null;
+      }
+    }
+
+    function updateSoundButton() {
+      els.soundBtn.textContent = state.sound ? "🔊" : "🔇";
+      els.soundBtn.setAttribute("aria-label", state.sound ? "Mute sound" : "Enable sound");
+    }
+
+    function selectedStartLevel() {
+      const value = Math.round(Number(els.startLevelInput?.value) || 1);
+      return clamp(value, 1, 99);
+    }
+
+    function resetRun(startAt = state.startLevel || 1) {
+      const chosenLevel = clamp(Math.round(Number(startAt) || 1), 1, 99);
+      state.startLevel = chosenLevel;
+      state.practiceMode = chosenLevel > 1;
+      if (els.startLevelInput) els.startLevelInput.value = String(chosenLevel);
+      state.mode = "levelready";
+      state.playerAngle = -Math.PI / 2;
+      state.playerDirection = 1;
+      state.playerSpeed = 2.55;
+      state.score = 0;
+      state.level = chosenLevel;
+      state.lives = 1;
+      state.levelPasses = 0;
+      state.gatesToClear = levelObjective(chosenLevel);
+      state.invulnerable = 0;
+      state.combo = 1;
+      state.bestCombo = 1;
+      state.passes = 0;
+      state.elapsed = 0;
+      state.runElapsed = 0;
+      state.spawnTimer = .55;
+      state.nextSpawn = .55;
+      state.walls = [];
+      state.particles = [];
+      state.sparks = [];
+      state.powerups = [];
+      state.meteors = [];
+      state.meteorSpawned = 0;
+      state.meteorSpawnTimer = 0;
+      state.bombPulse = 0;
+      state.activePowerups = { shield: 0, phase: 0, slow: 0, double: 0, wide: 0 };
+      state.gateBoostStacks = 0;
+      state.gateBoostScale = 1;
+      state.powerSpawnTimer = 4.5;
+      state.shake = 0;
+      state.flash = 0;
+      state.breakShown = false;
+      state.lastReverseAt = performance.now();
+      state.reversePulse = 0;
+      state.styleOrbitProgress = 0;
+      state.styleCount = 0;
+      state.stylePulse = 0;
+      applyLevelTheme();
+      updateHud();
+      updateCampaignHud();
+      updatePowerHud();
+      hideAllOverlays();
+      initAudio();
+      stopMusic();
+      showLevelBanner(false);
+      tone(380, .1, "sine", .025, 110);
+    }
+
+    function hideAllOverlays() {
+      els.startOverlay.classList.add("hidden");
+      els.gameOverOverlay.classList.add("hidden");
+      els.pauseOverlay.classList.add("hidden");
+      els.breakOverlay.classList.add("hidden");
+    }
+
+    function showMenu() {
+      state.mode = "menu";
+      stopMusic();
+      hideAllOverlays();
+      els.levelBanner.classList.remove("show");
+      els.startOverlay.classList.remove("hidden");
+    }
+
+    function pause(showOverlay = true) {
+      if (state.mode !== "playing") return;
+      state.mode = "paused";
+      setMusicLevel(false);
+      if (showOverlay) els.pauseOverlay.classList.remove("hidden");
+    }
+
+    function resume() {
+      if (state.mode !== "paused") return;
+      state.mode = "playing";
+      els.pauseOverlay.classList.add("hidden");
+      els.breakOverlay.classList.add("hidden");
+      state.lastTime = performance.now();
+      startMusic();
+      setMusicLevel(true);
+      tone(440, .07, "sine", .025, 80);
+    }
+
+    function endRun() {
+      if (!["playing", "paused", "dying", "respawning", "levelclear"].includes(state.mode)) return;
+      state.mode = "gameover";
+      stopMusic();
+      state.best = Math.max(state.best, Math.floor(state.score));
+      storage.set("orbitShiftBest", state.best);
+      els.best.textContent = state.best;
+      els.finalScore.textContent = Math.floor(state.score);
+      els.finalCombo.textContent = "x" + state.bestCombo;
+      els.finalPasses.textContent = state.passes;
+      els.finalLevel.textContent = state.level;
+      const diff = currentDifficulty();
+
+      const rank =
+        state.level >= 13 ? ["Beyond the horizon", `You survived ${state.level} levels. The orbit ran out of adjectives.`] :
+        state.level >= 7 ? ["World breaker", `You cleared the full six-world cycle and reached level ${state.level}.`] :
+        state.score >= 2500 ? ["Orbit legend", "That run was absurdly clean."] :
+        state.score >= 1400 ? ["Signal master", "You found the rhythm inside the chaos."] :
+        state.score >= 700 ? ["Flow locked", "The orbit was starting to obey you."] :
+        state.score >= 250 ? ["Nice recovery", "Your timing is already sharpening."] :
+        ["Signal lost", "One more clean reversal changes everything."];
+
+      els.resultTitle.textContent = rank[0];
+      els.resultText.textContent = `${rank[1]} · ${diff.label} difficulty ×${diff.score.toFixed(2)}`;
+      els.gameOverOverlay.classList.remove("hidden");
+    }
+
+    function reverse() {
+      if (["menu", "gameover", "dying", "respawning", "levelclear", "levelready"].includes(state.mode)) return;
+      if (state.mode === "paused") {
+        resume();
+        return;
+      }
+      const now = performance.now();
+      if (now - state.lastReverseAt < 55) return;
+      state.lastReverseAt = now;
+      state.styleOrbitProgress = 0;
+      state.playerDirection *= -1;
+      state.reversePulse = 1;
+      burstAtPlayer(7, "#58e7ff", .7);
+      tone(state.playerDirection > 0 ? 560 : 430, .055, "triangle", .025, state.playerDirection > 0 ? 70 : -55);
+    }
+
+    function currentWallSpeed() {
+      const progress = state.gatesToClear ? state.levelPasses / state.gatesToClear : 0;
+      const base = clamp(82 + (state.level - 1) * 10 + levelCycle() * 5 + progress * 10, 82, 226);
+      return base * currentDifficulty().wallSpeed * state.viewportSpeedScale * (state.activePowerups.slow > 0 ? .54 : 1);
+    }
+
+    function wallSpawnClearance() {
+      const base = Math.max(76, state.orbitRadius * .62 - (state.level - 1) * 1.5);
+      const levelOneEase = state.level === 1 ? 1.20 : 1;
+      return base * currentDifficulty().spawnClearance * levelOneEase;
+    }
+
+    function canSpawnWall() {
+      if (isMeteorOnslaughtLevel()) return false;
+      const remaining = Math.max(0, state.gatesToClear - state.levelPasses);
+      const pending = state.walls.filter(wall => !wall.dead && !wall.passed).length;
+
+      // The number of visible/incoming gates can never exceed what is still
+      // required to finish the level. The final required gate is therefore
+      // always visually the final gate.
+      if (remaining <= 0 || pending >= remaining) return false;
+
+      const liveWalls = state.walls.filter(wall => !wall.dead);
+      if (!liveWalls.length) return true;
+
+      const outermost = liveWalls.reduce((max, wall) => wall.radius > max.radius ? wall : max);
+      const required = wallSpawnClearance() + outermost.thickness * .5;
+      return state.outerRadius - outermost.radius >= required;
+    }
+
+    function spawnWall(first = false) {
+      if (isMeteorOnslaughtLevel()) return false;
+      const remaining = Math.max(0, state.gatesToClear - state.levelPasses);
+      const pending = state.walls.filter(wall => !wall.dead && !wall.passed).length;
+      if (remaining <= 0 || pending >= remaining) return false;
+
+      const theme = currentTheme();
+      const tier = state.level - 1;
+      const cycle = levelCycle();
+      const progress = state.gatesToClear ? state.levelPasses / state.gatesToClear : 0;
+      const gapSize = clamp(theme.gapBase + currentDifficulty().gapBonus - tier * .018 - cycle * .025 - progress * .08 - Math.random() * .14, .40, 1.48);
+      const directionBias = state.level % 2 === 0 ? 1 : -1;
+      const rotationMagnitude = theme.rotation + tier * .018 + progress * .10;
+      const rotationSpeed = (rand(-rotationMagnitude, rotationMagnitude) + directionBias * .015) * currentDifficulty().rotation;
+      const thickness = rand(14, 20 + Math.min(8, state.level * .55)) * state.viewportGeometryScale;
+
+      let gapAngle;
+      if (first) {
+        gapAngle = state.playerAngle + state.playerDirection * .95;
+      } else {
+        const predicted = state.playerAngle + state.playerDirection * state.playerSpeed * 1.25;
+        gapAngle = predicted + rand(-1.05, 1.05);
+      }
+
+      const doubleChance = clamp(theme.doubleChance + tier * .012, 0, .58);
+      const doubleGap = state.level >= 3 && Math.random() < doubleChance;
+      state.walls.push({
+        radius: state.outerRadius,
+        prevRadius: state.outerRadius,
+        gapAngle,
+        gapSize,
+        rotationSpeed,
+        thickness,
+        passed: false,
+        dead: false,
+        hue: Math.random(),
+        doubleGap,
+        shape: "circle"
+      });
+      return true;
+    }
+
+    function spawnSpark() {
+      if (state.sparks.length > 2) return;
+      state.sparks.push({
+        angle: Math.random() * TAU,
+        life: 7.5,
+        pulse: Math.random() * TAU,
+        special: Math.random() < .15
+      });
+    }
+
+    const POWER_TYPES = {
+      shield: { label: "Shield", color: "#6ef7b1", symbol: "◇", duration: 0, effect: "STACKS UP TO 3", hud: "HIT CHARGES" },
+      phase:  { label: "Phase", color: "#c38cff", symbol: "✦", duration: 5, effect: "PASS THROUGH ALL HAZARDS", hud: "HAZARDS CANNOT HIT" },
+      slow:   { label: "Time Warp", color: "#58e7ff", symbol: "◷", duration: 6, effect: "SLOWS ALL HAZARDS", hud: "HAZARDS SLOWED" },
+      double: { label: "Score Rush", color: "#ffd166", symbol: "×2", duration: 8, effect: "DOUBLE ALL POINTS", hud: "2X ALL POINTS" },
+      wide:   { label: "Gate Boost", color: "#ff8b5c", symbol: "↔", duration: 8, effect: "GAPS +25% · STACKS ×3", hud: "WIDER GATE GAPS" },
+      bomb:   { label: "Bomb", color: "#ff5d5d", symbol: "✹", duration: 0, effect: "DETONATES ALL HAZARDS", hud: "INSTANT BLAST" }
+    };
+
+    function spawnPowerup() {
+      if (state.powerups.length >= 1) return;
+      const keys = Object.keys(POWER_TYPES);
+      const type = keys[Math.floor(Math.random() * keys.length)];
+      let angle = Math.random() * TAU;
+      if (Math.abs(angleDelta(angle, state.playerAngle)) < .85) angle = (angle + Math.PI) % TAU;
+      state.powerups.push({
+        type,
+        angle,
+        life: 11.5,
+        pulse: Math.random() * TAU,
+        spin: Math.random() * TAU
+      });
+    }
+
+    function activatePowerup(type) {
+      const info = POWER_TYPES[type];
+      if (!info) return;
+
+      if (type === "shield") {
+        const before = state.activePowerups.shield;
+        state.activePowerups.shield = Math.min(3, before + 1);
+        if (before >= 3) {
+          const bonus = awardPoints(75);
+          showToast(`◇ SHIELDS FULL — +${bonus} BONUS`);
+        } else {
+          const charges = state.activePowerups.shield;
+          showToast(`◇ SHIELD STACK ${charges}/3 — ${charges} ${charges === 1 ? "HIT" : "HITS"} READY`);
+        }
+      } else if (type === "wide") {
+        const before = state.gateBoostStacks;
+        state.gateBoostStacks = Math.min(3, before + 1);
+        state.activePowerups.wide = info.duration;
+        const boostPct = state.gateBoostStacks * 25;
+        showToast(before >= 3
+          ? `↔ GATE BOOST MAX +75% — TIMER REFRESHED`
+          : `↔ GATE BOOST ${state.gateBoostStacks}/3 — GAPS +${boostPct}%`);
+      } else if (type === "bomb") {
+        detonateBomb();
+      } else {
+        state.activePowerups[type] = Math.max(state.activePowerups[type], info.duration);
+        showToast(`${info.symbol} ${info.label} — ${info.effect}`);
+      }
+
+      state.flash = Math.max(state.flash, type === "bomb" ? 1 : .55);
+      burstAtPlayer(type === "bomb" ? 54 : 34, info.color, type === "bomb" ? 2.1 : 1.5);
+
+      if (type !== "bomb") {
+        tone(
+          type === "double" ? 1040
+          : type === "phase" ? 820
+          : type === "slow" ? 680
+          : type === "wide" ? 930
+          : 900,
+          .18,
+          "triangle",
+          .045,
+          260
+        );
+        setTimeout(() => tone(1320, .10, "sine", .026, 90), 70);
+      }
+      updatePowerHud();
+    }
+
+    function showToast(message) {
+      els.toast.textContent = message;
+      els.toast.classList.add("show");
+      if (state.toastTimer) clearTimeout(state.toastTimer);
+      state.toastTimer = setTimeout(() => els.toast.classList.remove("show"), 1550);
+    }
+
+    function update(dt) {
+      state.elapsed += dt;
+      updateSessionClock();
+
+      if (state.mode !== "playing") {
+        updateParticles(dt);
+        return;
+      }
+
+      state.runElapsed += dt;
+      state.invulnerable = Math.max(0, state.invulnerable - dt);
+      state.stylePulse = Math.max(0, state.stylePulse - dt * 2.3);
+      const levelProgress = state.gatesToClear ? state.levelPasses / state.gatesToClear : 0;
+      state.playerSpeed = clamp(2.48 + (state.level - 1) * .075 + levelProgress * .18, 2.48, 5.15);
+      const angularTravel = state.playerSpeed * dt;
+      state.playerAngle = (state.playerAngle + state.playerDirection * angularTravel + TAU) % TAU;
+      state.styleOrbitProgress += angularTravel;
+      while (state.styleOrbitProgress >= TAU && state.mode === "playing") {
+        state.styleOrbitProgress -= TAU;
+        awardStyleBonus();
+      }
+      state.reversePulse = Math.max(0, state.reversePulse - dt * 4.5);
+      state.flash = Math.max(0, state.flash - dt * 3.5);
+      state.shake = Math.max(0, state.shake - dt * 18);
+
+      state.bombPulse = Math.max(0, state.bombPulse - dt * 1.75);
+
+      // Gate Boost smoothly grows/shrinks all gate openings.
+      const gateBoostTarget =
+        state.activePowerups.wide > 0 && state.gateBoostStacks > 0
+          ? 1 + state.gateBoostStacks * .25
+          : 1;
+      const gateBoostEase = 1 - Math.exp(-dt * 7.2);
+      state.gateBoostScale += (gateBoostTarget - state.gateBoostScale) * gateBoostEase;
+      if (Math.abs(state.gateBoostScale - gateBoostTarget) < .0005) {
+        state.gateBoostScale = gateBoostTarget;
+      }
+
+      let powerChanged = false;
+      for (const key of ["phase", "slow", "double", "wide"]) {
+        if (state.activePowerups[key] > 0) {
+          const before = state.activePowerups[key];
+          state.activePowerups[key] = Math.max(0, before - dt);
+          if (before > 0 && state.activePowerups[key] === 0) {
+            if (key === "wide") state.gateBoostStacks = 0;
+            powerChanged = true;
+            showToast(`${POWER_TYPES[key].label} ended`);
+          }
+        }
+      }
+      state.powerHudTick -= dt;
+      if (powerChanged || state.powerHudTick <= 0) {
+        updatePowerHud();
+        state.powerHudTick = .1;
+      }
+
+      state.spawnTimer -= dt;
+      if (!isMeteorOnslaughtLevel() && state.spawnTimer <= 0 && canSpawnWall()) {
+        spawnWall();
+        const levelPressure = (state.level - 1) * .055 + (state.levelPasses / Math.max(1, state.gatesToClear)) * .09;
+        state.nextSpawn = clamp((1.64 - levelPressure + Math.random() * .18) * currentDifficulty().spawnDelay, .58, 1.90);
+        state.spawnTimer = state.nextSpawn;
+      }
+
+      state.powerSpawnTimer -= dt;
+      if (state.powerSpawnTimer <= 0) {
+        spawnPowerup();
+        state.powerSpawnTimer = rand(10, 16);
+      }
+
+      if (Math.random() < dt * .18) spawnSpark();
+
+      updateWalls(dt);
+      if (state.mode === "playing") updateMeteors(dt);
+      updateSparks(dt);
+      updatePowerups(dt);
+      updateParticles(dt);
+
+      if (!state.breakShown && state.runElapsed >= 12 * 60) {
+        state.breakShown = true;
+        state.mode = "paused";
+        setMusicLevel(false);
+        els.breakOverlay.classList.remove("hidden");
+      }
+    }
+
+    function isMeteorOnslaughtLevel(level = state.level) {
+      const theme = LEVELS[(Math.max(1, level) - 1) % LEVELS.length];
+      return theme && theme.pattern === "onslaught";
+    }
+
+    function campaignCycleForLevel(level = state.level) {
+      return Math.floor((Math.max(1, level) - 1) / LEVELS.length);
+    }
+
+    function meteorQuotaForLevel(level = state.level) {
+      if (isMeteorOnslaughtLevel(level)) {
+        // The first finale is deliberately a huge barrage. Later finales get
+        // even nastier while preserving the endless campaign structure.
+        return 40 + campaignCycleForLevel(level) * 10;
+      }
+
+      // Level 8 is the first return to Level 1 after the seven-stage campaign.
+      // It starts with 2 meteor passes, then every later non-finale level adds 2.
+      if (level <= LEVELS.length) return 0;
+      return (level - LEVELS.length) * 2;
+    }
+
+    function levelObjective(level = state.level) {
+      return isMeteorOnslaughtLevel(level)
+        ? meteorQuotaForLevel(level)
+        : levelGoal(level);
+    }
+
+    function meteorActiveCap() {
+      if (!isMeteorOnslaughtLevel()) return 2;
+      if (state.difficulty === "easy") return 4;
+      if (state.difficulty === "hard") return 6;
+      return 5;
+    }
+
+    function onslaughtSpawnDelay() {
+      if (state.difficulty === "easy") return rand(.54, .76);
+      if (state.difficulty === "hard") return rand(.31, .48);
+      return rand(.40, .61);
+    }
+
+    function spawnMeteor(onslaught = isMeteorOnslaughtLevel()) {
+      const margin = 58;
+      const side = Math.floor(Math.random() * 4);
+      let x, y;
+
+      if (side === 0) {
+        x = -margin;
+        y = rand(0, state.height);
+      } else if (side === 1) {
+        x = state.width + margin;
+        y = rand(0, state.height);
+      } else if (side === 2) {
+        x = rand(0, state.width);
+        y = -margin;
+      } else {
+        x = rand(0, state.width);
+        y = state.height + margin;
+      }
+
+      const lead = onslaught ? rand(.22, .62) : rand(.35, .72);
+      const aimScatter = onslaught ? .62 : .34;
+      const targetAngle =
+        state.playerAngle
+        + state.playerDirection * state.playerSpeed * lead
+        + rand(-aimScatter, aimScatter);
+      const targetX = state.centerX + Math.cos(targetAngle) * state.orbitRadius;
+      const targetY = state.centerY + Math.sin(targetAngle) * state.orbitRadius;
+      const dx = targetX - x;
+      const dy = targetY - y;
+      const length = Math.max(1, Math.hypot(dx, dy));
+      const progression = Math.max(0, state.level - (LEVELS.length + 1));
+      const baseSpeed = onslaught ? rand(195, 265) : rand(205, 250);
+      const speed =
+        clamp(baseSpeed + progression * 4, 190, 340)
+        * state.viewportSpeedScale;
+      const size =
+        rand(10, onslaught ? 15.5 : 14)
+        * clamp(state.viewportGeometryScale / .8, .78, 1.18);
+
+      state.meteors.push({
+        x,
+        y,
+        vx: dx / length * speed,
+        vy: dy / length * speed,
+        size,
+        rotation: Math.random() * TAU,
+        spin: rand(-4.8, 4.8),
+        life: Math.hypot(state.width, state.height) / Math.max(1, speed) + 2.4,
+        dead: false,
+        resolved: false,
+        generation: 0,
+        seed: Math.random() * 1000
+      });
+      state.meteorSpawned += 1;
+      meteorWhoosh();
+    }
+
+    function recordMeteorResolved(meteor, reason = "dodged") {
+      if (!isMeteorOnslaughtLevel() || !meteor || meteor.resolved) return false;
+
+      // Fragment children are extra danger created by collisions, not extra
+      // requirements for completing the onslaught.
+      if (meteor.generation > 0) {
+        meteor.resolved = true;
+        return false;
+      }
+
+      meteor.resolved = true;
+      state.levelPasses = Math.min(state.gatesToClear, state.levelPasses + 1);
+
+      if (reason === "dodged") {
+        awardPoints(22 + Math.min(80, state.combo * 2));
+      } else if (reason === "bomb") {
+        awardPoints(34);
+      }
+
+      updateCampaignHud();
+
+      if (state.levelPasses >= state.gatesToClear && state.mode === "playing") {
+        completeLevel();
+        return true;
+      }
+      return false;
+    }
+
+    function spawnMeteorFragment(parent, angleOffset) {
+      const parentSpeed = Math.max(1, Math.hypot(parent.vx, parent.vy));
+      const baseAngle = Math.atan2(parent.vy, parent.vx);
+      const angle = baseAngle + angleOffset + rand(-.12, .12);
+      const speed = parentSpeed * rand(1.08, 1.22);
+
+      state.meteors.push({
+        x: parent.x + Math.cos(angle) * parent.size * .42,
+        y: parent.y + Math.sin(angle) * parent.size * .42,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        size: Math.max(5.2, parent.size * .62),
+        rotation: parent.rotation + rand(-.5, .5),
+        spin: rand(-6.2, 6.2),
+        life: Math.max(.8, parent.life * .78),
+        dead: false,
+        resolved: false,
+        generation: parent.generation + 1,
+        seed: Math.random() * 1000
+      });
+    }
+
+    function splitMeteorPair(a, b) {
+      if (!a || !b || a.dead || b.dead) return false;
+
+      // Only original meteors fragment. Their smaller children remain dangerous
+      // but cannot recursively explode into an exponential number of objects.
+      if (a.generation > 0 || b.generation > 0) return false;
+
+      a.dead = true;
+      b.dead = true;
+
+      const ax = a.x;
+      const ay = a.y;
+      const bx = b.x;
+      const by = b.y;
+
+      burstAtXY(ax, ay, 24, "#ff9b62", 1.45);
+      burstAtXY(bx, by, 24, "#ff9b62", 1.45);
+
+      // Each parent creates two fragments -> four smaller meteors total.
+      spawnMeteorFragment(a, -.42);
+      spawnMeteorFragment(a,  .42);
+      spawnMeteorFragment(b, -.42);
+      spawnMeteorFragment(b,  .42);
+
+      state.flash = Math.max(state.flash, .35);
+      state.shake = state.reducedMotion ? 0 : Math.max(state.shake, 6);
+      tone(210, .09, "sawtooth", .026, 190);
+      setTimeout(() => tone(330, .07, "triangle", .018, 140), 35);
+      return true;
+    }
+
+    function resolveMeteorCollisions() {
+      const live = state.meteors.filter(meteor => !meteor.dead && meteor.generation === 0);
+
+      for (let i = 0; i < live.length; i++) {
+        const a = live[i];
+        if (a.dead) continue;
+
+        for (let j = i + 1; j < live.length; j++) {
+          const b = live[j];
+          if (b.dead) continue;
+
+          const collisionDistance = (a.size + b.size) * .78;
+          const dx = a.x - b.x;
+          const dy = a.y - b.y;
+
+          if (dx * dx + dy * dy <= collisionDistance * collisionDistance) {
+            splitMeteorPair(a, b);
+            break;
+          }
+        }
+      }
+    }
+
+    function updateMeteors(dt) {
+      const quota = meteorQuotaForLevel();
+      const onslaught = isMeteorOnslaughtLevel();
+      const activeCount = state.meteors.filter(m => !m.dead).length;
+      const meteorTimeScale = state.activePowerups.slow > 0 ? .54 : 1;
+      const meteorDt = dt * meteorTimeScale;
+
+      if (onslaught) {
+        state.meteorSpawnTimer -= dt;
+        if (
+          state.meteorSpawned < quota &&
+          activeCount < meteorActiveCap() &&
+          state.meteorSpawnTimer <= 0
+        ) {
+          spawnMeteor(true);
+          state.meteorSpawnTimer = onslaughtSpawnDelay();
+        }
+      } else {
+        const progress = clamp(state.levelPasses / Math.max(1, state.gatesToClear), 0, 1);
+        if (quota > 0 && state.meteorSpawned < quota && activeCount < 2) {
+          const nextThreshold = (state.meteorSpawned + .5) / quota;
+          if (progress >= nextThreshold) spawnMeteor(false);
+        }
+      }
+
+      const px = state.centerX + Math.cos(state.playerAngle) * state.orbitRadius;
+      const py = state.centerY + Math.sin(state.playerAngle) * state.orbitRadius;
+
+      for (const meteor of state.meteors) {
+        meteor.life -= meteorDt;
+        meteor.x += meteor.vx * meteorDt;
+        meteor.y += meteor.vy * meteorDt;
+        meteor.rotation += meteor.spin * meteorDt;
+
+        if (meteor.life <= 0 ||
+            meteor.x < -120 || meteor.x > state.width + 120 ||
+            meteor.y < -120 || meteor.y > state.height + 120) {
+          meteor.dead = true;
+          if (recordMeteorResolved(meteor, "dodged")) return;
+          continue;
+        }
+      }
+
+      resolveMeteorCollisions();
+
+      for (const meteor of state.meteors) {
+        if (meteor.dead) continue;
+
+        if (state.invulnerable <= 0 && state.mode === "playing") {
+          const hitDistance = meteor.size + state.playerSize * .72;
+          if (Math.hypot(meteor.x - px, meteor.y - py) <= hitDistance) {
+            // Phase Shift applies to meteors as well as gates. Meteors pass
+            // harmlessly through the ship and continue on their trajectory.
+            if (state.activePowerups.phase > 0) {
+              burstAtXY(px, py, 14, POWER_TYPES.phase.color, .9);
+              tone(720, .055, "triangle", .018, 90);
+              continue;
+            }
+
+            meteor.dead = true;
+
+            if (state.activePowerups.shield > 0) {
+              state.activePowerups.shield = Math.max(0, state.activePowerups.shield - 1);
+              state.combo = Math.max(1, state.combo - 2);
+              state.shake = state.reducedMotion ? 0 : 10;
+              burstAtXY(meteor.x, meteor.y, 38, POWER_TYPES.shield.color, 1.8);
+              showToast(state.activePowerups.shield > 0
+                ? `SHIELD SMASHED METEOR — ${state.activePowerups.shield}/3 REMAIN`
+                : "FINAL SHIELD SMASHED METEOR");
+              tone(250, .18, "sawtooth", .045, 520);
+              updatePowerHud();
+              updateHud();
+              if (recordMeteorResolved(meteor, "shield")) return;
+            } else {
+              // A meteor that connects is still one resolved onslaught hazard.
+              // If a life remains, progression resumes after the safe respawn.
+              recordMeteorResolved(meteor, "hit");
+              burstAtXY(meteor.x, meteor.y, 52, "#ff8b5c", 2.1);
+              collision();
+              if (state.mode !== "playing") break;
+            }
+          }
+        }
+      }
+
+      state.meteors = state.meteors.filter(meteor => !meteor.dead);
+    }
+
+    function detonateBomb() {
+      const liveWalls = state.walls.filter(wall => !wall.dead);
+      const liveMeteors = state.meteors.filter(meteor => !meteor.dead);
+      const remainingGates = Math.max(0, state.gatesToClear - state.levelPasses);
+      const gatesCleared = isMeteorOnslaughtLevel()
+        ? 0
+        : Math.min(
+            remainingGates,
+            liveWalls.filter(wall => !wall.passed && wall.shape === "circle").length
+          );
+
+      for (const wall of liveWalls) {
+        wall.dead = true;
+        const boomAngle = wall.gapAngle + Math.PI + rand(-.35, .35);
+        burst(boomAngle, Math.max(30, wall.radius), 24, POWER_TYPES.bomb.color, 2.15);
+        burst(boomAngle + .45, Math.max(30, wall.radius), 14, "#ffd166", 1.7);
+      }
+
+      let meteorsDestroyed = 0;
+      for (const meteor of liveMeteors) {
+        meteor.dead = true;
+        meteorsDestroyed += 1;
+        burstAtXY(meteor.x, meteor.y, 42, POWER_TYPES.bomb.color, 2.25);
+        burstAtXY(meteor.x, meteor.y, 18, "#ffd166", 1.65);
+        recordMeteorResolved(meteor, "bomb");
+      }
+
+      if (gatesCleared > 0 && state.mode === "playing") {
+        state.passes += gatesCleared;
+        state.levelPasses = Math.min(state.gatesToClear, state.levelPasses + gatesCleared);
+        state.combo = Math.min(99, state.combo + gatesCleared);
+        state.bestCombo = Math.max(state.bestCombo, state.combo);
+        awardPoints(40 * gatesCleared);
+        updateHud();
+        updateCampaignHud();
+      }
+
+      state.walls = state.walls.filter(wall => !wall.dead);
+      state.meteors = state.meteors.filter(meteor => !meteor.dead);
+      state.bombPulse = 1;
+      state.flash = 1.35;
+      state.shake = state.reducedMotion ? 0 : 19;
+      bombBlastSound();
+
+      const totalDestroyed = liveWalls.length + meteorsDestroyed;
+      const passText = gatesCleared > 0
+        ? ` · ${gatesCleared} GATE${gatesCleared === 1 ? "" : "S"} AUTO-PASSED`
+        : "";
+      showToast(totalDestroyed > 0
+        ? `✹ BOMB — ${totalDestroyed} HAZARD${totalDestroyed === 1 ? "" : "S"} DETONATED${passText}`
+        : "✹ BOMB — CLEAR SKY");
+
+      if (
+        gatesCleared > 0 &&
+        state.levelPasses >= state.gatesToClear &&
+        state.mode === "playing"
+      ) {
+        completeLevel();
+      }
+    }
+
+    function regularPolygonBoundaryRadius(apothem, angle, rotation = 0, sides = 8) {
+      const sector = TAU / sides;
+      let relative = (angle - rotation + sector / 2) % sector;
+      if (relative < 0) relative += sector;
+      relative -= sector / 2;
+      return apothem / Math.max(.001, Math.cos(relative));
+    }
+
+    function updateWalls(dt) {
+      const speed = currentWallSpeed();
+      for (const wall of state.walls) {
+        wall.prevRadius = wall.radius;
+        wall.radius -= speed * dt;
+        wall.gapAngle = (wall.gapAngle + wall.rotationSpeed * dt + TAU) % TAU;
+        const crossed = wall.prevRadius > state.orbitRadius && wall.radius <= state.orbitRadius;
+        if (crossed && !wall.passed) {
+          wall.passed = true;
+          resolveGate(wall);
+          if (state.mode !== "playing") break;
+        }
+
+        if (wall.radius < 24) wall.dead = true;
+      }
+      state.walls = state.walls.filter(w => !w.dead);
+    }
+
+    function effectiveGapSize(wall) {
+      return wall.gapSize * state.gateBoostScale;
+    }
+
+    function resolveGate(wall) {
+      if (state.activePowerups.phase > 0) {
+        wall.dead = true;
+        state.passes += 1;
+        state.combo = Math.min(99, state.combo + 1);
+        state.bestCombo = Math.max(state.bestCombo, state.combo);
+        const phasePoints = awardPoints(55 + state.combo * 4);
+        burstAtPlayer(18, POWER_TYPES.phase.color, 1.25);
+        tone(760, .07, "triangle", .024, 130);
+        popCombo();
+        updateHud();
+        recordGateClear();
+        return;
+      }
+
+      if (state.invulnerable > 0) {
+        wall.dead = true;
+        return;
+      }
+
+      const d1 = Math.abs(angleDelta(state.playerAngle, wall.gapAngle));
+      const d2 = Math.abs(angleDelta(state.playerAngle, wall.gapAngle + Math.PI));
+      const distance = wall.doubleGap ? Math.min(d1, d2) : d1;
+      const safeHalf = effectiveGapSize(wall) / 2 - .035;
+
+      if (distance > safeHalf) {
+        if (state.activePowerups.shield > 0) {
+          state.activePowerups.shield = Math.max(0, state.activePowerups.shield - 1);
+          wall.dead = true;
+          state.combo = Math.max(1, state.combo - 2);
+          state.shake = state.reducedMotion ? 0 : 8;
+          burstAtPlayer(46, POWER_TYPES.shield.color, 1.9);
+          const shieldsLeft = state.activePowerups.shield;
+          showToast(shieldsLeft > 0
+            ? `SHIELD ABSORBED HIT — ${shieldsLeft}/3 REMAIN`
+            : "FINAL SHIELD USED — STACK EMPTY");
+          tone(320, .16, "sawtooth", .038, 420);
+          updatePowerHud();
+          updateHud();
+          return;
+        }
+        collision();
+        return;
+      }
+
+      const edgeDistance = safeHalf - distance;
+      const nearMiss = edgeDistance < .12;
+      state.passes += 1;
+      state.combo = Math.min(99, state.combo + (nearMiss ? 2 : 1));
+      state.bestCombo = Math.max(state.bestCombo, state.combo);
+
+      const tightness = Math.round((1.5 - wall.gapSize) * 85);
+      const points = awardPoints(28 + tightness + state.combo * 4 + (nearMiss ? 85 : 0));
+      state.flash = nearMiss ? .68 : .28;
+
+      burstAtPlayer(nearMiss ? 26 : 13, nearMiss ? "#ffd166" : "#6ef7b1", nearMiss ? 1.5 : 1);
+      tone(nearMiss ? 880 : 690, nearMiss ? .12 : .075, "sine", nearMiss ? .04 : .028, nearMiss ? 240 : 100);
+      if (nearMiss) setTimeout(() => tone(1180, .08, "triangle", .022, 90), 42);
+
+      popCombo();
+      updateHud();
+      recordGateClear();
+    }
+
+    function recordGateClear() {
+      if (state.mode !== "playing") return;
+      state.levelPasses += 1;
+      updateCampaignHud();
+      if (state.levelPasses >= state.gatesToClear) completeLevel();
+    }
+
+    function completeLevel() {
+      if (state.mode !== "playing") return;
+      const clearedLevel = state.level;
+      state.mode = "levelready";
+      state.styleOrbitProgress = 0;
+      state.lives += 1;
+      state.level += 1;
+      state.levelPasses = 0;
+      state.gatesToClear = levelObjective(state.level);
+      state.walls = [];
+      state.meteors = [];
+      state.meteorSpawned = 0;
+      state.meteorSpawnTimer = 0;
+      // Visible, uncollected power-ups carry into the next level. Since the
+      // level-ready screen freezes gameplay, their positions and lifetimes
+      // remain exactly as the player left them.
+      state.sparks = [];
+      state.spawnTimer = .65;
+      state.powerSpawnTimer = Math.max(state.powerSpawnTimer, 2.5);
+      state.invulnerable = 1.2;
+      stopMusic();
+      applyLevelTheme();
+      updateCampaignHud();
+      showLevelBanner(true, clearedLevel);
+      state.flash = .9;
+      burstAtPlayer(70, currentTheme().accent, 2.1);
+      tone(660, .18, "triangle", .05, 440);
+      setTimeout(() => tone(990, .16, "triangle", .04, 410), 90);
+      setTimeout(() => tone(1320, .22, "sine", .035, 280), 180);
+    }
+
+    function showLevelBanner(cleared = false, clearedLevel = 0) {
+      const theme = currentTheme();
+      els.levelBannerEyebrow.textContent = `LEVEL ${state.level}`;
+      els.levelBannerTitle.textContent = theme.name;
+      const meteorQuota = meteorQuotaForLevel(state.level);
+      const onslaught = isMeteorOnslaughtLevel();
+      const meteorText = !onslaught && meteorQuota > 0
+        ? ` · ☄ ${meteorQuota} meteor${meteorQuota === 1 ? "" : "s"} incoming`
+        : "";
+      els.levelBannerText.textContent = cleared
+        ? `Level ${clearedLevel} cleared · +1 life · ${theme.subtitle}${meteorText}`
+        : onslaught
+          ? `${theme.subtitle} · Survive ${state.gatesToClear} meteors`
+          : `${theme.subtitle} · Clear ${state.gatesToClear} gates${meteorText}`;
+      els.levelStartBtn.textContent = `START LEVEL ${state.level}`;
+      els.levelBanner.classList.add("show");
+    }
+
+    function beginReadyLevel() {
+      if (state.mode !== "levelready") return;
+      els.levelBanner.classList.remove("show");
+      state.mode = "playing";
+      state.lastTime = performance.now();
+      state.musicStep = 0;
+      state.spawnTimer = .72;
+      state.powerSpawnTimer = Math.max(state.powerSpawnTimer, 3.6);
+      state.invulnerable = Math.max(state.invulnerable, .9);
+      if (isMeteorOnslaughtLevel()) {
+        state.meteorSpawnTimer = .28;
+        if (state.meteorSpawned < meteorQuotaForLevel()) spawnMeteor(true);
+      } else if (state.gatesToClear - state.levelPasses > 0) {
+        spawnWall(true);
+      }
+      spawnSpark();
+      startMusic();
+      setMusicLevel(true);
+      tone(520, .08, "triangle", .03, 180);
+    }
+
+    function updateSparks(dt) {
+      for (const spark of state.sparks) {
+        spark.life -= dt;
+        spark.pulse += dt * 4;
+        const d = Math.abs(angleDelta(state.playerAngle, spark.angle));
+        if (d < .075) {
+          spark.life = -1;
+          const gain = spark.special ? 210 : 70;
+          awardPoints(gain + state.combo * 3);
+          state.combo = Math.min(99, state.combo + (spark.special ? 3 : 1));
+          state.bestCombo = Math.max(state.bestCombo, state.combo);
+          burst(spark.angle, state.orbitRadius, spark.special ? 28 : 15, spark.special ? "#ff4fd8" : "#58e7ff", 1.2);
+          tone(spark.special ? 1200 : 940, .09, "triangle", .03, 160);
+          popCombo();
+          updateHud();
+        }
+      }
+      state.sparks = state.sparks.filter(s => s.life > 0);
+    }
+
+    function updatePowerups(dt) {
+      for (const powerup of state.powerups) {
+        powerup.life -= dt;
+        powerup.pulse += dt * 4.6;
+        powerup.spin += dt * 1.8;
+        const d = Math.abs(angleDelta(state.playerAngle, powerup.angle));
+        if (d < .09) {
+          powerup.life = -1;
+          activatePowerup(powerup.type);
+        }
+      }
+      state.powerups = state.powerups.filter(powerup => powerup.life > 0);
+    }
+
+    function awardStyleBonus() {
+      state.styleCount += 1;
+      const base = 180 + Math.min(420, state.level * 30) + Math.min(220, state.combo * 5);
+      const points = awardPoints(base);
+      state.combo = Math.min(99, state.combo + 2);
+      state.bestCombo = Math.max(state.bestCombo, state.combo);
+      state.stylePulse = 1;
+      state.flash = Math.max(state.flash, .72);
+
+      const theme = currentTheme();
+      burstAtPlayer(58, theme.accent, 2.35);
+      burstAtPlayer(34, theme.secondary, 1.65);
+
+      els.styleBannerPoints.textContent = `+${points} · ${currentDifficulty().label.toUpperCase()} ×${currentDifficulty().score.toFixed(2)}`;
+      els.styleBanner.classList.remove("show");
+      void els.styleBanner.offsetWidth;
+      els.styleBanner.classList.add("show");
+      if (state.styleBannerTimer) clearTimeout(state.styleBannerTimer);
+      state.styleBannerTimer = setTimeout(() => els.styleBanner.classList.remove("show"), 930);
+
+      initAudio();
+      if (state.audio && state.audioNodes && state.sound) {
+        const now = state.audio.currentTime;
+        const notes = [440, 554.37, 659.25, 880];
+        notes.forEach((freq, i) => {
+          const osc = state.audio.createOscillator();
+          const gain = state.audio.createGain();
+          const filter = state.audio.createBiquadFilter();
+          osc.type = i < 2 ? "triangle" : "sine";
+          osc.frequency.setValueAtTime(freq, now + i * .045);
+          osc.frequency.exponentialRampToValueAtTime(freq * 1.08, now + i * .045 + .18);
+          filter.type = "bandpass";
+          filter.frequency.value = 1200 + i * 700;
+          filter.Q.value = 2.2;
+          gain.gain.setValueAtTime(.0001, now + i * .045);
+          gain.gain.exponentialRampToValueAtTime(.045 - i * .005, now + i * .045 + .018);
+          gain.gain.exponentialRampToValueAtTime(.0001, now + i * .045 + .26);
+          osc.connect(filter).connect(gain).connect(state.audioNodes.sfx);
+          osc.start(now + i * .045);
+          osc.stop(now + i * .045 + .29);
+        });
+        setTimeout(() => tone(1320, .13, "sine", .032, 480), 145);
+      }
+
+      popCombo();
+      updateHud();
+    }
+
+    function collision() {
+      if (state.invulnerable > 0 || state.mode !== "playing") return;
+
+      state.combo = 1;
+      state.styleOrbitProgress = 0;
+      state.lives = Math.max(0, state.lives - 1);
+      state.shake = state.reducedMotion ? 0 : 16;
+      state.flash = 1;
+      burstAtPlayer(55, "#ff4f6d", 2.2);
+      tone(150, .32, "sawtooth", .055, -70);
+      updateHud();
+      updateCampaignHud();
+
+      if (state.lives <= 0) {
+        state.mode = "dying";
+        setTimeout(endRun, 260);
+        return;
+      }
+
+      state.mode = "respawning";
+      setMusicLevel(false);
+      showToast(`LIFE LOST — ${state.lives} ${state.lives === 1 ? "LIFE" : "LIVES"} REMAIN`);
+      for (const wall of state.walls) {
+        if (Math.abs(wall.radius - state.orbitRadius) < 150) wall.dead = true;
+      }
+      state.walls = state.walls.filter(wall => !wall.dead);
+      if (isMeteorOnslaughtLevel()) {
+        const unresolved = state.meteors.filter(meteor => !meteor.dead && !meteor.resolved).length;
+        state.meteorSpawned = Math.max(state.levelPasses, state.meteorSpawned - unresolved);
+        state.meteorSpawnTimer = .55;
+      }
+      state.meteors = [];
+      // Visible, uncollected power-ups survive the life loss. While the player
+      // is respawning updatePowerups() is paused, so they do not expire.
+      if (state.respawnTimer) clearTimeout(state.respawnTimer);
+      state.respawnTimer = setTimeout(() => {
+        if (state.mode !== "respawning") return;
+        state.playerAngle = -Math.PI / 2;
+        state.playerDirection = 1;
+        state.styleOrbitProgress = 0;
+        state.invulnerable = 2.4;
+        state.spawnTimer = .45;
+        state.mode = "playing";
+        state.lastTime = performance.now();
+        setMusicLevel(true);
+        if (isMeteorOnslaughtLevel() && state.levelPasses >= state.gatesToClear) {
+          completeLevel();
+          return;
+        }
+        showToast("BACK ONLINE — 2.4s SAFE");
+        tone(480, .12, "triangle", .035, 360);
+      }, 720);
+    }
+
+    function burstAtPlayer(count, color, force) {
+      burst(state.playerAngle, state.orbitRadius, count, color, force);
+    }
+
+    function burstAtXY(x, y, count, color, force) {
+      for (let i = 0; i < count; i++) {
+        const a = Math.random() * TAU;
+        const speed = rand(35, 150) * force;
+        state.particles.push({
+          x, y,
+          vx: Math.cos(a) * speed,
+          vy: Math.sin(a) * speed,
+          life: rand(.25, .72),
+          maxLife: .72,
+          size: rand(1.5, 4.5),
+          color
+        });
+      }
+    }
+
+    function burst(angle, radius, count, color, force) {
+      const x = state.centerX + Math.cos(angle) * radius;
+      const y = state.centerY + Math.sin(angle) * radius;
+      for (let i = 0; i < count; i++) {
+        const a = Math.random() * TAU;
+        const speed = rand(35, 150) * force;
+        state.particles.push({
+          x, y,
+          vx: Math.cos(a) * speed,
+          vy: Math.sin(a) * speed,
+          life: rand(.25, .72),
+          maxLife: .72,
+          size: rand(1.5, 4.5),
+          color
+        });
+      }
+    }
+
+    function updateParticles(dt) {
+      for (const p of state.particles) {
+        p.life -= dt;
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+        p.vx *= Math.pow(.06, dt);
+        p.vy *= Math.pow(.06, dt);
+      }
+      state.particles = state.particles.filter(p => p.life > 0);
+    }
+
+    function popCombo() {
+      els.comboCard.classList.remove("pop");
+      void els.comboCard.offsetWidth;
+      els.comboCard.classList.add("pop");
+    }
+
+    function updateHud() {
+      els.score.textContent = Math.floor(state.score);
+      els.combo.textContent = "x" + state.combo;
+      els.best.textContent = Math.max(state.best, Math.floor(state.score));
+    }
+
+    function updateCampaignHud() {
+      const theme = currentTheme();
+      els.level.textContent = state.level;
+      const meteorQuota = meteorQuotaForLevel(state.level);
+      const meteorRemaining = Math.max(0, meteorQuota - state.meteorSpawned);
+      els.levelName.textContent = isMeteorOnslaughtLevel()
+        ? `${theme.name} · ${state.levelPasses}/${state.gatesToClear} survived · ☄ ${meteorRemaining} queued`
+        : `${theme.name} · ${state.levelPasses}/${state.gatesToClear} gates`
+          + (meteorQuota > 0 ? ` · ☄ ${meteorRemaining} queued` : "");
+      const diff = currentDifficulty();
+      els.difficultyBadge.textContent = `${diff.label} · ×${diff.score.toFixed(2)}`;
+      els.lives.textContent = state.lives > 0 ? "◆".repeat(Math.min(state.lives, 6)) + (state.lives > 6 ? ` +${state.lives - 6}` : "") : "—";
+      els.levelProgress.style.width = `${clamp(state.levelPasses / Math.max(1, state.gatesToClear), 0, 1) * 100}%`;
+    }
+
+    function updatePowerHud() {
+      const chips = [];
+      if (state.activePowerups.shield > 0) {
+        const info = POWER_TYPES.shield;
+        const charges = state.activePowerups.shield;
+        chips.push(`<span class="power-chip" style="--power-color:${info.color}"><i></i>${info.symbol} ${info.label}<b>${charges}/3 ${charges === 1 ? "CHARGE" : "CHARGES"}</b></span>`);
+      }
+      for (const key of ["phase", "slow", "double"]) {
+        const time = state.activePowerups[key];
+        if (time > 0) {
+          const info = POWER_TYPES[key];
+          chips.push(`<span class="power-chip" style="--power-color:${info.color}"><i></i>${info.symbol} ${info.label}<b>${info.hud} · ${time.toFixed(1)}s</b></span>`);
+        }
+      }
+      if (state.activePowerups.wide > 0 && state.gateBoostStacks > 0) {
+        const info = POWER_TYPES.wide;
+        const boostPct = state.gateBoostStacks * 25;
+        chips.push(`<span class="power-chip" style="--power-color:${info.color}"><i></i>${info.symbol} ${info.label}<b>+${boostPct}% GAPS · ${state.gateBoostStacks}/3 · ${state.activePowerups.wide.toFixed(1)}s</b></span>`);
+      }
+      els.powerHud.innerHTML = chips.join("");
+    }
+
+    function updateSessionClock() {
+      const seconds = Math.floor((Date.now() - state.sessionStart) / 1000);
+      const m = String(Math.floor(seconds / 60)).padStart(2, "0");
+      const s = String(seconds % 60).padStart(2, "0");
+      els.session.textContent = `Session ${m}:${s}`;
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, state.width, state.height);
+
+      let sx = 0, sy = 0;
+      if (state.shake > 0) {
+        sx = rand(-state.shake, state.shake);
+        sy = rand(-state.shake, state.shake);
+      }
+
+      ctx.save();
+      ctx.translate(sx, sy);
+      drawBackground();
+      drawOrbit();
+      drawWalls();
+      drawSparks();
+      drawPowerups();
+      drawMeteors();
+      drawBombPulse();
+      drawPlayer();
+      drawParticles();
+      ctx.restore();
+
+      if (state.flash > 0) {
+        ctx.fillStyle = `rgba(255,255,255,${state.flash * .055})`;
+        ctx.fillRect(0, 0, state.width, state.height);
+      }
+    }
+
+    function drawBackground() {
+      const t = state.elapsed;
+      const theme = currentTheme();
+
+      const base = ctx.createLinearGradient(0, 0, state.width, state.height);
+      base.addColorStop(0, theme.bg2);
+      base.addColorStop(1, theme.bg);
+      ctx.fillStyle = base;
+      ctx.fillRect(0, 0, state.width, state.height);
+
+      for (const star of state.stars) {
+        const alpha = star.a * (.62 + Math.sin(t * star.tw + star.x) * .38);
+        ctx.fillStyle = colorAlpha(theme.accent, alpha);
+        ctx.beginPath();
+        ctx.arc(star.x, star.y, star.r, 0, TAU);
+        ctx.fill();
+      }
+
+      ctx.save();
+      ctx.globalAlpha = .20;
+
+      if (theme.pattern === "grid") {
+        ctx.strokeStyle = theme.accent;
+        ctx.lineWidth = 1;
+        const horizon = state.centerY + state.orbitRadius * .15;
+        for (let i = -10; i <= 10; i++) {
+          ctx.beginPath();
+          ctx.moveTo(state.centerX + i * 30, horizon);
+          ctx.lineTo(state.centerX + i * 110, state.height);
+          ctx.stroke();
+        }
+        const shift = (t * 70) % 42;
+        for (let y = horizon + shift; y < state.height; y += 42) {
+          const depth = (y - horizon) / Math.max(1, state.height - horizon);
+          ctx.globalAlpha = .05 + depth * .18;
+          ctx.beginPath();
+          ctx.moveTo(0, y);
+          ctx.lineTo(state.width, y);
+          ctx.stroke();
+        }
+      } else if (theme.pattern === "rings") {
+        ctx.strokeStyle = theme.secondary;
+        ctx.lineWidth = 2;
+        for (let i = 0; i < 9; i++) {
+          const r = ((t * 45 + i * 86) % (state.outerRadius * .9)) + 30;
+          ctx.globalAlpha = .03 + (1 - r / state.outerRadius) * .17;
+          ctx.beginPath();
+          ctx.arc(state.centerX, state.centerY, r, 0, TAU);
+          ctx.stroke();
+        }
+      } else if (theme.pattern === "hex") {
+        ctx.strokeStyle = theme.accent;
+        ctx.lineWidth = 1;
+        const size = 34;
+        for (let row = -1; row < state.height / (size * 1.5) + 1; row++) {
+          for (let col = -1; col < state.width / (size * 1.73) + 1; col++) {
+            const x = col * size * 1.73 + (row % 2 ? size * .865 : 0);
+            const y = row * size * 1.5 + (t * 9 % (size * 1.5));
+            ctx.globalAlpha = .035 + ((row + col + Math.floor(t)) % 4 === 0 ? .07 : 0);
+            ctx.beginPath();
+            for (let i = 0; i < 6; i++) {
+              const a = i / 6 * TAU;
+              const px = x + Math.cos(a) * size;
+              const py = y + Math.sin(a) * size;
+              i ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
+            }
+            ctx.closePath();
+            ctx.stroke();
+          }
+        }
+      } else if (theme.pattern === "flare") {
+        ctx.translate(state.centerX, state.centerY);
+        ctx.strokeStyle = theme.secondary;
+        for (let i = 0; i < 28; i++) {
+          const a = i / 28 * TAU + t * .035;
+          const inner = 60 + Math.sin(t * 2 + i) * 12;
+          const outer = state.outerRadius * .92;
+          ctx.globalAlpha = i % 3 === 0 ? .13 : .035;
+          ctx.lineWidth = i % 3 === 0 ? 3 : 1;
+          ctx.beginPath();
+          ctx.moveTo(Math.cos(a) * inner, Math.sin(a) * inner);
+          ctx.lineTo(Math.cos(a) * outer, Math.sin(a) * outer);
+          ctx.stroke();
+        }
+      } else if (theme.pattern === "onslaught") {
+        const cx = state.centerX;
+        const cy = state.centerY;
+        ctx.save();
+        ctx.translate(cx, cy);
+        for (let i = 0; i < 28; i++) {
+          const a = i / 28 * TAU + Math.sin(t * .7 + i) * .035;
+          const inner = 40 + (i % 5) * 8;
+          const outer = Math.max(state.width, state.height) * .72;
+          ctx.strokeStyle = i % 3 === 0 ? theme.secondary : theme.accent;
+          ctx.globalAlpha = .025 + (i % 4) * .008;
+          ctx.lineWidth = i % 6 === 0 ? 2.2 : 1;
+          ctx.beginPath();
+          ctx.moveTo(Math.cos(a) * inner, Math.sin(a) * inner);
+          ctx.lineTo(
+            Math.cos(a + Math.sin(t * 1.4 + i) * .012) * outer,
+            Math.sin(a + Math.sin(t * 1.4 + i) * .012) * outer
+          );
+          ctx.stroke();
+        }
+        ctx.globalAlpha = .07;
+        const pulse = 70 + Math.sin(t * 3.1) * 12;
+        const grad = ctx.createRadialGradient(0, 0, 0, 0, 0, pulse * 2.4);
+        grad.addColorStop(0, theme.accent);
+        grad.addColorStop(.35, "rgba(255,107,61,.25)");
+        grad.addColorStop(1, "rgba(255,107,61,0)");
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(0, 0, pulse * 2.4, 0, TAU);
+        ctx.fill();
+        ctx.restore();
+      } else if (theme.pattern === "void") {
+        ctx.strokeStyle = theme.secondary;
+        ctx.lineWidth = 1.5;
+        for (let i = -8; i <= 8; i++) {
+          const drift = Math.sin(t * .7 + i) * 28;
+          ctx.globalAlpha = i % 2 ? .045 : .10;
+          ctx.beginPath();
+          ctx.moveTo(state.centerX + i * 70 + drift, 0);
+          ctx.lineTo(state.centerX - i * 70 - drift, state.height);
+          ctx.stroke();
+        }
+        ctx.strokeStyle = theme.accent;
+        for (let i = 0; i < 5; i++) {
+          const r = state.orbitRadius * (.6 + i * .34) + Math.sin(t * 1.4 + i) * 12;
+          ctx.globalAlpha = .035 + i * .012;
+          ctx.beginPath();
+          ctx.arc(state.centerX, state.centerY, r, t * .12, Math.PI + t * .12);
+          ctx.stroke();
+        }
+      }
+
+      ctx.restore();
+
+      const glow = ctx.createRadialGradient(
+        state.centerX, state.centerY, 0,
+        state.centerX, state.centerY, state.orbitRadius * 2.9
+      );
+      glow.addColorStop(0, colorAlpha(theme.secondary, .15));
+      glow.addColorStop(.48, colorAlpha(theme.accent, .055));
+      glow.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = glow;
+      ctx.fillRect(0, 0, state.width, state.height);
+    }
+
+    function drawOrbit() {
+      const theme = currentTheme();
+      const pulse = 1 + Math.sin(state.elapsed * 2.4) * .008;
+      const r = state.orbitRadius * pulse;
+
+      ctx.save();
+      ctx.translate(state.centerX, state.centerY);
+
+      ctx.strokeStyle = "rgba(155,174,255,.10)";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.arc(0, 0, r, 0, TAU);
+      ctx.stroke();
+
+      ctx.strokeStyle = colorAlpha(theme.accent, .055);
+      ctx.lineWidth = 10 * state.viewportGeometryScale;
+      ctx.beginPath();
+      ctx.arc(0, 0, r, 0, TAU);
+      ctx.stroke();
+
+      for (let i = 0; i < 24; i++) {
+        const a = i / 24 * TAU + state.elapsed * .07;
+        const tick = 4 * state.viewportGeometryScale;
+        const x1 = Math.cos(a) * (r - tick);
+        const y1 = Math.sin(a) * (r - tick);
+        const x2 = Math.cos(a) * (r + tick);
+        const y2 = Math.sin(a) * (r + tick);
+        ctx.strokeStyle = "rgba(255,255,255,.07)";
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.stroke();
+      }
+
+      const coreRadius = 32 * state.viewportGeometryScale;
+      const core = ctx.createRadialGradient(0, 0, 0, 0, 0, coreRadius);
+      core.addColorStop(0, "rgba(255,255,255,.95)");
+      core.addColorStop(.08, colorAlpha(theme.accent, .9));
+      core.addColorStop(.30, colorAlpha(theme.secondary, .30));
+      core.addColorStop(1, colorAlpha(theme.secondary, 0));
+      ctx.fillStyle = core;
+      ctx.beginPath();
+      ctx.arc(0, 0, coreRadius, 0, TAU);
+      ctx.fill();
+
+      if (state.stylePulse > 0) {
+        ctx.strokeStyle = colorAlpha(theme.accent, .78 * state.stylePulse);
+        ctx.shadowBlur = 24 * state.viewportGeometryScale;
+        ctx.shadowColor = theme.secondary;
+        ctx.lineWidth = (3 + state.stylePulse * 5) * state.viewportGeometryScale;
+        ctx.beginPath();
+        ctx.arc(
+          0,
+          0,
+          r + (14 + (1 - state.stylePulse) * 34) * state.viewportGeometryScale,
+          0,
+          TAU
+        );
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+      }
+
+      const styleProgress = clamp(state.styleOrbitProgress / TAU, 0, 1);
+      if (state.mode === "playing" && styleProgress > .03) {
+        ctx.strokeStyle = colorAlpha(theme.accent, .44);
+        ctx.lineWidth = 2.5 * state.viewportGeometryScale;
+        ctx.beginPath();
+        const start = -Math.PI / 2;
+        const direction = state.playerDirection > 0 ? 1 : -1;
+        ctx.arc(0, 0, r + 7 * state.viewportGeometryScale, start, start + direction * TAU * styleProgress, direction < 0);
+        ctx.stroke();
+      }
+
+      ctx.restore();
+    }
+
+    function pointOnRegularPolygon(apothem, progress, rotation, sides = 8) {
+      const circumRadius = apothem / Math.cos(Math.PI / sides);
+      const wrapped = ((progress % 1) + 1) % 1;
+      const scaled = wrapped * sides;
+      const side = Math.floor(scaled) % sides;
+      const f = scaled - Math.floor(scaled);
+      const startAngle = -Math.PI / 2 + Math.PI / sides + side * TAU / sides + rotation;
+      const endAngle = startAngle + TAU / sides;
+      const x1 = Math.cos(startAngle) * circumRadius;
+      const y1 = Math.sin(startAngle) * circumRadius;
+      const x2 = Math.cos(endAngle) * circumRadius;
+      const y2 = Math.sin(endAngle) * circumRadius;
+      return {
+        x: lerp(x1, x2, f),
+        y: lerp(y1, y2, f)
+      };
+    }
+
+    function angleIsInsideGate(angle, wall, gapSize) {
+      const half = gapSize / 2;
+      if (Math.abs(angleDelta(angle, wall.gapAngle)) <= half) return true;
+      if (wall.doubleGap && Math.abs(angleDelta(angle, wall.gapAngle + Math.PI)) <= half) return true;
+      return false;
+    }
+
+    function strokeOctagonGate(wall, radius, gapSize) {
+      // More samples make the gap edges glide cleanly around the polygon.
+      const samples = 192;
+      let drawing = false;
+      ctx.beginPath();
+
+      for (let i = 0; i <= samples; i++) {
+        const p = pointOnRegularPolygon(radius, i / samples, wall.polygonRotation, 8);
+        const angle = Math.atan2(p.y, p.x);
+        const gap = angleIsInsideGate(angle, wall, gapSize);
+
+        if (gap) {
+          drawing = false;
+          continue;
+        }
+
+        if (!drawing) {
+          ctx.moveTo(p.x, p.y);
+          drawing = true;
+        } else {
+          ctx.lineTo(p.x, p.y);
+        }
+      }
+      ctx.stroke();
+    }
+
+    function drawOctagonGapMarkers(wall, gapSize, alpha) {
+      const theme = currentTheme();
+      const centers = wall.doubleGap ? [wall.gapAngle, wall.gapAngle + Math.PI] : [wall.gapAngle];
+
+      for (const center of centers) {
+        for (const edgeAngle of [center - gapSize / 2, center + gapSize / 2]) {
+          const boundary = regularPolygonBoundaryRadius(
+            wall.radius,
+            edgeAngle,
+            wall.polygonRotation,
+            8
+          );
+          const markerLength = 15 * state.viewportGeometryScale;
+          const x1 = Math.cos(edgeAngle) * (boundary - markerLength);
+          const y1 = Math.sin(edgeAngle) * (boundary - markerLength);
+          const x2 = Math.cos(edgeAngle) * (boundary + markerLength);
+          const y2 = Math.sin(edgeAngle) * (boundary + markerLength);
+          ctx.strokeStyle = colorAlpha(theme.marker, .82 * alpha);
+          ctx.lineWidth = 2.2 * state.viewportGeometryScale;
+          ctx.shadowBlur = 12 * state.viewportGeometryScale;
+          ctx.shadowColor = colorAlpha(theme.marker, .58);
+          ctx.beginPath();
+          ctx.moveTo(x1, y1);
+          ctx.lineTo(x2, y2);
+          ctx.stroke();
+          ctx.shadowBlur = 0;
+        }
+      }
+    }
+
+    function drawWalls() {
+      const theme = currentTheme();
+      ctx.save();
+      ctx.translate(state.centerX, state.centerY);
+      ctx.lineCap = "butt";
+      ctx.lineJoin = "round";
+
+      for (const wall of state.walls) {
+        if (wall.radius <= 0) continue;
+
+        const fadeIn = clamp((state.outerRadius - wall.radius) / 120, 0, 1);
+        const fadeOut = clamp(wall.radius / 70, 0, 1);
+        const alpha = fadeIn * fadeOut;
+        const displayGapSize = effectiveGapSize(wall);
+
+        ctx.shadowBlur = 18;
+        ctx.shadowColor = colorAlpha(theme.wall, .32);
+        ctx.strokeStyle = colorAlpha(theme.wall, .72 * alpha);
+        ctx.lineWidth = wall.thickness;
+
+        const safeHalf = displayGapSize / 2;
+        const starts = wall.doubleGap
+          ? [
+              [wall.gapAngle + safeHalf, wall.gapAngle + Math.PI - safeHalf],
+              [wall.gapAngle + Math.PI + safeHalf, wall.gapAngle + TAU - safeHalf]
+            ]
+          : [[wall.gapAngle + safeHalf, wall.gapAngle + TAU - safeHalf]];
+
+        for (const segment of starts) {
+          ctx.beginPath();
+          ctx.arc(0, 0, wall.radius, segment[0], segment[1]);
+          ctx.stroke();
+        }
+
+        ctx.shadowBlur = 0;
+        ctx.strokeStyle = colorAlpha(theme.marker, .42 * alpha);
+        ctx.lineWidth = 1.2;
+        for (const segment of starts) {
+          ctx.beginPath();
+          ctx.arc(0, 0, wall.radius - wall.thickness * .36, segment[0], segment[1]);
+          ctx.stroke();
+        }
+
+        drawGapMarker(wall.gapAngle, wall.radius, displayGapSize, alpha);
+        if (wall.doubleGap) drawGapMarker(wall.gapAngle + Math.PI, wall.radius, displayGapSize, alpha);
+      }
+
+      ctx.restore();
+    }
+
+    function drawGapMarker(angle, radius, gapSize, alpha) {
+      const theme = currentTheme();
+      const a1 = angle - gapSize / 2;
+      const a2 = angle + gapSize / 2;
+
+      for (const a of [a1, a2]) {
+        const x1 = Math.cos(a) * (radius - 14);
+        const y1 = Math.sin(a) * (radius - 14);
+        const x2 = Math.cos(a) * (radius + 14);
+        const y2 = Math.sin(a) * (radius + 14);
+        ctx.strokeStyle = colorAlpha(theme.marker, .78 * alpha);
+        ctx.lineWidth = 2 * state.viewportGeometryScale;
+        ctx.shadowBlur = 12 * state.viewportGeometryScale;
+        ctx.shadowColor = colorAlpha(theme.marker, .55);
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+      }
+    }
+
+    function drawSparks() {
+      ctx.save();
+      ctx.translate(state.centerX, state.centerY);
+
+      for (const spark of state.sparks) {
+        const x = Math.cos(spark.angle) * state.orbitRadius;
+        const y = Math.sin(spark.angle) * state.orbitRadius;
+        const pulse = 1 + Math.sin(spark.pulse) * .18;
+        const color = spark.special ? "#ff4fd8" : "#58e7ff";
+
+        ctx.shadowBlur = spark.special ? 28 : 18;
+        ctx.shadowColor = color;
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.arc(x, y, (spark.special ? 6.5 : 4.6) * pulse, 0, TAU);
+        ctx.fill();
+
+        ctx.fillStyle = "rgba(255,255,255,.92)";
+        ctx.beginPath();
+        ctx.arc(x, y, 1.8, 0, TAU);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+      }
+
+      ctx.restore();
+    }
+
+    function drawPowerups() {
+      ctx.save();
+      ctx.translate(state.centerX, state.centerY);
+
+      for (const powerup of state.powerups) {
+        const info = POWER_TYPES[powerup.type];
+        const x = Math.cos(powerup.angle) * state.orbitRadius;
+        const y = Math.sin(powerup.angle) * state.orbitRadius;
+        const pulse = 1 + Math.sin(powerup.pulse) * .13;
+        const arenaVisualScale = lerp(.94, .80, clamp((700 - state.width) / 280, 0, 1));
+        const size = 15 * pulse * arenaVisualScale;
+
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(powerup.spin);
+        ctx.shadowBlur = 28;
+        ctx.shadowColor = info.color;
+        ctx.strokeStyle = info.color;
+        ctx.fillStyle = "rgba(8,9,25,.86)";
+        ctx.lineWidth = 2.4;
+
+        ctx.beginPath();
+        if (powerup.type === "shield") {
+          for (let i = 0; i < 6; i++) {
+            const a = -Math.PI / 2 + i / 6 * TAU;
+            const px = Math.cos(a) * size;
+            const py = Math.sin(a) * size;
+            i ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
+          }
+          ctx.closePath();
+        } else if (powerup.type === "phase") {
+          for (let i = 0; i < 8; i++) {
+            const a = -Math.PI / 2 + i / 8 * TAU;
+            const r = i % 2 === 0 ? size * 1.18 : size * .48;
+            const px = Math.cos(a) * r;
+            const py = Math.sin(a) * r;
+            i ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
+          }
+          ctx.closePath();
+        } else if (powerup.type === "slow") {
+          ctx.arc(0, 0, size, 0, TAU);
+        } else if (powerup.type === "wide") {
+          ctx.roundRect(-size * 1.18, -size * .72, size * 2.36, size * 1.44, size * .38);
+        } else if (powerup.type === "bomb") {
+          ctx.arc(0, size * .08, size * 1.03, 0, TAU);
+        } else {
+          ctx.rect(-size, -size, size * 2, size * 2);
+        }
+        ctx.fill();
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+        ctx.restore();
+
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.fillStyle = "white";
+        ctx.font = `900 ${powerup.type === "double" ? 10 : powerup.type === "bomb" ? 17 : 14}px system-ui`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(info.symbol, 0, .5);
+        ctx.restore();
+
+        ctx.save();
+        ctx.translate(x, y + size + 11 * arenaVisualScale);
+        ctx.font = `900 ${10 * arenaVisualScale}px system-ui`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        const titleWidth = Math.max(54, ctx.measureText(info.label.toUpperCase()).width + 16);
+        ctx.fillStyle = "rgba(5,6,18,.88)";
+        ctx.strokeStyle = colorAlpha(info.color, .82);
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.roundRect(-titleWidth / 2, -8, titleWidth, 16, 7);
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = info.color;
+        ctx.fillText(info.label.toUpperCase(), 0, .2);
+
+        ctx.font = `800 ${8 * arenaVisualScale}px system-ui`;
+        const effectWidth = Math.max(78, ctx.measureText(info.effect).width + 14);
+        ctx.fillStyle = "rgba(5,6,18,.78)";
+        ctx.beginPath();
+        ctx.roundRect(-effectWidth / 2, 10, effectWidth, 14, 6);
+        ctx.fill();
+        ctx.fillStyle = "rgba(255,255,255,.82)";
+        ctx.fillText(info.effect, 0, 17);
+        ctx.restore();
+      }
+
+      ctx.restore();
+    }
+
+    function drawMeteors() {
+      for (const meteor of state.meteors) {
+        const speed = Math.max(1, Math.hypot(meteor.vx, meteor.vy));
+        const nx = meteor.vx / speed;
+        const ny = meteor.vy / speed;
+        const tail = meteor.size * (meteor.generation > 0 ? 3.2 : 4.3);
+
+        ctx.save();
+        ctx.translate(meteor.x, meteor.y);
+
+        const trail = ctx.createLinearGradient(
+          -nx * tail, -ny * tail,
+          nx * meteor.size, ny * meteor.size
+        );
+        trail.addColorStop(0, "rgba(255,86,52,0)");
+        trail.addColorStop(.55, "rgba(255,126,60,.16)");
+        trail.addColorStop(1, "rgba(255,224,150,.72)");
+        ctx.strokeStyle = trail;
+        ctx.lineWidth = meteor.size * .72;
+        ctx.lineCap = "round";
+        ctx.beginPath();
+        ctx.moveTo(-nx * tail, -ny * tail);
+        ctx.lineTo(0, 0);
+        ctx.stroke();
+
+        ctx.rotate(meteor.rotation);
+        ctx.shadowBlur = meteor.generation > 0 ? 14 : 22;
+        ctx.shadowColor = "#ff713d";
+        ctx.fillStyle = meteor.generation > 0 ? "#6f3327" : "#5d2b26";
+        ctx.strokeStyle = meteor.generation > 0 ? "#ffc078" : "#ff9b62";
+        ctx.lineWidth = meteor.generation > 0 ? 1.25 : 1.6;
+
+        ctx.beginPath();
+        const points = 9;
+        for (let i = 0; i < points; i++) {
+          const a = i / points * TAU;
+          const jag = 1 + Math.sin(meteor.seed + i * 2.37) * .17;
+          const r = meteor.size * jag;
+          const x = Math.cos(a) * r;
+          const y = Math.sin(a) * r;
+          i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+        }
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = "rgba(255,203,129,.46)";
+        ctx.beginPath();
+        ctx.arc(-meteor.size * .26, -meteor.size * .18, meteor.size * .22, 0, TAU);
+        ctx.fill();
+
+        ctx.shadowBlur = 0;
+        ctx.restore();
+      }
+    }
+
+    function drawBombPulse() {
+      if (state.bombPulse <= 0) return;
+      const theme = currentTheme();
+      const t = 1 - state.bombPulse;
+      const radius = lerp(state.orbitRadius * .35, state.outerRadius * 1.08, t);
+      ctx.save();
+      ctx.translate(state.centerX, state.centerY);
+      ctx.globalAlpha = Math.max(0, state.bombPulse) * .9;
+      ctx.strokeStyle = "#ff5d5d";
+      ctx.shadowBlur = 34;
+      ctx.shadowColor = "#ff6b3d";
+      ctx.lineWidth = 5 * state.viewportGeometryScale;
+      ctx.beginPath();
+      ctx.arc(0, 0, radius, 0, TAU);
+      ctx.stroke();
+      ctx.strokeStyle = theme.secondary;
+      ctx.lineWidth = 2 * state.viewportGeometryScale;
+      ctx.beginPath();
+      ctx.arc(0, 0, radius * .88, 0, TAU);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    function drawPlayer() {
+      const theme = currentTheme();
+      const x = state.centerX + Math.cos(state.playerAngle) * state.orbitRadius;
+      const y = state.centerY + Math.sin(state.playerAngle) * state.orbitRadius;
+      const tx = -Math.sin(state.playerAngle) * state.playerDirection;
+      const ty = Math.cos(state.playerAngle) * state.playerDirection;
+
+      ctx.save();
+      ctx.translate(x, y);
+
+      if (state.activePowerups.shield > 0) {
+        const shieldCharges = Math.min(3, state.activePowerups.shield);
+        ctx.strokeStyle = POWER_TYPES.shield.color;
+        ctx.shadowBlur = 18;
+        ctx.shadowColor = POWER_TYPES.shield.color;
+        for (let charge = 0; charge < shieldCharges; charge++) {
+          ctx.globalAlpha = 1 - charge * .16;
+          ctx.lineWidth = (2.5 - charge * .35) * state.viewportGeometryScale;
+          ctx.beginPath();
+          ctx.arc(
+            0,
+            0,
+            state.playerSize
+              + (10 + charge * 5) * state.viewportGeometryScale
+              + Math.sin(state.elapsed * (5 + charge * .45) + charge) * 1.5 * state.viewportGeometryScale,
+            0,
+            TAU
+          );
+          ctx.stroke();
+        }
+        ctx.globalAlpha = 1;
+        ctx.shadowBlur = 0;
+      }
+      if (state.activePowerups.phase > 0) ctx.globalAlpha = .55 + Math.sin(state.elapsed * 14) * .20;
+      if (state.invulnerable > 0) {
+        ctx.strokeStyle = colorAlpha(theme.marker, .85);
+        ctx.lineWidth = 2.5 * state.viewportGeometryScale;
+        ctx.shadowBlur = 18 * state.viewportGeometryScale;
+        ctx.shadowColor = theme.marker;
+        ctx.beginPath();
+        ctx.arc(
+          0,
+          0,
+          state.playerSize + 14 * state.viewportGeometryScale + Math.sin(state.elapsed * 11) * 2 * state.viewportGeometryScale,
+          0,
+          TAU
+        );
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+        ctx.globalAlpha *= .58 + Math.sin(state.elapsed * 18) * .25;
+      }
+
+      ctx.rotate(Math.atan2(ty, tx));
+
+      const trailLength =
+        (20 + state.playerSpeed * 4 + (state.activePowerups.double > 0 ? 12 : 0))
+        * lerp(.94, .80, clamp((700 - state.width) / 280, 0, 1));
+      const grad = ctx.createLinearGradient(-trailLength, 0, 7, 0);
+      grad.addColorStop(0, colorAlpha(theme.accent, 0));
+      grad.addColorStop(.65, colorAlpha(theme.accent, .22));
+      grad.addColorStop(1, "rgba(255,255,255,.75)");
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.moveTo(-trailLength, -3);
+      ctx.lineTo(7, -5);
+      ctx.lineTo(7, 5);
+      ctx.lineTo(-trailLength, 3);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.shadowBlur =
+        (26 + state.reversePulse * 18)
+        * lerp(.95, .82, clamp((700 - state.width) / 280, 0, 1));
+      ctx.shadowColor = theme.accent;
+      ctx.fillStyle = "#fafdff";
+      ctx.beginPath();
+      ctx.moveTo(state.playerSize + 5, 0);
+      ctx.lineTo(-state.playerSize * .75, -state.playerSize * .72);
+      ctx.lineTo(-state.playerSize * .3, 0);
+      ctx.lineTo(-state.playerSize * .75, state.playerSize * .72);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = theme.secondary;
+      ctx.beginPath();
+      ctx.arc(-state.playerSize * .15, 0, 2.3 + state.reversePulse * 1.6, 0, TAU);
+      ctx.fill();
+
+      ctx.restore();
+    }
+
+    function drawParticles() {
+      for (const p of state.particles) {
+        const alpha = clamp(p.life / p.maxLife, 0, 1);
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size * alpha, 0, TAU);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    function loop(now) {
+      const dt = Math.min(.033, Math.max(0, (now - state.lastTime) / 1000));
+      state.lastTime = now;
+      update(dt);
+      draw();
+      requestAnimationFrame(loop);
+    }
+
+    function handlePrimaryInput(event) {
+      const target = event.target;
+      if (target && (target.tagName === "BUTTON" || target.closest?.("button"))) return;
+      reverse();
+    }
+
+    for (const button of els.difficultyButtons) {
+      button.addEventListener("click", () => setDifficulty(button.dataset.difficulty));
+    }
+
+    els.startBtn.addEventListener("click", () => resetRun(selectedStartLevel()));
+    els.retryBtn.addEventListener("click", () => resetRun(state.startLevel || 1));
+    els.levelStartBtn.addEventListener("click", beginReadyLevel);
+    els.levelBanner.addEventListener("click", event => {
+      if (event.target !== els.levelStartBtn) beginReadyLevel();
+    });
+    els.menuBtn.addEventListener("click", showMenu);
+    els.resumeBtn.addEventListener("click", resume);
+    els.quitBtn.addEventListener("click", endRun);
+    els.pauseBtn.addEventListener("click", () => {
+      if (state.mode === "playing") pause();
+      else if (state.mode === "paused") resume();
+    });
+    els.soundBtn.addEventListener("click", () => {
+      state.sound = !state.sound;
+      storage.set("orbitShiftSound", state.sound);
+      updateSoundButton();
+      initAudio();
+      setMasterSound(state.sound);
+      if (state.sound) {
+        if (state.mode === "playing") startMusic();
+        tone(640, .08, "sine", .025, 90);
+      }
+    });
+    els.breakBtn.addEventListener("click", () => {
+      els.breakOverlay.classList.add("hidden");
+      state.mode = "paused";
+      els.pauseOverlay.classList.remove("hidden");
+    });
+    els.continueBtn.addEventListener("click", resume);
+
+    window.addEventListener("pointerdown", handlePrimaryInput);
+    window.addEventListener("keydown", event => {
+      if ((event.code === "Space" || event.code === "Enter") && state.mode === "levelready") {
+        event.preventDefault();
+        beginReadyLevel();
+      } else if (event.code === "Space" || event.code === "ArrowLeft" || event.code === "ArrowRight") {
+        event.preventDefault();
+        reverse();
+      } else if (event.code === "KeyP" || event.code === "Escape") {
+        event.preventDefault();
+        if (state.mode === "playing") pause();
+        else if (state.mode === "paused") resume();
+      } else if (event.code === "Enter" && state.mode === "menu") {
+        resetRun(selectedStartLevel());
+      } else if (event.code === "Enter" && state.mode === "gameover") {
+        resetRun(state.startLevel || 1);
+      }
+    });
+
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden && state.mode === "playing") pause(false);
+      if (!document.hidden && state.mode === "paused") {
+        els.pauseOverlay.classList.remove("hidden");
+      }
+    });
+
+    window.addEventListener("resize", resize);
+    window.addEventListener("orientationchange", resize);
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener("resize", resize);
+    }
+    resize();
+    requestAnimationFrame(loop);
+  })();
+  </script>
+</body>
+</html>

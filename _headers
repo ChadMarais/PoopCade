@@ -1,0 +1,23 @@
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()
+  X-Frame-Options: DENY
+
+/
+  Cache-Control: no-cache
+
+/index.html
+  Cache-Control: no-cache
+
+/games/orbit-shift/
+  Cache-Control: no-cache
+
+/games/orbit-shift/index.html
+  Cache-Control: no-cache
+
+/service-worker.js
+  Cache-Control: no-cache, no-store, must-revalidate
+
+/manifest.webmanifest
+  Cache-Control: public, max-age=3600
