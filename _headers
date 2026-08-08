@@ -10,10 +10,22 @@
 /index.html
   Cache-Control: no-cache
 
+/account/
+  Cache-Control: no-cache
+
+/account/index.html
+  Cache-Control: no-cache
+
 /games/orbit-shift/
   Cache-Control: no-cache
 
 /games/orbit-shift/index.html
+  Cache-Control: no-cache
+
+/leaderboard/orbit-shift/
+  Cache-Control: no-cache
+
+/leaderboard/orbit-shift/index.html
   Cache-Control: no-cache
 
 /service-worker.js

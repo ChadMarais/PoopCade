@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#07070d">
+  <meta name="description" content="The global ORBIT//SHIFT leaderboard on Poopcade.">
+  <title>ORBIT//SHIFT Leaderboard — Poopcade</title>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" type="image/png" sizes="192x192" href="/assets/icons/icon-192.png">
+  <link rel="apple-touch-icon" sizes="192x192" href="/assets/icons/icon-192.png">
+  <style>
+    :root { color-scheme:dark; --bg:#07070d; --panel:#11111e; --ink:#fbfaff; --soft:#aaa4b8; --line:rgba(255,255,255,.12); --cyan:#52efff; --violet:#9b69ff; --pink:#ff4fbd; --acid:#c8ff47; }
+    * { box-sizing:border-box; }
+    body { min-width:280px; margin:0; color:var(--ink); background:radial-gradient(circle at 12% 2%,rgba(82,239,255,.13),transparent 25rem),radial-gradient(circle at 88% 24%,rgba(155,105,255,.15),transparent 30rem),var(--bg); font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif; line-height:1.5; }
+    body::before { position:fixed; inset:0; z-index:-1; content:""; opacity:.19; background-image:linear-gradient(rgba(255,255,255,.03) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.03) 1px,transparent 1px); background-size:52px 52px; mask-image:linear-gradient(#000,transparent 80%); }
+    a{color:inherit}button{font:inherit;color:inherit}[hidden]{display:none!important}:focus-visible{outline:3px solid var(--acid);outline-offset:4px}
+    .shell{width:min(calc(100% - 28px),1060px);margin-inline:auto}
+    header{border-bottom:1px solid var(--line);background:rgba(7,7,13,.72);backdrop-filter:blur(18px)}nav{display:flex;min-height:70px;align-items:center;justify-content:space-between;gap:14px}.brand{text-decoration:none;font-size:.88rem;font-weight:1000;letter-spacing:.15em}.brand i{color:var(--cyan);font-style:normal}.nav-links{display:flex;gap:17px}.nav-links a{color:var(--soft);text-decoration:none;font-size:.66rem;font-weight:850;letter-spacing:.08em;text-transform:uppercase}
+    main{padding:clamp(58px,10vw,110px) 0 120px}.eyebrow{margin:0 0 13px;color:var(--cyan);font:800 .67rem/1 ui-monospace,monospace;letter-spacing:.15em;text-transform:uppercase}h1{margin:0;font-size:clamp(3.3rem,12vw,8.2rem);line-height:.8;letter-spacing:-.085em}h1 i{color:var(--cyan);font-style:normal;text-shadow:0 0 34px rgba(82,239,255,.28)}.intro{max-width:650px;margin:26px 0 38px;color:var(--soft);font-size:1rem}
+    .top-grid{display:grid;gap:14px;margin-bottom:20px}.filter-card,.own-card{padding:20px;border:1px solid var(--line);border-radius:20px;background:rgba(17,17,30,.78)}.card-label{display:block;margin-bottom:12px;color:var(--soft);font-size:.65rem;font-weight:850;letter-spacing:.1em;text-transform:uppercase}.filters{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}.filter{min-height:43px;padding:0 8px;border:1px solid rgba(255,255,255,.09);border-radius:10px;background:rgba(255,255,255,.025);cursor:pointer;font-size:.68rem;font-weight:900;text-transform:uppercase}.filter.active{border-color:var(--cyan);color:#071014;background:var(--cyan);box-shadow:0 0 22px rgba(82,239,255,.18)}
+    .own-card{display:flex;align-items:center;justify-content:space-between;gap:15px}.own-copy strong{display:block;font-size:clamp(1.7rem,7vw,2.8rem);line-height:1}.own-copy small{color:var(--soft)}.own-card a{color:var(--acid);font-size:.72rem;font-weight:850;text-decoration:none}.own-signed-out{max-width:260px;color:var(--soft);font-size:.8rem}.own-signed-out a{display:block;margin-top:4px}
+    .board{overflow:hidden;border:1px solid var(--line);border-radius:24px;background:rgba(15,14,26,.82);box-shadow:0 35px 100px rgba(0,0,0,.3)}.table-scroll{overflow-x:auto}table{width:100%;min-width:590px;border-collapse:collapse}th,td{padding:17px 18px;border-bottom:1px solid rgba(255,255,255,.075);text-align:left}th{color:#777182;background:rgba(255,255,255,.025);font-size:.63rem;letter-spacing:.12em;text-transform:uppercase}td{font-size:.86rem}.rank-cell{width:70px;color:var(--cyan);font:850 .73rem/1 ui-monospace,monospace}.name-cell{font-weight:800}.score-cell{font-size:1rem;font-weight:950}.difficulty-cell{color:var(--soft)}tbody tr:last-child td{border-bottom:0}tbody tr:hover{background:rgba(82,239,255,.025)}
+    .state{padding:62px 25px;text-align:center;color:var(--soft)}.state strong{display:block;margin-bottom:7px;color:white;font-size:1.25rem}.retry{margin-top:16px;min-height:42px;padding:0 16px;border:1px solid var(--line);border-radius:10px;background:rgba(255,255,255,.04);cursor:pointer}.page-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:24px}.button{display:inline-flex;min-height:50px;align-items:center;justify-content:center;padding:0 19px;border-radius:11px;color:#08090d;background:var(--acid);font-size:.72rem;font-weight:950;letter-spacing:.08em;text-decoration:none;text-transform:uppercase}.button.secondary{border:1px solid var(--line);color:white;background:rgba(255,255,255,.04)}
+    footer{border-top:1px solid var(--line);padding:28px 0 calc(28px + env(safe-area-inset-bottom));color:#777182;font-size:.72rem}
+    @media(min-width:720px){.shell{width:min(calc(100% - 64px),1060px)}.top-grid{grid-template-columns:1.35fr .65fr}.filter-card,.own-card{padding:24px}}
+    @media(max-width:390px){.nav-links a:last-child{display:none}.filters{grid-template-columns:repeat(2,1fr)}.filter{min-height:40px}.board{border-radius:18px}th,td{padding:14px 13px}.page-actions{display:grid}.button{width:100%}}
+    @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;transition:none!important}}
+  </style>
+</head>
+<body>
+  <header><nav class="shell" aria-label="Primary navigation"><a class="brand" href="/">POOP<i>CADE</i></a><div class="nav-links"><a href="/games/orbit-shift/">Play</a><a href="/account/">My account</a></div></nav></header>
+
+  <main class="shell" data-leaderboard-page>
+    <p class="eyebrow">Global transmission</p>
+    <h1>ORBIT<i>//</i><br>SHIFT</h1>
+    <p class="intro">The cleanest lines through the chaos. Only saved personal bests appear here—one score per player and difficulty.</p>
+
+    <div class="top-grid">
+      <section class="filter-card" aria-labelledby="filter-label">
+        <span class="card-label" id="filter-label">Difficulty</span>
+        <div class="filters" role="group" aria-label="Filter leaderboard by difficulty">
+          <button class="filter active" type="button" data-difficulty="All" aria-pressed="true">All</button>
+          <button class="filter" type="button" data-difficulty="Easy" aria-pressed="false">Easy</button>
+          <button class="filter" type="button" data-difficulty="Medium" aria-pressed="false">Medium</button>
+          <button class="filter" type="button" data-difficulty="Hard" aria-pressed="false">Hard</button>
+        </div>
+      </section>
+
+      <section class="own-card" aria-live="polite">
+        <div class="own-copy" data-own-best-signed-in hidden><span class="card-label">Your best</span><strong data-own-best-score>—</strong><small data-own-best-meta>No saved run yet</small></div>
+        <div class="own-signed-out" data-own-best-signed-out hidden>Want your score here?<a href="/account/">Sign in to save runs →</a></div>
+      </section>
+    </div>
+
+    <section class="board" aria-label="ORBIT//SHIFT leaderboard">
+      <div class="state" data-loading>Dialling the global scoreboard…</div>
+      <div class="state" data-empty hidden><strong>No saved scores yet.</strong>The first clean orbit could be yours.</div>
+      <div class="state" data-error hidden><strong>Leaderboard signal lost.</strong>The backend may not be deployed yet.<br><button class="retry" type="button" data-retry>Try again</button></div>
+      <div class="table-scroll" data-table hidden>
+        <table>
+          <thead><tr><th>Rank</th><th>Gamer</th><th>Score</th><th>Level</th><th>Mode</th></tr></thead>
+          <tbody data-leaderboard-body></tbody>
+        </table>
+      </div>
+    </section>
+
+    <div class="page-actions"><a class="button" href="/games/orbit-shift/">Play ORBIT//SHIFT</a><a class="button secondary" href="/">Back to Poopcade</a></div>
+  </main>
+
+  <footer><div class="shell">POOPCADE · Global nonsense, responsibly ranked.</div></footer>
+  <script type="module" src="/js/leaderboard.js"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => navigator.serviceWorker.register('/service-worker.js', { scope: '/' }).catch(() => {}));
+    }
+  </script>
+</body>
+</html>

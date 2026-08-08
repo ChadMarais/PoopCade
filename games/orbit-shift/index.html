@@ -754,6 +754,28 @@
       font-size: 11px;
     }
 
+    .score-save {
+      display: flex;
+      min-height: 42px;
+      align-items: center;
+      justify-content: center;
+      gap: 9px;
+      margin: 14px 0 4px;
+      padding: 9px 12px;
+      border: 1px solid rgba(255,255,255,.1);
+      border-radius: 13px;
+      color: var(--muted);
+      background: rgba(255,255,255,.03);
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: .04em;
+    }
+
+    .score-save[data-state="saved"] { border-color: rgba(110,247,177,.32); color: var(--good); }
+    .score-save[data-state="best"] { border-color: rgba(255,209,102,.42); color: var(--gold); box-shadow: inset 0 0 20px rgba(255,209,102,.06); }
+    .score-save[data-state="error"] { color: rgba(255,255,255,.58); }
+    .score-save a { color: var(--cyan); text-underline-offset: 3px; }
+
     .break-text {
       color: var(--muted);
       line-height: 1.55;
@@ -918,6 +940,10 @@
         <div class="stat"><b id="finalPasses">0</b><small>Gates</small></div>
         <div class="stat"><b id="finalLevel">1</b><small>Level</small></div>
       </div>
+      <div class="score-save" id="scoreSaveStatus" data-state="idle" aria-live="polite" hidden>
+        <span id="scoreSaveMessage">Sign in to save your score.</span>
+        <a id="scoreSaveLink" href="/account/" hidden>Sign in</a>
+      </div>
       <button class="primary" id="retryBtn">RESTART CAMPAIGN</button>
       <button class="secondary" id="menuBtn">MAIN MENU</button>
     </div>
@@ -954,6 +980,7 @@
     </div>
   </div>
 
+  <script type="module" src="/js/poopcade-api.js"></script>
   <script>
   (() => {
     "use strict";
@@ -1001,7 +1028,10 @@
       finalPasses: document.getElementById("finalPasses"),
       finalLevel: document.getElementById("finalLevel"),
       resultTitle: document.getElementById("resultTitle"),
-      resultText: document.getElementById("resultText")
+      resultText: document.getElementById("resultText"),
+      scoreSaveStatus: document.getElementById("scoreSaveStatus"),
+      scoreSaveMessage: document.getElementById("scoreSaveMessage"),
+      scoreSaveLink: document.getElementById("scoreSaveLink")
     };
 
     const TAU = Math.PI * 2;
@@ -1268,7 +1298,9 @@
       styleOrbitProgress: 0,
       styleCount: 0,
       styleBannerTimer: null,
-      stylePulse: 0
+      stylePulse: 0,
+      clientRunId: null,
+      submissionStarted: false
     };
 
     els.best.textContent = state.best;
@@ -1747,6 +1779,15 @@
       return clamp(value, 1, 99);
     }
 
+    function createClientRunId() {
+      if (typeof crypto.randomUUID === "function") return crypto.randomUUID();
+      const bytes = crypto.getRandomValues(new Uint8Array(16));
+      bytes[6] = (bytes[6] & 0x0f) | 0x40;
+      bytes[8] = (bytes[8] & 0x3f) | 0x80;
+      const hex = [...bytes].map(value => value.toString(16).padStart(2, "0")).join("");
+      return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+    }
+
     function resetRun(startAt = state.startLevel || 1) {
       const chosenLevel = clamp(Math.round(Number(startAt) || 1), 1, 99);
       state.startLevel = chosenLevel;
@@ -1789,6 +1830,12 @@
       state.styleOrbitProgress = 0;
       state.styleCount = 0;
       state.stylePulse = 0;
+      state.clientRunId = createClientRunId();
+      state.submissionStarted = false;
+      els.scoreSaveStatus.hidden = true;
+      els.scoreSaveStatus.dataset.state = "idle";
+      els.scoreSaveMessage.textContent = "Sign in to save your score.";
+      els.scoreSaveLink.hidden = true;
       applyLevelTheme();
       updateHud();
       updateCampaignHud();
@@ -1833,6 +1880,61 @@
       tone(440, .07, "sine", .025, 80);
     }
 
+    function setScoreSaveStatus(message, status = "idle", showSignIn = false) {
+      els.scoreSaveStatus.hidden = false;
+      els.scoreSaveStatus.dataset.state = status;
+      els.scoreSaveMessage.textContent = message;
+      els.scoreSaveLink.hidden = !showSignIn;
+    }
+
+    async function submitCompletedRun() {
+      if (state.submissionStarted) return;
+      state.submissionStarted = true;
+
+      if (state.practiceMode) {
+        setScoreSaveStatus("Practice run — score not submitted.");
+        return;
+      }
+
+      const submission = {
+        clientRunId: state.clientRunId,
+        score: Math.floor(state.score),
+        difficulty: currentDifficulty().label,
+        level: state.level,
+        gates: state.passes,
+        styleBonuses: state.styleCount,
+        durationMs: Math.max(1, Math.round(state.runElapsed * 1000))
+      };
+
+      const api = window.PoopcadeAPI;
+      if (!api || !submission.clientRunId) {
+        setScoreSaveStatus("Score couldn't be saved.", "error");
+        return;
+      }
+
+      try {
+        const user = await api.getCurrentUser();
+        if (!user) {
+          setScoreSaveStatus("Sign in to save your score.", "idle", true);
+          return;
+        }
+
+        setScoreSaveStatus("Saving score…");
+        const result = await api.submitOrbitShiftRun(submission);
+        if (result?.skipped) {
+          setScoreSaveStatus("Sign in to save your score.", "idle", true);
+        } else if (result?.accepted && result.newPersonalBest) {
+          setScoreSaveStatus(`NEW PERSONAL BEST · ${Number(result.personalBest).toLocaleString()}`, "best");
+        } else if (result?.accepted) {
+          setScoreSaveStatus(`Score saved · Best ${Number(result.personalBest).toLocaleString()}`, "saved");
+        } else {
+          setScoreSaveStatus("Score couldn't be saved.", "error");
+        }
+      } catch {
+        setScoreSaveStatus("Score couldn't be saved.", "error");
+      }
+    }
+
     function endRun() {
       if (!["playing", "paused", "dying", "respawning", "levelclear"].includes(state.mode)) return;
       state.mode = "gameover";
@@ -1858,6 +1960,7 @@
       els.resultTitle.textContent = rank[0];
       els.resultText.textContent = `${rank[1]} · ${diff.label} difficulty ×${diff.score.toFixed(2)}`;
       els.gameOverOverlay.classList.remove("hidden");
+      void submitCompletedRun();
     }
 
     function reverse() {

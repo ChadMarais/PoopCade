@@ -1,6 +1,6 @@
 # Poopcade
 
-Poopcade is a static, mobile-first progressive web app containing small arcade games. It uses plain HTML, CSS, and JavaScript with no build step or runtime dependencies.
+Poopcade is a static, mobile-first progressive web app containing small arcade games. It uses plain HTML, CSS, and JavaScript with no build step or locally installed frontend packages. Account features load one pinned Supabase browser module from a CDN.
 
 ## Project structure
 
@@ -9,9 +9,15 @@ Poopcade is a static, mobile-first progressive web app containing small arcade g
 ├── index.html                       # Arcade homepage and install UI
 ├── manifest.webmanifest             # PWA metadata and icon declarations
 ├── service-worker.js                # Offline shell and caching strategies
-├── _headers                         # Cloudflare Pages response headers
+├── _headers                         # Cloudflare Static Assets response headers
+├── account/                         # Gamer profile and personal bests
+├── leaderboard/orbit-shift/         # Public ORBIT//SHIFT leaderboard
+├── js/                              # Shared Supabase client/auth/API modules
 ├── assets/
 │   └── icons/                       # PWA PNG icons and editable SVG master
+├── supabase/
+│   ├── migrations/                  # Reviewed database schema and RLS
+│   └── functions/submit-run/        # Authenticated score submission
 └── games/
     └── orbit-shift/
         └── index.html               # ORBIT//SHIFT
@@ -37,6 +43,24 @@ When testing service-worker changes, use the browser's Application/Storage devel
 - `manifest.webmanifest` defines standalone, portrait-first behavior and the intended production icon paths.
 - `service-worker.js` precaches the homepage and ORBIT//SHIFT. Navigations are network-first so updated HTML is preferred, with cached pages and the homepage as offline fallbacks. Same-origin static assets use stale-while-revalidate behavior.
 - Missing optional icon files are ignored during service-worker installation, so they cannot prevent the offline shell from installing.
+- Supabase API, authentication, Edge Function, and leaderboard responses are never cached by the service worker.
+
+## Accounts and leaderboards
+
+Guest play remains the default. Players may optionally sign in with Google, choose a separate public gamer name, save ORBIT//SHIFT runs, and sync personal bests across devices.
+
+The browser uses one Supabase client from `js/supabase-config.js`, with `@supabase/supabase-js` pinned to version `2.111.0`. The publishable browser key in that file is not a secret. Never add a secret key, service-role key, database password, OAuth client secret, or access token to frontend code or source control.
+
+The backend foundation is source-only and has not been deployed. Before accounts work in production:
+
+1. Apply `supabase/migrations/20260808_initial_poocade.sql` to the intended Supabase project.
+2. Deploy the `submit-run` Edge Function with JWT verification enabled.
+3. Enable Google under Supabase Authentication providers and configure its real Google OAuth client ID and secret in the dashboard.
+4. Set the Supabase Site URL and redirect allow list to `https://poopcade.com/`.
+5. Add `https://kpssybcwwmtcdhrmfcgc.supabase.co/auth/v1/callback` as an authorized redirect URI in the Google OAuth client.
+6. Test sign-in, profile naming, run submission, RLS, leaderboard reads, sign-out, and offline behavior on the production HTTPS origin.
+
+The current server validation blocks unauthenticated and obviously extreme submissions, but a client-side game is not cheat-proof. Stronger anti-cheat, rate limiting, abuse monitoring, and self-service account deletion remain future production work.
 
 ## ORBIT//SHIFT production testing convention
 
@@ -49,12 +73,13 @@ Do not remove the underlying testing capability until a production-safe debug pa
 
 ## Deployment status
 
-The repository is prepared for its first Cloudflare Pages deployment as a static site:
+The repository is configured for Cloudflare Workers Static Assets:
 
-- Framework preset: none
-- Build command: none
-- Build output directory: repository root (`.`)
-- Production routes: `/` and `/games/orbit-shift/`
+- Wrangler config: `wrangler.jsonc`
+- Worker JavaScript entry point: none
+- Static asset directory: repository root (`.`)
+- Upload exclusions: `.assetsignore` (including `android/` and `supabase/` source)
+- Production routes: `/`, `/games/orbit-shift/`, `/leaderboard/orbit-shift/`, and `/account/`
 - Custom response headers: `_headers`
 
 No Content Security Policy is set yet because the current homepage and game use inline CSS and JavaScript, and the game uses WebAudio. A CSP should be designed and tested separately rather than added in a way that breaks the application.
@@ -69,4 +94,4 @@ The manifest declares:
 
 All three PNG files are generated from `assets/icons/icon-source.svg`. The maskable version keeps its essential mark inside Android's central safe area. Regenerate every PNG from the SVG master whenever the artwork changes, then increment the service-worker cache version.
 
-Before public launch, also configure the Cloudflare Pages project, attach the production domain, deploy, and verify the manifest, worker scope, offline mode, install prompt, and security headers over HTTPS.
+Before public launch, deploy the reviewed static assets, attach `poopcade.com`, and verify the manifest, worker scope, offline mode, install prompt, account flow, leaderboard, and security headers over HTTPS.

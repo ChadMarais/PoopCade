@@ -37,3 +37,15 @@ Desktop.ini
 tmp/
 temp/
 *.tmp
+
+# Android local / signing files
+android/android.keystore
+android/*.keystore
+android/*.jks
+android/local.properties
+android/.gradle/
+android/app/build/
+android/build/
+
+# Supabase local CLI state
+supabase/.temp/

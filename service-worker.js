@@ -1,13 +1,22 @@
 const CACHE_PREFIX = 'poopcade-';
-const CACHE_NAME = `${CACHE_PREFIX}shell-v3`;
+const CACHE_NAME = `${CACHE_PREFIX}shell-v5`;
+const SUPABASE_ORIGIN = 'https://kpssybcwwmtcdhrmfcgc.supabase.co';
 
 // These routes must exist for the offline shell to install successfully.
 const CORE_ASSETS = [
   '/',
   '/index.html',
   '/manifest.webmanifest',
+  '/account/',
+  '/account/index.html',
   '/games/orbit-shift/',
-  '/games/orbit-shift/index.html'
+  '/games/orbit-shift/index.html',
+  '/leaderboard/orbit-shift/',
+  '/leaderboard/orbit-shift/index.html',
+  '/js/supabase-config.js',
+  '/js/auth.js',
+  '/js/leaderboard.js',
+  '/js/poopcade-api.js'
 ];
 
 // Presentation assets remain non-blocking so a bad optional response can
@@ -53,9 +62,18 @@ self.addEventListener('fetch', (event) => {
   if (request.method !== 'GET') return;
 
   const url = new URL(request.url);
+  // Auth, database, Edge Function, and leaderboard API responses always stay
+  // on the network and are never placed in Poopcade caches.
+  if (url.origin === SUPABASE_ORIGIN) return;
   if (url.origin !== self.location.origin) return;
 
   if (request.mode === 'navigate') {
+    // PKCE OAuth redirects carry a short-lived authorization code. Never cache
+    // callback URLs or serve them from an offline fallback.
+    if (url.searchParams.has('code') || url.searchParams.has('error') || url.searchParams.has('error_description')) {
+      event.respondWith(fetch(request));
+      return;
+    }
     event.respondWith(networkFirst(request, event.preloadResponse));
     return;
   }

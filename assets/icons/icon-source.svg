@@ -1,62 +1,87 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
-  <title id="title">Poopcade app icon</title>
-  <desc id="desc">A geometric neon letter P crossed by an orbital arc on a dark arcade background.</desc>
+  <title id="title">Poopcade neon arcade token</title>
+  <desc id="desc">A bold geometric letter P with a play-shaped counter, fused with a rising neon orbit and glowing puck.</desc>
   <defs>
-    <linearGradient id="background" x1="72" y1="40" x2="438" y2="474" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#12132a"/>
-      <stop offset="0.5" stop-color="#080810"/>
-      <stop offset="1" stop-color="#100b1e"/>
+    <linearGradient id="background" x1="54" y1="22" x2="454" y2="488" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#15112c"/>
+      <stop offset="0.48" stop-color="#080810"/>
+      <stop offset="1" stop-color="#090713"/>
     </linearGradient>
-    <radialGradient id="aura" cx="0" cy="0" r="1" gradientTransform="translate(256 253) rotate(90) scale(246)" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#342267" stop-opacity="0.58"/>
-      <stop offset="0.58" stop-color="#11111d" stop-opacity="0.14"/>
-      <stop offset="1" stop-color="#080810" stop-opacity="0"/>
+    <radialGradient id="token" cx="0" cy="0" r="1" gradientTransform="translate(218 190) rotate(52) scale(284)" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#27264d"/>
+      <stop offset="0.5" stop-color="#121323"/>
+      <stop offset="1" stop-color="#090910"/>
     </radialGradient>
-    <linearGradient id="neon" x1="178" y1="144" x2="349" y2="361" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#6cf7ff"/>
-      <stop offset="0.48" stop-color="#41dfff"/>
-      <stop offset="1" stop-color="#a774ff"/>
+    <linearGradient id="token-edge" x1="100" y1="82" x2="420" y2="436" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#5df3ff" stop-opacity="0.58"/>
+      <stop offset="0.32" stop-color="#5df3ff" stop-opacity="0.06"/>
+      <stop offset="0.7" stop-color="#a76cff" stop-opacity="0.08"/>
+      <stop offset="1" stop-color="#ff4fbd" stop-opacity="0.55"/>
     </linearGradient>
-    <linearGradient id="orbit" x1="133" y1="287" x2="391" y2="296" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#a774ff"/>
-      <stop offset="0.52" stop-color="#765cff"/>
-      <stop offset="1" stop-color="#48eaff"/>
+    <linearGradient id="mark" x1="166" y1="116" x2="389" y2="380" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#94fbff"/>
+      <stop offset="0.38" stop-color="#45e8ff"/>
+      <stop offset="0.72" stop-color="#6278ff"/>
+      <stop offset="1" stop-color="#9067ff"/>
     </linearGradient>
-    <pattern id="grid" width="32" height="32" patternUnits="userSpaceOnUse">
-      <path d="M32 0H0V32" fill="none" stroke="#ffffff" stroke-opacity="0.032" stroke-width="1"/>
-    </pattern>
-    <filter id="soft-glow" x="-80%" y="-80%" width="260%" height="260%">
-      <feGaussianBlur stdDeviation="12" result="blur"/>
+    <linearGradient id="mark-highlight" x1="176" y1="124" x2="342" y2="315" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#ffffff" stop-opacity="0.72"/>
+      <stop offset="0.42" stop-color="#ffffff" stop-opacity="0.16"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="orbit" x1="119" y1="304" x2="407" y2="279" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ff4fbd"/>
+      <stop offset="0.42" stop-color="#bc5dff"/>
+      <stop offset="0.72" stop-color="#7472ff"/>
+      <stop offset="1" stop-color="#55efff"/>
+    </linearGradient>
+    <filter id="mark-glow" x="-35%" y="-35%" width="170%" height="170%">
+      <feGaussianBlur stdDeviation="11" result="blur"/>
       <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
     </filter>
-    <filter id="tight-glow" x="-40%" y="-40%" width="180%" height="180%">
-      <feGaussianBlur stdDeviation="4.5" result="blur"/>
+    <filter id="orbit-glow" x="-30%" y="-80%" width="160%" height="260%">
+      <feGaussianBlur stdDeviation="7" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="puck-glow" x="-110%" y="-110%" width="320%" height="320%">
+      <feGaussianBlur stdDeviation="8" result="blur"/>
       <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
     </filter>
   </defs>
 
-  <!-- Full-bleed background supports Android maskable icon cropping. -->
+  <!-- Full-bleed background: safe for circle, squircle and rounded-square masks. -->
   <rect width="512" height="512" fill="url(#background)"/>
-  <rect width="512" height="512" fill="url(#aura)"/>
-  <rect width="512" height="512" fill="url(#grid)"/>
-  <circle cx="256" cy="256" r="221" fill="none" stroke="#ffffff" stroke-opacity="0.055" stroke-width="2"/>
-  <circle cx="256" cy="256" r="205" fill="none" stroke="#4de7ff" stroke-opacity="0.055" stroke-width="1"/>
+  <circle cx="256" cy="256" r="218" fill="#05060b" stroke="#05060b" stroke-width="18"/>
+  <circle cx="256" cy="256" r="208" fill="url(#token)" stroke="url(#token-edge)" stroke-width="3"/>
+  <path d="M112 151C145 94 203 60 270 59" fill="none" stroke="#5df3ff" stroke-opacity="0.08" stroke-width="3" stroke-linecap="round"/>
+  <path d="M404 362C372 416 317 449 251 452" fill="none" stroke="#ff4fbd" stroke-opacity="0.1" stroke-width="3" stroke-linecap="round"/>
 
-  <!-- The essential mark stays within a 328px-diameter central safe circle. -->
-  <g>
-    <path d="M192 360V165C192 153 201 144 213 144H268C315 144 347 173 347 216C347 261 313 289 263 289H223"
-      fill="none" stroke="#4de7ff" stroke-opacity="0.22" stroke-width="48" stroke-linecap="round" stroke-linejoin="round" filter="url(#soft-glow)"/>
-    <path d="M192 360V165C192 153 201 144 213 144H268C315 144 347 173 347 216C347 261 313 289 263 289H223"
-      fill="none" stroke="url(#neon)" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/>
-    <path d="M199 163H265C301 163 325 183 325 216C325 249 301 269 263 269H222"
-      fill="none" stroke="#effeff" stroke-opacity="0.28" stroke-width="4" stroke-linecap="round"/>
+  <!-- Rear orbit segment establishes the motion path behind the monogram. -->
+  <path d="M120 304C155 368 243 399 322 371C364 356 390 327 400 286"
+    fill="none" stroke="#6b47b0" stroke-opacity="0.34" stroke-width="34" stroke-linecap="round" filter="url(#orbit-glow)"/>
+  <path d="M120 304C155 368 243 399 322 371C364 356 390 327 400 286"
+    fill="none" stroke="url(#orbit)" stroke-width="22" stroke-linecap="round"/>
 
-    <path d="M135 295C161 354 229 382 294 368C346 357 382 322 391 277"
-      fill="none" stroke="#8c65ff" stroke-opacity="0.24" stroke-width="28" stroke-linecap="round" filter="url(#soft-glow)"/>
-    <path d="M135 295C161 354 229 382 294 368C346 357 382 322 391 277"
-      fill="none" stroke="url(#orbit)" stroke-width="13" stroke-linecap="round"/>
-    <circle cx="391" cy="277" r="13" fill="#e8fdff" stroke="#4de7ff" stroke-width="5" filter="url(#tight-glow)"/>
-    <circle cx="135" cy="295" r="6" fill="#b58aff"/>
-  </g>
+  <!-- Offset magenta plate gives the mark a physical arcade-token silhouette. -->
+  <path d="M176 388V148C176 136 186 126 198 126H282C354 126 397 168 397 231C397 296 351 338 278 338H248V388H176ZM250 192V271L329 231L250 192Z"
+    fill="#e849c5" fill-rule="evenodd" opacity="0.62" transform="translate(8 10)" filter="url(#mark-glow)"/>
+
+  <!-- Primary P: its triangular negative space doubles as a play symbol. -->
+  <path d="M166 378V138C166 126 176 116 188 116H272C344 116 387 158 387 221C387 286 341 328 268 328H238V378H166ZM240 182V261L319 221L240 182Z"
+    fill="url(#mark)" fill-rule="evenodd"/>
+  <path d="M181 363V145C181 137 187 131 195 131H270C324 131 359 157 368 197"
+    fill="none" stroke="url(#mark-highlight)" stroke-width="7" stroke-linecap="round" opacity="0.64"/>
+  <path d="M240 182L319 221L240 261Z" fill="#090b17" stroke="#60efff" stroke-opacity="0.2" stroke-width="3"/>
+
+  <!-- Foreground orbit weave visibly fuses the ring and the P. -->
+  <path d="M214 391C250 398 288 392 322 380C364 365 390 333 401 290"
+    fill="none" stroke="#3c245d" stroke-opacity="0.48" stroke-width="34" stroke-linecap="round" filter="url(#orbit-glow)"/>
+  <path d="M214 391C250 398 288 392 322 380C364 365 390 333 401 290"
+    fill="none" stroke="url(#orbit)" stroke-width="22" stroke-linecap="round"/>
+
+  <!-- Bright puck is the memorable motion accent. -->
+  <circle cx="401" cy="290" r="16" fill="#52efff" fill-opacity="0.34" filter="url(#puck-glow)"/>
+  <circle cx="401" cy="290" r="11" fill="#f8ffff" stroke="#52efff" stroke-width="4"/>
+  <circle cx="120" cy="304" r="7" fill="#ff8ed7"/>
 </svg>

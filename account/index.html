@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#07070d">
+  <meta name="description" content="Manage your Poopcade gamer name and saved scores.">
+  <title>My Account — Poopcade</title>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" type="image/png" sizes="192x192" href="/assets/icons/icon-192.png">
+  <link rel="apple-touch-icon" sizes="192x192" href="/assets/icons/icon-192.png">
+  <style>
+    :root { color-scheme: dark; --bg:#07070d; --panel:#12111f; --ink:#fbfaff; --soft:#aaa4b8; --line:rgba(255,255,255,.12); --cyan:#52efff; --violet:#9b69ff; --pink:#ff4fbd; --acid:#c8ff47; }
+    * { box-sizing: border-box; }
+    body { min-width:280px; margin:0; color:var(--ink); background:radial-gradient(circle at 12% 5%,rgba(155,105,255,.17),transparent 28rem),radial-gradient(circle at 90% 38%,rgba(255,79,189,.09),transparent 26rem),var(--bg); font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif; line-height:1.5; }
+    body::before { position:fixed; inset:0; z-index:-1; content:""; opacity:.2; background-image:linear-gradient(rgba(255,255,255,.03) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.03) 1px,transparent 1px); background-size:54px 54px; mask-image:linear-gradient(#000,transparent 82%); }
+    a { color:inherit; } button,input { font:inherit; } [hidden] { display:none!important; } :focus-visible { outline:3px solid var(--acid); outline-offset:4px; }
+    .shell { width:min(calc(100% - 30px),980px); margin-inline:auto; }
+    header { border-bottom:1px solid var(--line); background:rgba(7,7,13,.72); backdrop-filter:blur(18px); }
+    nav { display:flex; min-height:70px; align-items:center; justify-content:space-between; gap:16px; }
+    .brand { text-decoration:none; font-size:.9rem; font-weight:1000; letter-spacing:.16em; }
+    .brand i { color:var(--cyan); font-style:normal; }
+    .nav-links { display:flex; gap:18px; }
+    .nav-links a { color:var(--soft); text-decoration:none; font-size:.68rem; font-weight:850; letter-spacing:.08em; text-transform:uppercase; }
+    main { padding:clamp(60px,10vw,112px) 0 120px; }
+    .eyebrow { margin:0 0 14px; color:var(--cyan); font:800 .68rem/1 ui-monospace,monospace; letter-spacing:.15em; text-transform:uppercase; }
+    h1 { max-width:760px; margin:0; font-size:clamp(3rem,10vw,7rem); line-height:.86; letter-spacing:-.075em; }
+    .intro { max-width:610px; margin:24px 0 42px; color:var(--soft); font-size:1.05rem; }
+    .state { padding:clamp(25px,5vw,46px); border:1px solid var(--line); border-radius:26px; background:rgba(18,17,31,.78); box-shadow:0 30px 90px rgba(0,0,0,.3); }
+    .loading { color:var(--soft); }
+    .error { min-height:1.5em; margin:15px 0 0; color:#ff93ce; font-size:.86rem; }
+    .signed-out h2,.profile-head h2 { margin:0 0 10px; font-size:clamp(1.8rem,6vw,3.2rem); letter-spacing:-.045em; }
+    .signed-out p { max-width:490px; margin:0 0 24px; color:var(--soft); }
+    .button { display:inline-flex; min-height:50px; align-items:center; justify-content:center; padding:0 20px; border:0; border-radius:12px; cursor:pointer; color:#08090d; background:var(--acid); font-size:.75rem; font-weight:950; letter-spacing:.08em; text-decoration:none; text-transform:uppercase; }
+    .button.secondary { border:1px solid var(--line); color:white; background:rgba(255,255,255,.045); }
+    .button:disabled { cursor:not-allowed; opacity:.45; }
+    .profile-head { display:flex; flex-wrap:wrap; align-items:end; justify-content:space-between; gap:18px; padding-bottom:30px; border-bottom:1px solid var(--line); }
+    .profile-head span { color:var(--soft); font-size:.72rem; font-weight:800; letter-spacing:.1em; text-transform:uppercase; }
+    .account-grid { display:grid; gap:22px; margin-top:24px; }
+    .account-card { padding:24px; border:1px solid var(--line); border-radius:20px; background:rgba(255,255,255,.025); }
+    .account-card h3 { margin:0 0 8px; font-size:1rem; letter-spacing:.02em; }
+    .account-card > p { margin:0 0 18px; color:var(--soft); font-size:.88rem; }
+    label { display:block; margin-bottom:8px; color:#dad5e1; font-size:.72rem; font-weight:800; letter-spacing:.08em; text-transform:uppercase; }
+    .field-row { display:grid; gap:9px; }
+    input { width:100%; min-height:50px; padding:0 14px; border:1px solid var(--line); border-radius:11px; outline:none; color:white; background:#0b0b15; }
+    input:focus { border-color:var(--cyan); box-shadow:0 0 0 3px rgba(82,239,255,.1); }
+    .form-status { min-height:1.4em; margin:9px 0 0; color:var(--soft); font-size:.8rem; }
+    .best-grid { display:grid; gap:9px; }
+    .best-card { display:grid; grid-template-columns:1fr auto; gap:4px 12px; align-items:center; padding:15px; border:1px solid rgba(255,255,255,.09); border-radius:13px; background:rgba(255,255,255,.025); }
+    .best-card span { color:var(--cyan); font-size:.68rem; font-weight:900; letter-spacing:.1em; text-transform:uppercase; }
+    .best-card strong { grid-row:span 2; font-size:1.55rem; }
+    .best-card small { color:var(--soft); }
+    .empty-copy { color:var(--soft); }
+    .danger-zone { border-color:rgba(255,79,189,.22); }
+    .actions { display:flex; flex-wrap:wrap; gap:10px; margin-top:24px; }
+    footer { border-top:1px solid var(--line); padding:28px 0 calc(28px + env(safe-area-inset-bottom)); color:#777182; font-size:.72rem; }
+    @media(min-width:700px){ .shell{width:min(calc(100% - 64px),980px)} .account-grid{grid-template-columns:1fr 1fr}.field-row{grid-template-columns:1fr auto}.account-card.full{grid-column:1/-1} }
+    @media(max-width:390px){.nav-links a:first-child{display:none}.state{border-radius:20px;padding:21px}.button{width:100%}}
+    @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;transition:none!important}}
+  </style>
+</head>
+<body>
+  <header>
+    <nav class="shell" aria-label="Primary navigation">
+      <a class="brand" href="/">POOP<i>CADE</i></a>
+      <div class="nav-links"><a href="/games/orbit-shift/">Play</a><a href="/leaderboard/orbit-shift/">Leaderboard</a></div>
+    </nav>
+  </header>
+
+  <main class="shell" data-account-page>
+    <p class="eyebrow">Player terminal</p>
+    <h1>Your scores.<br>Your weird little legacy.</h1>
+    <p class="intro">Play instantly. Sign in to save your scores across devices and claim a public gamer name. Your email and Google identity stay off the leaderboard.</p>
+
+    <section class="state" aria-live="polite">
+      <p class="loading" data-account-loading>Checking your player signal…</p>
+      <div class="signed-out" data-account-signed-out hidden>
+        <h2>No player signal yet.</h2>
+        <p>Signing in is optional. It simply lets Poopcade save your best runs and sync them between devices.</p>
+        <button class="button" type="button" data-sign-in>Sign in with Google</button>
+      </div>
+
+      <div data-account-signed-in hidden>
+        <div class="profile-head">
+          <div><span>Signed in as</span><h2 data-page-display-name>Poopcade Player</h2></div>
+          <button class="button secondary" type="button" data-sign-out>Sign out</button>
+        </div>
+
+        <div class="account-grid">
+          <section class="account-card">
+            <h3>Public gamer name</h3>
+            <p>This is the only identity other players see.</p>
+            <form data-display-name-form>
+              <label for="displayName">Gamer name</label>
+              <div class="field-row">
+                <input id="displayName" data-display-name-input minlength="3" maxlength="20" autocomplete="nickname" required>
+                <button class="button" type="submit">Save</button>
+              </div>
+              <p class="form-status" data-profile-status></p>
+            </form>
+          </section>
+
+          <section class="account-card">
+            <h3>ORBIT//SHIFT bests</h3>
+            <p>Your highest saved score for each difficulty.</p>
+            <div class="best-grid" data-my-bests></div>
+          </section>
+
+          <section class="account-card full danger-zone">
+            <h3>Account deletion</h3>
+            <p>Self-service deletion is the next account feature. Until the secure deletion flow is deployed, this control remains unavailable.</p>
+            <button class="button secondary" type="button" disabled>Delete account — coming soon</button>
+          </section>
+        </div>
+
+        <div class="actions">
+          <a class="button" href="/games/orbit-shift/">Play ORBIT//SHIFT</a>
+          <a class="button secondary" href="/leaderboard/orbit-shift/">View leaderboard</a>
+        </div>
+      </div>
+      <p class="error" data-account-error role="alert"></p>
+    </section>
+  </main>
+
+  <footer><div class="shell">POOPCADE · Tiny games. Maximum nonsense.</div></footer>
+  <script type="module" src="/js/auth.js"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => navigator.serviceWorker.register('/service-worker.js', { scope: '/' }).catch(() => {}));
+    }
+  </script>
+</body>
+</html>
