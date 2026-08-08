@@ -97,8 +97,12 @@
 
     .hero { border-bottom: 1px solid rgba(255,255,255,.07); }
     .hero-copy { padding: clamp(24px,5vw,43px) 0 clamp(25px,4.5vw,40px); }
-    .eyebrow { display: inline-flex; align-items: center; gap: 7px; margin-bottom: 9px; color: var(--soft); font: 750 .57rem/1 ui-monospace,monospace; letter-spacing: .09em; text-transform: uppercase; }
+    .hero-status { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin-bottom: 9px; }
+    .eyebrow { display: inline-flex; align-items: center; gap: 7px; color: var(--soft); font: 750 .57rem/1 ui-monospace,monospace; letter-spacing: .09em; text-transform: uppercase; }
     .eyebrow::before { width: 6px; height: 6px; content: ""; border-radius: 50%; background: var(--acid); box-shadow: 0 0 10px var(--acid); animation: blink 2.2s ease-in-out infinite; }
+    .player-count { display: inline-flex; align-items: baseline; gap: 5px; padding-left: 14px; border-left: 1px solid rgba(255,255,255,.16); color: var(--dim); font: 750 .54rem/1 ui-monospace,monospace; letter-spacing: .08em; text-transform: uppercase; }
+    .player-count strong { color: var(--cyan); font-size: .66rem; font-variant-numeric: tabular-nums; text-shadow: 0 0 12px rgba(82,239,255,.35); }
+    .player-count[data-state="unavailable"] { opacity: .65; }
     h1 { margin: 0; font-size: clamp(2.55rem,9.5vw,4.8rem); font-weight: 1000; letter-spacing: -.085em; line-height: .88; white-space: nowrap; }
     h1 span { color: transparent; background: linear-gradient(100deg,var(--cyan),var(--violet) 58%,var(--pink)); background-clip: text; -webkit-background-clip: text; filter: drop-shadow(0 8px 25px rgba(90,110,255,.16)); }
     .tagline { margin: 13px 0 2px; font-size: clamp(.96rem,2.3vw,1.28rem); font-weight: 850; letter-spacing: -.025em; }
@@ -243,7 +247,10 @@
   <main id="main">
     <section class="hero" aria-labelledby="hero-title">
       <div class="hero-copy shell">
-        <div class="eyebrow">Pocket arcade online</div>
+        <div class="hero-status">
+          <div class="eyebrow">Pocket arcade online</div>
+          <div class="player-count" data-total-players role="status" aria-live="polite" aria-label="Loading total player count"><strong data-total-players-value>—</strong><span>Total players</span></div>
+        </div>
         <h1 id="hero-title">POOP<span>CADE</span></h1>
         <p class="tagline">Silly games to play while you're pooping</p>
         <p class="support">Tiny games. Zero commitment. Maximum nonsense.</p>
@@ -280,6 +287,7 @@
   <footer><div class="footer-row shell"><b>POOPCADE © 2026</b><span class="footer-links"><a href="/privacy/">Privacy Policy</a><a href="/delete-account/">Delete account</a></span></div></footer>
 
   <script type="module" src="/js/auth.js"></script>
+  <script type="module" src="/js/stats.js"></script>
   <script>
     (() => {
       const installButtons = Array.from(document.querySelectorAll('[data-install]'));
