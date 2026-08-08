@@ -1,5 +1,5 @@
 const CACHE_PREFIX = 'poopcade-';
-const CACHE_NAME = `${CACHE_PREFIX}shell-v11`;
+const CACHE_NAME = `${CACHE_PREFIX}shell-v13`;
 const SUPABASE_ORIGIN = 'https://kpssybcwwmtcdhrmfcgc.supabase.co';
 
 // These routes must exist for the offline shell to install successfully.
@@ -9,10 +9,14 @@ const CORE_ASSETS = [
   '/manifest.webmanifest',
   '/account/',
   '/account/index.html',
+  '/delete-account/',
+  '/delete-account/index.html',
   '/games/orbit-shift/',
   '/games/orbit-shift/index.html',
   '/leaderboard/orbit-shift/',
   '/leaderboard/orbit-shift/index.html',
+  '/privacy/',
+  '/privacy/index.html',
   '/js/supabase-config.js',
   '/js/auth.js',
   '/js/leaderboard.js',

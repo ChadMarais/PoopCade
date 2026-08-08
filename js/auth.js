@@ -27,11 +27,11 @@ export async function getMyBests(gameSlug = "orbit-shift") {
   return Array.isArray(data) ? data : [];
 }
 
-export async function signInWithGoogle() {
+export async function signInWithGoogle(redirectTo = AUTH_REDIRECT_URL) {
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: "google",
     options: {
-      redirectTo: AUTH_REDIRECT_URL,
+      redirectTo,
     },
   });
   if (error) throw error;
@@ -41,6 +41,24 @@ export async function signInWithGoogle() {
 export async function signOut() {
   const { error } = await supabase.auth.signOut();
   if (error) throw error;
+}
+
+export async function deleteCurrentAccount() {
+  const session = await getSession();
+  if (!session?.user) throw new Error("Sign in before deleting your account.");
+
+  const { data, error } = await supabase.functions.invoke("delete-account", {
+    body: {},
+  });
+  if (error || data?.deleted !== true) {
+    throw new Error("Your account could not be deleted. Please try again.");
+  }
+
+  // The Auth user no longer exists server-side. Clear only Supabase's local
+  // session state; Poopcade never reads or removes token storage directly.
+  const { error: signOutError } = await supabase.auth.signOut({ scope: "local" });
+  if (signOutError) throw new Error("Your account was deleted, but this device could not be signed out cleanly.");
+  return data;
 }
 
 export async function updateDisplayName(rawDisplayName) {
@@ -255,6 +273,105 @@ function bindAccountPage(page) {
   });
 }
 
+function bindDeletionPage(page) {
+  if (page.dataset.pageBound === "true") return;
+  page.dataset.pageBound = "true";
+
+  page.querySelectorAll("[data-sign-in]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      button.disabled = true;
+      setMessage(page.querySelector("[data-deletion-error]"), "");
+      try {
+        await signInWithGoogle("https://poopcade.com/delete-account/");
+      } catch {
+        setMessage(page.querySelector("[data-deletion-error]"), "Google sign-in is not available right now. Please try again later.");
+        button.disabled = false;
+      }
+    });
+  });
+
+  page.querySelectorAll("[data-sign-out]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      button.disabled = true;
+      try {
+        await signOut();
+      } catch {
+        setMessage(page.querySelector("[data-deletion-error]"), "Sign out failed. Please try again.");
+        button.disabled = false;
+      }
+    });
+  });
+}
+
+async function renderDeletionPage(page) {
+  const loading = page.querySelector("[data-deletion-loading]");
+  const signedOut = page.querySelector("[data-deletion-signed-out]");
+  const signedIn = page.querySelector("[data-deletion-signed-in]");
+  const errorElement = page.querySelector("[data-deletion-error]");
+
+  setVisible(loading, true);
+  setVisible(signedOut, false);
+  setVisible(signedIn, false);
+  setMessage(errorElement, "");
+
+  try {
+    const user = await getCurrentUser();
+    if (!user) {
+      setVisible(signedOut, true);
+      return;
+    }
+
+    const profile = await getMyProfile();
+    page.querySelectorAll("[data-page-display-name]").forEach((element) => {
+      element.textContent = profile?.display_name ?? "Poopcade Player";
+    });
+    setVisible(signedIn, true);
+  } catch {
+    setVisible(signedOut, true);
+    setMessage(errorElement, "Your account status could not be loaded. Please try again.");
+  } finally {
+    setVisible(loading, false);
+  }
+}
+
+function bindDeleteAccountControl(control) {
+  if (control.dataset.deleteBound === "true") return;
+  control.dataset.deleteBound = "true";
+
+  const openButton = control.querySelector("[data-delete-open]");
+  const confirmation = control.querySelector("[data-delete-confirmation]");
+  const confirmButton = control.querySelector("[data-delete-confirm]");
+  const cancelButton = control.querySelector("[data-delete-cancel]");
+  const status = control.querySelector("[data-delete-status]");
+
+  openButton?.addEventListener("click", () => {
+    openButton.hidden = true;
+    confirmation.hidden = false;
+    confirmButton?.focus();
+  });
+
+  cancelButton?.addEventListener("click", () => {
+    confirmation.hidden = true;
+    openButton.hidden = false;
+    setMessage(status, "");
+    openButton.focus();
+  });
+
+  confirmButton?.addEventListener("click", async () => {
+    confirmButton.disabled = true;
+    if (cancelButton) cancelButton.disabled = true;
+    setMessage(status, "Permanently deleting your account…");
+    try {
+      await deleteCurrentAccount();
+      window.location.assign("/?account_deleted=1");
+    } catch (error) {
+      setMessage(status, error instanceof Error ? error.message : "Your account could not be deleted. Please try again.");
+      confirmButton.disabled = false;
+      if (cancelButton) cancelButton.disabled = false;
+    }
+  });
+}
+
 async function refreshAuthUI() {
   const controls = Array.from(document.querySelectorAll("[data-account-control]"));
   controls.forEach(bindAccountControl);
@@ -265,6 +382,14 @@ async function refreshAuthUI() {
     bindAccountPage(accountPage);
     await renderAccountPage(accountPage);
   }
+
+  const deletionPage = document.querySelector("[data-deletion-page]");
+  if (deletionPage) {
+    bindDeletionPage(deletionPage);
+    await renderDeletionPage(deletionPage);
+  }
+
+  document.querySelectorAll("[data-delete-account-control]").forEach(bindDeleteAccountControl);
 }
 
 refreshAuthUI();

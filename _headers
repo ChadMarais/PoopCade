@@ -16,6 +16,12 @@
 /account/index.html
   Cache-Control: no-cache
 
+/delete-account/
+  Cache-Control: no-cache
+
+/delete-account/index.html
+  Cache-Control: no-cache
+
 /games/orbit-shift/
   Cache-Control: no-cache
 
@@ -26,6 +32,12 @@
   Cache-Control: no-cache
 
 /leaderboard/orbit-shift/index.html
+  Cache-Control: no-cache
+
+/privacy/
+  Cache-Control: no-cache
+
+/privacy/index.html
   Cache-Control: no-cache
 
 /service-worker.js

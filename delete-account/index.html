@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#07070d">
+  <meta name="description" content="Delete your Poopcade account and associated saved game data.">
+  <title>Delete your Poopcade account</title>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" type="image/png" sizes="192x192" href="/assets/icons/icon-192.png">
+  <link rel="apple-touch-icon" sizes="192x192" href="/assets/icons/icon-192.png">
+  <style>
+    :root { color-scheme:dark; --bg:#07070d; --ink:#fbfaff; --soft:#aaa4b8; --line:rgba(255,255,255,.12); --cyan:#52efff; --pink:#ff4fbd; --acid:#c8ff47; }
+    * { box-sizing:border-box; }
+    body { min-width:280px; margin:0; color:var(--ink); background:radial-gradient(circle at 12% 3%,rgba(155,105,255,.17),transparent 27rem),radial-gradient(circle at 92% 46%,rgba(255,79,189,.09),transparent 25rem),var(--bg); font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif; line-height:1.5; }
+    body::before { position:fixed; inset:0; z-index:-1; content:""; opacity:.18; background-image:linear-gradient(rgba(255,255,255,.03) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.03) 1px,transparent 1px); background-size:52px 52px; mask-image:linear-gradient(#000,transparent 80%); }
+    a { color:inherit; } button { font:inherit; } [hidden] { display:none!important; } :focus-visible { outline:3px solid var(--acid); outline-offset:4px; }
+    .shell { width:min(calc(100% - 30px),820px); margin-inline:auto; }
+    header { border-bottom:1px solid var(--line); background:rgba(7,7,13,.78); backdrop-filter:blur(18px); }
+    nav { display:flex; min-height:66px; align-items:center; justify-content:space-between; gap:14px; }
+    .brand { text-decoration:none; font-size:.82rem; font-weight:1000; letter-spacing:.14em; }
+    .brand i { color:var(--cyan); font-style:normal; }
+    .back-link { color:var(--soft); font-size:.68rem; font-weight:850; letter-spacing:.07em; text-decoration:none; text-transform:uppercase; }
+    main { padding:clamp(42px,8vw,76px) 0 90px; }
+    .eyebrow { margin:0 0 12px; color:var(--pink); font:800 .65rem/1 ui-monospace,monospace; letter-spacing:.14em; text-transform:uppercase; }
+    h1 { max-width:700px; margin:0; font-size:clamp(2.35rem,8vw,5rem); line-height:.94; letter-spacing:-.065em; }
+    .intro { max-width:650px; margin:20px 0 28px; color:var(--soft); }
+    .data-list { display:grid; gap:7px; margin:0 0 28px; padding:0; list-style:none; color:#ddd8e3; font-size:.88rem; }
+    .data-list li::before { margin-right:9px; color:var(--pink); content:"×"; font-weight:1000; }
+    .state { padding:clamp(22px,5vw,38px); border:1px solid var(--line); border-radius:23px; background:rgba(18,17,31,.82); box-shadow:0 28px 80px rgba(0,0,0,.32); }
+    .state h2 { margin:0 0 9px; font-size:clamp(1.4rem,5vw,2.3rem); letter-spacing:-.035em; }
+    .state p { margin:0 0 18px; color:var(--soft); }
+    .loading,.error,.status { min-height:1.4em; color:var(--soft); }
+    .error { color:#ffaddb; }
+    .button { display:inline-flex; min-height:48px; align-items:center; justify-content:center; padding:0 18px; border:0; border-radius:11px; cursor:pointer; color:#08090d; background:var(--acid); font-size:.7rem; font-weight:950; letter-spacing:.075em; text-decoration:none; text-transform:uppercase; }
+    .button.secondary { border:1px solid var(--line); color:white; background:rgba(255,255,255,.045); }
+    .button.danger { border:1px solid rgba(255,79,189,.54); color:#ffd8ee; background:rgba(255,79,189,.1); }
+    .button:disabled { cursor:not-allowed; opacity:.45; }
+    .signed-in-head { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px; margin-bottom:20px; padding-bottom:18px; border-bottom:1px solid var(--line); }
+    .signed-in-head p { margin:0; font-size:.8rem; }
+    .signed-in-head strong { display:block; color:white; font-size:1rem; }
+    .confirmation { margin-top:14px; padding:16px; border:1px solid rgba(255,79,189,.3); border-radius:14px; background:rgba(255,79,189,.055); }
+    .confirmation p { color:#ded7e2; }
+    .actions { display:flex; flex-wrap:wrap; gap:9px; }
+    .status { margin:10px 0 0!important; color:#ffaddb!important; font-size:.82rem; }
+    footer { border-top:1px solid var(--line); padding:25px 0 calc(25px + env(safe-area-inset-bottom)); color:#777182; font-size:.7rem; }
+    .footer-row { display:flex; flex-wrap:wrap; justify-content:space-between; gap:12px; }
+    footer a { color:var(--soft); text-underline-offset:3px; }
+    @media(max-width:390px){.state{padding:20px;border-radius:19px}.button{width:100%}.actions{display:grid}.brand{font-size:.74rem}}
+  </style>
+</head>
+<body>
+  <header><nav class="shell" aria-label="Primary navigation"><a class="brand" href="/">POOP<i>CADE</i></a><a class="back-link" href="/account/">Account</a></nav></header>
+
+  <main class="shell" data-deletion-page>
+    <p class="eyebrow">Permanent action</p>
+    <h1>Delete your Poopcade account</h1>
+    <p class="intro">Self-service deletion permanently removes your Poopcade account and the game data associated with it.</p>
+    <ul class="data-list">
+      <li>Poopcade gamer profile and public display name</li>
+      <li>Saved ORBIT//SHIFT runs and scores</li>
+      <li>Personal-best and leaderboard history associated with your account</li>
+    </ul>
+
+    <section class="state" aria-live="polite">
+      <p class="loading" data-deletion-loading>Checking your player signal…</p>
+
+      <div data-deletion-signed-out hidden>
+        <h2>Verify account ownership</h2>
+        <p>Sign in with the Google account connected to Poopcade. Signing in does not delete anything—you will still need to confirm deletion.</p>
+        <button class="button" type="button" data-sign-in>Sign in with Google</button>
+      </div>
+
+      <div data-deletion-signed-in hidden>
+        <div class="signed-in-head">
+          <p>Signed in as <strong data-page-display-name>Poopcade Player</strong></p>
+          <button class="button secondary" type="button" data-sign-out>Sign out</button>
+        </div>
+        <div data-delete-account-control>
+          <h2>Ready to delete?</h2>
+          <p>This action cannot be undone. You will lose access to all saved Poopcade scores and account history.</p>
+          <button class="button danger" type="button" data-delete-open>Delete account</button>
+          <div class="confirmation" data-delete-confirmation hidden>
+            <p><strong>Final confirmation:</strong> permanently delete this Poopcade account and its associated data?</p>
+            <div class="actions">
+              <button class="button danger" type="button" data-delete-confirm>Permanently delete</button>
+              <button class="button secondary" type="button" data-delete-cancel>Cancel</button>
+            </div>
+            <p class="status" data-delete-status role="status" aria-live="polite"></p>
+          </div>
+        </div>
+      </div>
+      <p class="error" data-deletion-error role="alert"></p>
+    </section>
+  </main>
+
+  <footer><div class="shell footer-row"><span>2Play · Poopcade</span><span><a href="/privacy/">Privacy Policy</a> · <a href="/">Back to Poopcade</a></span></div></footer>
+  <script type="module" src="/js/auth.js"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => navigator.serviceWorker.register('/service-worker.js', { scope: '/' }).catch(() => {}));
+    }
+  </script>
+</body>
+</html>

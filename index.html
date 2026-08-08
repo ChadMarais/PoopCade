@@ -143,6 +143,9 @@
     footer { border-top: 1px solid rgba(255,255,255,.08); }
     .footer-row { display: flex; min-height: 68px; align-items: center; justify-content: space-between; gap: 14px; padding-bottom: env(safe-area-inset-bottom); color: var(--dim); font-size: .65rem; }
     .footer-row b { color: #a69fad; letter-spacing: .11em; }
+    .footer-links { display: flex; flex-wrap: wrap; gap: 14px; }
+    .footer-links a { color: var(--soft); text-underline-offset: 3px; }
+    .delete-success { width: min(calc(100% - 28px),var(--max)); margin: 12px auto 0; padding: 10px 13px; border: 1px solid rgba(200,255,71,.3); border-radius: 11px; color: var(--acid); background: rgba(200,255,71,.06); font-size: .75rem; }
 
     @keyframes blink { 50% { opacity: .35; transform: scale(.78); } }
     @keyframes orbit { to { transform: rotate(332deg); } }
@@ -235,6 +238,8 @@
     </nav>
   </header>
 
+  <p class="delete-success" data-account-deleted role="status" hidden>Your Poopcade account and associated saved data were permanently deleted.</p>
+
   <main id="main">
     <section class="hero" aria-labelledby="hero-title">
       <div class="hero-copy shell">
@@ -272,13 +277,21 @@
     </section>
   </main>
 
-  <footer><div class="footer-row shell"><b>POOPCADE © 2026</b><span>Made for tiny breaks and questionable timing.</span></div></footer>
+  <footer><div class="footer-row shell"><b>POOPCADE © 2026</b><span class="footer-links"><a href="/privacy/">Privacy Policy</a><a href="/delete-account/">Delete account</a></span></div></footer>
 
   <script type="module" src="/js/auth.js"></script>
   <script>
     (() => {
       const installButtons = Array.from(document.querySelectorAll('[data-install]'));
       let installPrompt = null;
+
+      const query = new URLSearchParams(window.location.search);
+      if (query.get('account_deleted') === '1') {
+        document.querySelector('[data-account-deleted]').hidden = false;
+        query.delete('account_deleted');
+        const remainingQuery = query.toString();
+        history.replaceState(null, '', window.location.pathname + (remainingQuery ? `?${remainingQuery}` : '') + window.location.hash);
+      }
 
       const setInstallVisibility = (visible) => {
         installButtons.forEach((button) => {
