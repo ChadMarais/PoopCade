@@ -1,5 +1,5 @@
 const CACHE_PREFIX = 'poopcade-';
-const CACHE_NAME = `${CACHE_PREFIX}shell-v2`;
+const CACHE_NAME = `${CACHE_PREFIX}shell-v3`;
 
 // These routes must exist for the offline shell to install successfully.
 const CORE_ASSETS = [
@@ -10,8 +10,8 @@ const CORE_ASSETS = [
   '/games/orbit-shift/index.html'
 ];
 
-// Artwork is not production-ready yet. A missing optional file must never
-// prevent the core service worker from installing.
+// Presentation assets remain non-blocking so a bad optional response can
+// never prevent the core offline shell from installing.
 const OPTIONAL_ASSETS = [
   '/assets/icons/icon-192.png',
   '/assets/icons/icon-512.png',

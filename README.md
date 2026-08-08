@@ -11,7 +11,7 @@ Poopcade is a static, mobile-first progressive web app containing small arcade g
 ├── service-worker.js                # Offline shell and caching strategies
 ├── _headers                         # Cloudflare Pages response headers
 ├── assets/
-│   └── icons/                       # PWA icon artwork (still required)
+│   └── icons/                       # PWA PNG icons and editable SVG master
 └── games/
     └── orbit-shift/
         └── index.html               # ORBIT//SHIFT
@@ -59,14 +59,14 @@ The repository is prepared for its first Cloudflare Pages deployment as a static
 
 No Content Security Policy is set yet because the current homepage and game use inline CSS and JavaScript, and the game uses WebAudio. A CSP should be designed and tested separately rather than added in a way that breaks the application.
 
-### Remaining production artwork
+### Production icon artwork
 
-The manifest intentionally declares:
+The manifest declares:
 
 - `/assets/icons/icon-192.png`
 - `/assets/icons/icon-512.png`
 - `/assets/icons/icon-maskable-512.png`
 
-These PNG files are currently missing and require final production artwork. Until valid files exist at all three paths, browser PWA installation criteria may not be satisfied even though the manifest and service worker are otherwise configured.
+All three PNG files are generated from `assets/icons/icon-source.svg`. The maskable version keeps its essential mark inside Android's central safe area. Regenerate every PNG from the SVG master whenever the artwork changes, then increment the service-worker cache version.
 
 Before public launch, also configure the Cloudflare Pages project, attach the production domain, deploy, and verify the manifest, worker scope, offline mode, install prompt, and security headers over HTTPS.
