@@ -957,6 +957,7 @@
   </div>
 
   <script type="module" src="/js/poopcade-api.js"></script>
+  <script type="module" src="/js/guest-analytics.js"></script>
   <script>
   (() => {
     "use strict";
@@ -1941,6 +1942,12 @@
         const user = await api.getCurrentUser();
         if (!user) {
           showSubmissionResult("Sign in to save your score.", "idle", true);
+          void window.PoopcadeGuestAnalytics?.recordRun({
+            clientRunId: submission.clientRunId,
+            gameSlug: "orbit-shift",
+            score: submission.score,
+            durationMs: submission.durationMs
+          });
           return;
         }
 

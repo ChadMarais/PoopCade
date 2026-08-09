@@ -1,5 +1,5 @@
 const CACHE_PREFIX = 'poopcade-';
-const CACHE_NAME = `${CACHE_PREFIX}shell-v15`;
+const CACHE_NAME = `${CACHE_PREFIX}shell-v16`;
 const SUPABASE_ORIGIN = 'https://kpssybcwwmtcdhrmfcgc.supabase.co';
 
 // These routes must exist for the offline shell to install successfully.
@@ -25,7 +25,8 @@ const CORE_ASSETS = [
   '/js/auth.js',
   '/js/stats.js',
   '/js/leaderboard.js',
-  '/js/poopcade-api.js'
+  '/js/poopcade-api.js',
+  '/js/guest-analytics.js'
 ];
 
 // Presentation assets remain non-blocking so a bad optional response can

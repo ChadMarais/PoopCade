@@ -211,6 +211,13 @@
     line-height:1;
     max-width:82%;
   }
+  .target.singleLine .symbol{
+    max-width:92%;
+    white-space:nowrap;
+    overflow-wrap:normal;
+    font-size:clamp(10px,2.8vw,16px);
+    letter-spacing:-.045em;
+  }
   .symbol{
     display:block;
     max-width:88%;
@@ -355,6 +362,12 @@
     width:72px;height:72px;border-radius:22px;
     box-shadow:0 14px 28px rgba(0,0,0,.3),inset 0 2px 0 rgba(255,255,255,.45);
   }
+  .stroopOption{border:2px solid currentColor!important;background:#11131c!important;box-shadow:0 14px 38px #0008,inset 0 0 24px color-mix(in srgb,currentColor 10%,transparent)!important}
+  .shellPod{position:absolute;top:54%;width:clamp(62px,21vw,92px);aspect-ratio:.82;border:1px solid rgba(99,231,255,.34);border-radius:42% 42% 28% 28%;background:linear-gradient(145deg,#272b3a,#0c0e15 62%);box-shadow:0 18px 32px #0008,inset 0 2px 0 #ffffff22;z-index:4;touch-action:manipulation;will-change:transform}
+  .shellPod::before{content:"";position:absolute;inset:13% 17% 29%;border-radius:50%;background:#080910;box-shadow:inset 0 0 0 2px #ffffff12}
+  .shellPod.tracked::before{background:var(--lime);box-shadow:0 0 22px rgba(201,255,90,.7),inset 0 2px 0 #fff8}
+  .shellPod.ready{cursor:pointer;border-color:rgba(255,255,255,.3)}
+  .machineStatement{position:absolute;left:8%;right:8%;top:19%;padding:11px 12px;border:1px solid rgba(255,78,145,.28);border-radius:12px;color:#ffd9e8;background:rgba(255,78,145,.07);font:950 clamp(10px,2.7vw,14px)/1.2 ui-monospace,monospace;letter-spacing:.08em;text-align:center;text-transform:uppercase}
   .miniLabel{
     position:absolute;left:50%;top:18%;transform:translateX(-50%);
     color:#7f8497;font-size:9px;font-weight:1000;letter-spacing:.2em;text-transform:uppercase;
@@ -408,6 +421,7 @@
       max-width:88%;
       line-height:.98;
     }
+    .target.singleLine .symbol{font-size:clamp(8px,2.55vw,13px);max-width:94%}
     .bottomHint{font-size:8px;letter-spacing:.12em;bottom:max(16px,env(safe-area-inset-bottom))}
   }
 
@@ -416,6 +430,7 @@
     .instruction{font-size:clamp(23px,8.2vw,34px)}
     .arena{top:35.5%;bottom:72px}
     .target.wordy .symbol{font-size:11px}
+    .target.singleLine .symbol{font-size:8px}
     .timerWrap{height:7px}
   }
 
@@ -450,6 +465,9 @@
   .host[data-reaction="gleeful"]{animation:hostGloat .5s cubic-bezier(.2,1.5,.4,1)}
   .host[data-reaction="irritated"]{animation:hostRecoil .3s ease}
   .host[data-reaction="glitching"]{animation:hostGlitch .11s steps(2) 5}
+  .host[data-reaction="slapped"] .hostMachine{animation:hostSlapped .38s cubic-bezier(.15,.8,.25,1)}
+  .host[data-reaction="muted"] .mouth{transform:scale(.72,.22)}
+  .host[data-reaction="ranting"] .mouth{animation:hostRant .13s steps(2) infinite}
   .hostBubble{position:absolute;right:calc(100% + 7px);top:12%;width:min(190px,52vw);padding:8px 10px;border:1px solid rgba(99,231,255,.22);border-radius:11px 11px 3px 11px;color:#d9dbe5;background:rgba(7,8,13,.94);box-shadow:0 12px 30px rgba(0,0,0,.32);font:800 clamp(8px,1.7vw,11px)/1.25 ui-monospace,monospace;letter-spacing:.03em;opacity:0;transform:translateY(5px);transition:opacity .18s ease,transform .18s ease}
   .hostBubble.show{opacity:1;transform:translateY(0)}
   .shell.menu-mode .host,.shell.over-mode .host{right:50%;top:max(46px,calc(env(safe-area-inset-top) + 28px));bottom:auto;width:clamp(132px,28vw,190px);transform:translateX(50%)}
@@ -481,6 +499,8 @@
   @keyframes hostGloat{40%{transform:translateY(-7px) scale(1.05)}}
   @keyframes hostHorror{25%{transform:translateX(-3px)}75%{transform:translateX(3px)}}
   @keyframes hostGlitch{25%{transform:translate(-3px,1px)}75%{transform:translate(3px,-1px)}}
+  @keyframes hostSlapped{20%{transform:translateX(20px) rotate(12deg) scale(.92)}45%{transform:translateX(-9px) rotate(-5deg)}75%{transform:translateX(4px) rotate(2deg)}}
+  @keyframes hostRant{from{transform:scale(1,.45)}to{transform:scale(.72,1.2)}}
   @media(max-width:420px){
     .host{right:8px;top:auto;bottom:max(7px,env(safe-area-inset-bottom));width:46px}
     .shell:not(.menu-mode):not(.over-mode) .hostBubble{display:none}
@@ -497,7 +517,12 @@
     .rules{margin:10px auto}.tag{font-size:14px}.logo{font-size:48px}
     .deathScore{font-size:58px}.deathMsg{margin:8px 0 3px}
   }
-  @media(prefers-reduced-motion:reduce){.hostMachine,.host[data-reaction]{animation:none!important}.host,.hostBubble{transition:none!important}}
+  .shell:not(.menu-mode):not(.over-mode) .host.challenge-active{right:50%;top:57%;bottom:auto;width:clamp(130px,29vw,188px);transform:translate(50%,-50%);pointer-events:auto;touch-action:none;cursor:grab;z-index:64}
+  .shell:not(.menu-mode):not(.over-mode) .host.challenge-active:active{cursor:grabbing}
+  .shell:not(.menu-mode):not(.over-mode) .host.challenge-active .hostBubble{display:block;right:auto;left:50%;top:calc(100% + 4px);width:min(230px,72vw);transform:translate(-50%,5px);text-align:center}
+  .shell:not(.menu-mode):not(.over-mode) .host.challenge-active .hostBubble.show{transform:translate(-50%,0)}
+  @media(max-width:340px){.shell:not(.menu-mode):not(.over-mode) .host.challenge-active{width:118px;top:55%}}
+  @media(prefers-reduced-motion:reduce){.hostMachine,.host[data-reaction],.host[data-reaction] .hostMachine{animation:none!important}.host,.hostBubble{transition:none!important}}
 </style>
 </head>
 <body>
@@ -597,6 +622,7 @@
 </div>
 
 <script type="module" src="/js/poopcade-api.js"></script>
+<script type="module" src="/js/guest-analytics.js"></script>
 <script>
 (() => {
   const arena = document.getElementById('arena');
@@ -651,6 +677,7 @@
   let remembered = null;
   let previousType = '';
   let recentTypes = [];
+  let recentCategories = [];
   let currentRoundFn = null;
   let pausedRoundFn = null;
   let runActive = false;
@@ -898,9 +925,21 @@
     stopPressureBar();
     timers.forEach(clearTimeout);timers=[];
     cleanupFns.forEach(fn=>{try{fn()}catch{}});cleanupFns=[];
+    host.classList.remove('challenge-active');
+    host.onpointerdown=host.onpointermove=host.onpointerup=host.onpointercancel=null;
     arena.innerHTML='';
     arena.onpointerdown=arena.onpointermove=arena.onpointerup=arena.onpointercancel=null;
     arena.style.transform='';
+  }
+  function activateChallengeHost(){
+    host.classList.add('challenge-active');
+    host.setAttribute('aria-label','Interactive NEXT test administrator');
+    cleanupFns.push(()=>{
+      host.classList.remove('challenge-active');
+      host.onpointerdown=host.onpointermove=host.onpointerup=host.onpointercancel=null;
+      host.setAttribute('aria-label','NEXT test administrator');
+      hostBubble.classList.remove('show');
+    });
   }
   function setInstruction(main,small=''){
     instruction.textContent=main;
@@ -1157,7 +1196,7 @@
 
   function correct(text=choice([
     'OOOOH!','NAILED IT.','DISGUSTINGLY GOOD.','WOO!','CLEAN.','YESSS.','CHEEKY.','ABSOLUTELY.'
-  ])){
+  ]),options={}){
     if(!running)return;
     running=false;
     stopPressureBar();
@@ -1166,7 +1205,7 @@
     showStamp(choice(['APPROVED','LUCKY','FINE THEN','VALID','ANNOYINGLY GOOD']));
     audio.success();
     hostReact(score>20?'angry':'eye-roll');
-    haptic(10);
+    if(options.haptics!==false)haptic(10);
     score++;
     scoreEl.textContent=score;
     if(score>best){best=score;localStorage.setItem('next_best',best);bestEl.textContent=best;}
@@ -1346,6 +1385,12 @@
       const result=await api.submitNextRun(submission);
       if(result?.skipped){
         saveStatus.textContent='Sign in to save your score';
+        void window.PoopcadeGuestAnalytics?.recordRun({
+          clientRunId:submission.clientRunId,
+          gameSlug:'next',
+          score:submission.score,
+          durationMs:submission.durationMs
+        });
         return;
       }
       if(result?.newPersonalBest){
@@ -1375,7 +1420,7 @@
     audio.ensure();
     roundToken++;
     clearRound();
-    score=0;lives=1;scoreEl.textContent='0';remembered=null;previousType='';recentTypes=[];
+    score=0;lives=1;scoreEl.textContent='0';remembered=null;previousType='';recentTypes=[];recentCategories=[];
     currentRoundFn=null;pausedRoundFn=null;paused=false;runActive=true;
     clientRunId=createClientRunId();submissionStarted=false;activeElapsedMs=0;runStartedAt=performance.now();activeSegmentStartedAt=runStartedAt;
     renderLives();
@@ -1955,21 +2000,22 @@
     });
 
     const yes=targetButton({
-      x:50,y:50,size:96,color:'#e7e8ee',shape:'square',text:'SAME',extraClass:'wordy',
+      x:50,y:50,size:96,color:'#e7e8ee',shape:'square',text:'SAME',extraClass:'wordy singleLine',
       onTap:e=>same?(particles(e.clientX,e.clientY),correct('SAME.')):fail('Different.')
     });
     const no=targetButton({
-      x:50,y:50,size:96,color:'#e7e8ee',shape:'square',text:'DIFFERENT',extraClass:'wordy',
+      x:50,y:50,size:96,color:'#e7e8ee',shape:'square',text:'DIFFERENT',extraClass:'wordy singleLine',
       onTap:e=>!same?(particles(e.clientX,e.clientY),correct('DIFFERENT.')):fail('Same.')
     });
     const w=arena.clientWidth;
     const gap=Math.max(10,Math.min(16,w*.04));
     const bw=Math.min(126,Math.max(88,(w-gap*3)/2));
     const y=Math.min(arena.clientHeight-92,arena.clientHeight*.66);
+    const startX=(w-(bw*2+gap))/2;
     [yes,no].forEach((b,i)=>{
       b.style.width=bw+'px';
       b.style.height=Math.max(76,Math.min(96,bw*.75))+'px';
-      b.style.left=(gap+i*(bw+gap))+'px';
+      b.style.left=(startX+i*(bw+gap))+'px';
       b.style.top=y+'px';
     });
     armTimeout(3000);
@@ -2093,7 +2139,7 @@
     labels.forEach((txt,i)=>{
       const b=targetButton({
         x:50,y:50,size:96,color:'#e7e8ee',
-        shape:'square',text:txt,extraClass:'wordy',
+        shape:'square',text:txt,extraClass:'wordy singleLine',
         onTap:e=>{
           if(txt===v.answer){particles(e.clientX,e.clientY,18);correct(choice(['CHEEKY.','YOU READ IT.','NOT BAD.']));}
           else fail(choice(['That one warned you.','You trusted THAT one?','Bold. Incorrect.']));
@@ -2121,7 +2167,7 @@
         color:'#e7e8ee',
         shape:'square',
         text:txt,
-        extraClass:'wordy',
+        extraClass:'wordy singleLine',
         onTap:e=>{
           i===correctIndex?(particles(e.clientX,e.clientY),correct('LITERAL.')):fail('It said HERE. Exactly HERE.');
         }
@@ -2239,6 +2285,172 @@
     addTimer(()=>correct(choice(['NEXT.','FINE.','MOVE.'])),ms);
   }
 
+  // Production-polish special challenges. These are deliberately uncommon and
+  // reuse the existing round lifecycle so pause, timeout and cleanup stay safe.
+  function slapMachineRound(){
+    setInstruction('SLAP THE MACHINE.','A proper sideways one.');
+    activateChallengeHost();
+    hostReact('side-eye',2200);
+    hostSpeak('This feels like a workplace issue.',2300);
+    let pointerId=null,startX=0,startY=0,finished=false;
+    const succeed=e=>{
+      if(finished || !running)return;
+      finished=true;
+      try{host.releasePointerCapture?.(pointerId)}catch{}
+      const rect=host.getBoundingClientRect();
+      particles(rect.left+rect.width/2,rect.top+rect.height/2,26);
+      audio.fail();haptic(24);
+      correct('OFFENDED.',{haptics:false});
+      hostReact('slapped',1200);hostSpeak('That was completely unnecessary.',1800);
+    };
+    host.onpointerdown=e=>{
+      if(!running || pointerId!==null)return;
+      e.preventDefault();pointerId=e.pointerId;startX=e.clientX;startY=e.clientY;
+      host.setPointerCapture?.(pointerId);
+    };
+    host.onpointermove=e=>{
+      if(e.pointerId!==pointerId || finished)return;
+      const dx=e.clientX-startX,dy=e.clientY-startY;
+      const threshold=Math.max(54,Math.min(86,host.clientWidth*.42));
+      if(Math.abs(dx)>=threshold && Math.abs(dx)>Math.abs(dy)*1.35)succeed(e);
+    };
+    host.onpointerup=e=>{
+      if(e.pointerId!==pointerId || finished)return;
+      const dx=e.clientX-startX,dy=e.clientY-startY;
+      try{host.releasePointerCapture?.(pointerId)}catch{}
+      pointerId=null;
+      const threshold=Math.max(54,Math.min(86,host.clientWidth*.42));
+      if(Math.abs(dx)>=threshold && Math.abs(dx)>Math.abs(dy)*1.35)succeed(e);
+      else fail(Math.abs(dy)>Math.abs(dx)?'Sideways. Not vertical.':'That was a tap, not a slap.');
+    };
+    host.onpointercancel=e=>{
+      if(e.pointerId!==pointerId || finished)return;
+      pointerId=null;fail('Slap interrupted.');
+    };
+    armTimeout(3600);
+  }
+
+  function wordOrColourRound(){
+    const colours=shuffle(COLORS).slice(0,3);
+    const inks=[colours[1],colours[2],colours[0]];
+    const literal=Math.random()<.5;
+    const targetIndex=randi(0,2);
+    const target=literal?colours[targetIndex]:inks[targetIndex];
+    setInstruction(literal?`TAP THE WORD ${target.name}.`:`TAP THE ${target.name} WORD.`,literal?'Read the letters.':'Read the ink.');
+    const buttons=colours.map((label,i)=>{
+      const b=targetButton({
+        x:50,y:50,size:86,color:'#11131c',shape:'square',text:label.name,extraClass:'wordy singleLine stroopOption',
+        onTap:e=>i===targetIndex?(particles(e.clientX,e.clientY,20),correct('STROOPED.')):fail(literal?'Wrong word.':'Wrong colour.')
+      });
+      b.style.color=inks[i].hex;
+      return b;
+    });
+    const w=arena.clientWidth,gap=Math.max(7,Math.min(12,w*.025));
+    const bw=Math.min(112,Math.max(76,(w-gap*4)/3));
+    const total=bw*3+gap*2,start=(w-total)/2;
+    buttons.forEach((b,i)=>{b.style.width=bw+'px';b.style.height=Math.max(72,bw*.78)+'px';b.style.left=(start+i*(bw+gap))+'px';b.style.top=Math.max(26,arena.clientHeight*.46)+'px';});
+    armTimeout(3300);
+  }
+
+  function whereDidItGoRound(){
+    setInstruction('WHERE DID IT GO?','Watch the glowing pod.');
+    const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const podCount=3;
+    const pods=[];
+    const slots=[-Math.min(104,arena.clientWidth*.3),0,Math.min(104,arena.clientWidth*.3)];
+    const transformFor=slot=>`translate3d(${slots[slot]}px,-50%,0) translateX(-50%)`;
+    const trackedIndex=randi(0,podCount-1);
+    const slotByPod=[0,1,2];
+    let selectable=false;
+    for(let i=0;i<podCount;i++){
+      const pod=document.createElement('button');pod.type='button';pod.className='shellPod'+(i===trackedIndex?' tracked':'');
+      pod.style.left='50%';pod.style.transform=transformFor(i);pod.setAttribute('aria-label',`Pod ${i+1}`);
+      pod.addEventListener('pointerdown',e=>{
+        if(!running || !selectable)return;
+        e.preventDefault();
+        i===trackedIndex?(particles(e.clientX,e.clientY,22),correct('TRACKED.')):fail('It went elsewhere.');
+      });
+      arena.appendChild(pod);pods.push(pod);
+    }
+    const swaps=score>=28?4:score>=18?3:2;
+    const moveMs=reduced?210:Math.max(300,450-score*3);
+    addTimer(()=>{
+      pods[trackedIndex].classList.remove('tracked');sub.textContent='Keep your eyes on it.';
+      let previous='';
+      for(let step=0;step<swaps;step++){
+        addTimer(()=>{
+          const pairs=[[0,1],[1,2],[0,2]];
+          const pair=choice(pairs.filter(p=>p.join('')!==previous));previous=pair.join('');
+          const podA=slotByPod.indexOf(pair[0]),podB=slotByPod.indexOf(pair[1]);
+          [podA,podB].forEach(podIndex=>{
+            const from=slotByPod[podIndex];
+            const to=from===pair[0]?pair[1]:pair[0];
+            const animation=pods[podIndex].animate([{transform:transformFor(from)},{transform:transformFor(to)}],{duration:moveMs,easing:'cubic-bezier(.45,0,.2,1)',fill:'forwards'});
+            cleanupFns.push(()=>animation.cancel());
+            slotByPod[podIndex]=to;
+            animation.onfinish=()=>{pods[podIndex].style.transform=transformFor(to);animation.cancel();};
+          });
+          audio.tone(300+step*60,.06,'sine',.018);
+        },step*(moveMs+90));
+      }
+      addTimer(()=>{
+        selectable=true;sub.textContent='Pick the original pod.';pods.forEach(p=>p.classList.add('ready'));
+        const answerMs=scaledDeadline(2300);startPressureBar(answerMs);addTimer(()=>{if(running)fail('Lost it.');},answerMs);
+      },swaps*(moveMs+90)+120);
+    },650);
+  }
+
+  function shutMeUpRound(){
+    setInstruction('PLEASE WAIT.','The machine has notes.');
+    activateChallengeHost();hostReact('ranting',1800);
+    const rants=['I have reviewed your performance.','The buttons are clearly biased.','Your technique lacks paperwork.'];
+    rants.forEach((line,i)=>addTimer(()=>{hostSpeak(line,650);audio.vowel(i%2?'oh':'oo',.22,130+i*15,175,.026);},i*430));
+    let armed=false,holding=false,finished=false,pointerId=null,holdTimer=0;
+    addTimer(()=>{
+      armed=true;setInstruction('SHUT ME UP.','Press and hold the machine.');hostSpeak('I was not finished—',1500);
+      armTimeout(3400);
+    },1280);
+    host.onpointerdown=e=>{
+      if(!running || !armed || holding || finished)return;
+      e.preventDefault();holding=true;pointerId=e.pointerId;host.setPointerCapture?.(pointerId);
+      hostBubble.classList.remove('show');hostReact('muted',1800);audio.tone(92,.18,'square',.018);
+      const holdMs=900;startPressureBar(holdMs);
+      holdTimer=addTimer(()=>{
+        if(!running || !holding || finished)return;
+        finished=true;holding=false;particles(e.clientX,e.clientY,18);correct('SILENCED.');hostReact('muted',1300);hostSpeak('…rude.',1500);
+      },holdMs);
+    };
+    host.onpointerup=e=>{
+      if(e.pointerId!==pointerId || !holding || finished)return;
+      holding=false;clearTimeout(holdTimer);try{host.releasePointerCapture?.(pointerId)}catch{};pointerId=null;fail('You let the machine speak.');
+    };
+    host.onpointercancel=e=>{
+      if(e.pointerId!==pointerId || !holding || finished)return;
+      holding=false;clearTimeout(holdTimer);pointerId=null;fail('Hold interrupted.');
+    };
+  }
+
+  function machineIsLyingRound(){
+    setInstruction('THE MACHINE IS LYING.','Do the exact opposite.');
+    hostReact('side-eye',2400);
+    const statement=document.createElement('div');statement.className='machineStatement';arena.appendChild(statement);
+    const variant=choice(['colour','size','swipe','position']);
+    if(variant==='colour'){
+      const [said,other]=shuffle(COLORS).slice(0,2);statement.textContent=`MACHINE SAYS · TAP ${said.name}`;
+      [said,other].forEach((c,i)=>targetButton({x:i?68:32,y:64,size:82,color:c.hex,text:c.name,extraClass:'wordy singleLine',onTap:e=>c===other?(particles(e.clientX,e.clientY),correct('LIAR DETECTED.')):fail('You believed it.')}));
+    }else if(variant==='size'){
+      const saysBig=Math.random()<.5;statement.textContent=`MACHINE SAYS · TAP ${saysBig?'BIG':'SMALL'}`;
+      const sizes=[62,112];sizes.forEach((size,i)=>targetButton({x:i?68:32,y:64,size,color:choice(COLORS).hex,onTap:e=>((saysBig&&i===0)||(!saysBig&&i===1))?(particles(e.clientX,e.clientY),correct('OPPOSITE.')):fail('The machine lied.')}));
+    }else if(variant==='position'){
+      const said=choice(['LEFT','RIGHT']),answer=said==='LEFT'?'RIGHT':'LEFT';statement.textContent=`MACHINE SAYS · TAP ${said}`;
+      ['LEFT','RIGHT'].forEach((label,i)=>targetButton({x:i?68:32,y:64,size:94,color:'#e7e8ee',shape:'square',text:label,extraClass:'wordy singleLine',onTap:e=>label===answer?(particles(e.clientX,e.clientY),correct('DISTRUST PAYS.')):fail('You trusted it.')}));
+    }else{
+      const said=choice(['LEFT','RIGHT','UP','DOWN']);const opposite={LEFT:'RIGHT',RIGHT:'LEFT',UP:'DOWN',DOWN:'UP'}[said];statement.textContent=`MACHINE SAYS · SWIPE ${said}`;
+      bindSwipe(opposite,()=>correct('LIAR.'));
+    }
+    armTimeout(3300);
+  }
+
   function armTimeout(ms){
     const actual=scaledDeadline(ms);
     startPressureBar(actual);
@@ -2251,6 +2463,40 @@
     const ms=scaledDeadline(1700);
     startPressureBar(ms);
     addTimer(()=>{setInstruction('GOOD.','You didn’t panic.');correct('OOOOOH.');},ms);
+  }
+
+  const CHALLENGE_META={
+    tapOne:{category:'tap-selection'},tapSpecific:{category:'tap-selection'},smaller:{category:'observation'},
+    tapCount:{category:'rapid-tap'},waitRound:{category:'inhibition'},stopMeter:{category:'timing'},
+    holdRound:{category:'hold'},swipeRound:{category:'swipe'},flashTap:{category:'timing'},
+    rememberRound:{category:'memory'},recallRound:{category:'memory',weight:1.25},oddOne:{category:'observation'},
+    movingCatch:{category:'tracking'},dragRound:{category:'drag'},orderRound:{category:'tap-selection'},
+    movedOneRound:{category:'observation'},sideRound:{category:'observation'},sameDifferentRound:{category:'observation'},
+    oppositeSwipeRound:{category:'rule-inversion'},rapidTargetsRound:{category:'rapid-tap'},countDotsRound:{category:'observation'},
+    cheekyChoice:{category:'inhibition'},fakeOut:{category:'inhibition'},missingButton:{category:'observation'},
+    teaseRound:{category:'inhibition'},insultRound:{category:'inhibition',weight:.35},bossRound:{category:'rapid-tap'},
+    slapMachineRound:{category:'robot-interaction',weight:.32},wordOrColourRound:{category:'inhibition',weight:.82},
+    whereDidItGoRound:{category:'tracking',weight:.62},shutMeUpRound:{category:'robot-interaction',weight:.28},
+    machineIsLyingRound:{category:'rule-inversion',weight:.4}
+  };
+  function categoryFor(fn){return CHALLENGE_META[fn.name]?.category||'observation';}
+  function rememberChallenge(fn){
+    recentTypes.push(fn.name);if(recentTypes.length>5)recentTypes.shift();
+    recentCategories.push(categoryFor(fn));if(recentCategories.length>4)recentCategories.shift();
+  }
+  function weightedChallenge(pool){
+    const weighted=pool.map(fn=>{
+      const category=categoryFor(fn);
+      let weight=CHALLENGE_META[fn.name]?.weight??1;
+      if(recentTypes.includes(fn.name))weight*=.08;
+      if(recentCategories.at(-1)===category)weight*=.18;
+      else if(recentCategories.includes(category))weight*=.5;
+      if(category==='tap-selection' && recentCategories.slice(-2).includes('tap-selection'))weight*=.4;
+      return {fn,weight};
+    });
+    let cursor=Math.random()*weighted.reduce((sum,item)=>sum+item.weight,0);
+    for(const item of weighted){cursor-=item.weight;if(cursor<=0)return item.fn;}
+    return weighted.at(-1).fn;
   }
 
   function nextRound(){
@@ -2276,7 +2522,7 @@
     if(n>8 && Math.random()<personalityChance){
       if(Math.random()<.55){
         currentRoundFn=insultRound;debugRound.textContent='insultRound';
-        insultRound();previousType='insultRound';return;
+        rememberChallenge(insultRound);insultRound();previousType='insultRound';return;
       }
       currentRoundFn=rareRound;debugRound.textContent='rareRound';rareRound();
       previousType='rare';return;
@@ -2284,7 +2530,7 @@
 
     // guaranteed milestones to create "what comes next"
     if(n===10 || n===25 || (n>=50 && n%25===0)){
-      currentRoundFn=bossRound;debugRound.textContent='bossRound';bossRound();previousType='boss';return;
+      currentRoundFn=bossRound;debugRound.textContent='bossRound';rememberChallenge(bossRound);bossRound();previousType='boss';return;
     }
 
     let pool=[];
@@ -2320,16 +2566,19 @@
       if(score>12 && Math.random()<.38) pool.push(recallRound,recallRound,recallRound);
     }
 
-    // Avoid recently seen mechanics, not just the immediately previous one.
-    const fresh = pool.filter(fn=>!recentTypes.includes(fn.name));
-    if(fresh.length>=3) pool=fresh;
+    if(score>=8)pool.push(wordOrColourRound);
+    if(score>=10)pool.push(whereDidItGoRound);
+    if(score>=12)pool.push(slapMachineRound);
+    if(score>=15)pool.push(shutMeUpRound);
+    if(score>=20)pool.push(machineIsLyingRound);
 
-    const fn=choice(pool);
+    // Weighted category memory keeps the sequence varied without becoming a
+    // rigid rotation. Exact repeats and tap-selection chains are heavily taxed.
+    const fn=weightedChallenge(pool);
     currentRoundFn=fn;
     debugRound.textContent=fn.name;
     previousType=fn.name;
-    recentTypes.push(fn.name);
-    if(recentTypes.length>5) recentTypes.shift();
+    rememberChallenge(fn);
     fn();
   }
 
@@ -2338,6 +2587,7 @@
     flashTap,rememberRound,recallRound,oddOne,movingCatch,dragRound,orderRound,
     movedOneRound,sideRound,sameDifferentRound,oppositeSwipeRound,rapidTargetsRound,
     countDotsRound,cheekyChoice,fakeOut,missingButton,teaseRound,insultRound,bossRound
+    ,slapMachineRound,wordOrColourRound,whereDidItGoRound,shutMeUpRound,machineIsLyingRound
   };
   function forceDebugRound(fn){
     if(!runActive)begin();
