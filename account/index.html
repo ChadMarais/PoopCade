@@ -112,7 +112,13 @@
           <section class="account-card">
             <h3>ORBIT//SHIFT bests</h3>
             <p>Your highest saved score for each difficulty.</p>
-            <div class="best-grid" data-my-bests></div>
+            <div class="best-grid" data-my-bests data-game="orbit-shift"></div>
+          </section>
+
+          <section class="account-card">
+            <h3>NEXT. best</h3>
+            <p>Your highest saved challenge streak.</p>
+            <div class="best-grid" data-my-bests data-game="next"></div>
           </section>
 
           <section class="account-card full danger-zone" data-delete-account-control>
@@ -132,7 +138,9 @@
 
         <div class="actions">
           <a class="button" href="/games/orbit-shift/">Play ORBIT//SHIFT</a>
-          <a class="button secondary" href="/leaderboard/orbit-shift/">View leaderboard</a>
+          <a class="button" href="/games/next/">Play NEXT.</a>
+          <a class="button secondary" href="/leaderboard/orbit-shift/">ORBIT leaderboard</a>
+          <a class="button secondary" href="/leaderboard/next/">NEXT. leaderboard</a>
         </div>
       </div>
       <p class="error" data-account-error role="alert"></p>

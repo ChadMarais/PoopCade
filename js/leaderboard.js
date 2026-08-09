@@ -3,11 +3,11 @@ import { getCurrentUser, getMyBests } from "./auth.js";
 
 const ALLOWED_DIFFICULTIES = new Set(["All", "Easy", "Medium", "Hard"]);
 
-export async function getLeaderboard(difficulty = "All", limit = 50) {
+export async function getLeaderboard(gameSlug = "orbit-shift", difficulty = "All", limit = 50) {
   const selectedDifficulty = ALLOWED_DIFFICULTIES.has(difficulty) ? difficulty : "All";
   const safeLimit = Math.min(Math.max(Number(limit) || 50, 1), 100);
   const { data, error } = await supabase.rpc("get_leaderboard", {
-    game_slug: "orbit-shift",
+    game_slug: gameSlug,
     difficulty_filter: selectedDifficulty,
     result_limit: safeLimit,
   });
@@ -26,20 +26,30 @@ function addCell(row, value, className = "") {
   row.append(cell);
 }
 
-function renderRows(body, entries) {
+function formatAchievedAt(value) {
+  if (!value) return "—";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "—" : date.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+}
+
+function renderRows(body, entries, gameSlug) {
   body.replaceChildren();
   entries.forEach((entry) => {
     const row = document.createElement("tr");
     addCell(row, `#${entry.rank}`, "rank-cell");
     addCell(row, entry.display_name, "name-cell");
     addCell(row, Number(entry.score).toLocaleString(), "score-cell");
-    addCell(row, entry.level, "level-cell");
-    addCell(row, entry.difficulty, "difficulty-cell");
+    if (gameSlug === "next") {
+      addCell(row, formatAchievedAt(entry.achieved_at), "difficulty-cell");
+    } else {
+      addCell(row, entry.level, "level-cell");
+      addCell(row, entry.difficulty, "difficulty-cell");
+    }
     body.append(row);
   });
 }
 
-async function renderOwnBest(page, difficulty) {
+async function renderOwnBest(page, difficulty, gameSlug) {
   const signedOut = page.querySelector("[data-own-best-signed-out]");
   const signedIn = page.querySelector("[data-own-best-signed-in]");
   const score = page.querySelector("[data-own-best-score]");
@@ -55,7 +65,7 @@ async function renderOwnBest(page, difficulty) {
       return;
     }
 
-    const bests = await getMyBests();
+    const bests = await getMyBests(gameSlug);
     const candidates = difficulty === "All"
       ? bests
       : bests.filter((best) => best.difficulty === difficulty);
@@ -69,13 +79,13 @@ async function renderOwnBest(page, difficulty) {
       return;
     }
     score.textContent = Number(best.score).toLocaleString();
-    meta.textContent = `${best.difficulty} · Level ${best.level}`;
+    meta.textContent = gameSlug === "next" ? `Challenge ${best.level} reached` : `${best.difficulty} · Level ${best.level}`;
   } catch {
     setVisible(signedOut, true);
   }
 }
 
-async function loadLeaderboard(page, difficulty) {
+async function loadLeaderboard(page, difficulty, gameSlug) {
   const loading = page.querySelector("[data-loading]");
   const empty = page.querySelector("[data-empty]");
   const errorState = page.querySelector("[data-error]");
@@ -94,11 +104,11 @@ async function loadLeaderboard(page, difficulty) {
   });
 
   try {
-    const entries = await getLeaderboard(difficulty);
+    const entries = await getLeaderboard(gameSlug, difficulty);
     if (!entries.length) {
       setVisible(empty, true);
     } else {
-      renderRows(body, entries);
+      renderRows(body, entries, gameSlug);
       setVisible(table, true);
     }
   } catch {
@@ -107,21 +117,22 @@ async function loadLeaderboard(page, difficulty) {
     setVisible(loading, false);
   }
 
-  await renderOwnBest(page, difficulty);
+  await renderOwnBest(page, difficulty, gameSlug);
 }
 
 function initLeaderboardPage(page) {
+  const gameSlug = page.dataset.gameSlug || "orbit-shift";
   let selectedDifficulty = "All";
   page.querySelectorAll("[data-difficulty]").forEach((button) => {
     button.addEventListener("click", () => {
       selectedDifficulty = button.dataset.difficulty;
-      void loadLeaderboard(page, selectedDifficulty);
+      void loadLeaderboard(page, selectedDifficulty, gameSlug);
     });
   });
   page.querySelector("[data-retry]")?.addEventListener("click", () => {
-    void loadLeaderboard(page, selectedDifficulty);
+    void loadLeaderboard(page, selectedDifficulty, gameSlug);
   });
-  void loadLeaderboard(page, selectedDifficulty);
+  void loadLeaderboard(page, selectedDifficulty, gameSlug);
 }
 
 const leaderboardPage = document.querySelector("[data-leaderboard-page]");

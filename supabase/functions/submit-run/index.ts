@@ -1,11 +1,11 @@
 import { createClient } from "npm:@supabase/supabase-js@2.111.0";
 
 const PRODUCTION_ORIGIN = "https://poopcade.com";
-const GAME_SLUG = "orbit-shift";
 const MAX_BODY_BYTES = 16_384;
 const MAX_DURATION_MS = 6 * 60 * 60 * 1000;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const DIFFICULTIES = new Set(["Easy", "Medium", "Hard"]);
+const GAME_SLUGS = new Set(["orbit-shift", "next"]);
+const ORBIT_DIFFICULTIES = new Set(["Easy", "Medium", "Hard"]);
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL");
 const serverCredential =
@@ -25,9 +25,10 @@ const supabaseAdmin = createClient(supabaseUrl, serverCredential, {
 });
 
 type RunPayload = {
+  gameSlug: "orbit-shift" | "next";
   clientRunId: string;
   score: number;
-  difficulty: "Easy" | "Medium" | "Hard";
+  difficulty: "Easy" | "Medium" | "Hard" | "Standard";
   level: number;
   gates: number;
   styleBonuses: number;
@@ -68,6 +69,7 @@ function validatePayload(value: unknown): { data?: RunPayload; error?: string } 
   if (!isRecord(value)) return { error: "Request body must be a JSON object." };
 
   const {
+    gameSlug,
     clientRunId,
     score,
     difficulty,
@@ -77,45 +79,43 @@ function validatePayload(value: unknown): { data?: RunPayload; error?: string } 
     durationMs,
   } = value;
 
+  if (typeof gameSlug !== "string" || !GAME_SLUGS.has(gameSlug)) {
+    return { error: "gameSlug must identify a supported game." };
+  }
   if (typeof clientRunId !== "string" || !UUID_PATTERN.test(clientRunId)) {
     return { error: "clientRunId must be a valid UUID." };
   }
-  if (typeof difficulty !== "string" || !DIFFICULTIES.has(difficulty)) {
-    return { error: "difficulty must be Easy, Medium, or Hard." };
-  }
-  if (!isSafeInteger(score) || score < 0 || score > 50_000_000) {
-    return { error: "score is outside the accepted range." };
-  }
-  if (!isSafeInteger(level) || level < 1 || level > 999) {
-    return { error: "level is outside the accepted range." };
-  }
-  if (!isSafeInteger(gates) || gates < 0 || gates > 250_000) {
-    return { error: "gates is outside the accepted range." };
-  }
-  if (!isSafeInteger(styleBonuses) || styleBonuses < 0 || styleBonuses > 100_000) {
-    return { error: "styleBonuses is outside the accepted range." };
-  }
-  if (!isSafeInteger(durationMs) || durationMs < 2_000 || durationMs > MAX_DURATION_MS) {
-    return { error: "durationMs is outside the accepted range." };
-  }
+  if (!isSafeInteger(score) || score < 0) return { error: "score is outside the accepted range." };
+  if (!isSafeInteger(level) || level < 1) return { error: "level is outside the accepted range." };
+  if (!isSafeInteger(gates) || gates < 0) return { error: "gates is outside the accepted range." };
+  if (!isSafeInteger(styleBonuses) || styleBonuses < 0) return { error: "styleBonuses is outside the accepted range." };
+  if (!isSafeInteger(durationMs) || durationMs > MAX_DURATION_MS) return { error: "durationMs is outside the accepted range." };
 
-  // Broad server-side sanity ceilings. These reject trivial extreme payloads
-  // without pretending that a browser game can be made cheat-proof here.
-  if (score > Math.max(10_000, durationMs * 50)) {
-    return { error: "score is not plausible for the submitted duration." };
-  }
-  if (gates > Math.max(200, Math.floor(durationMs / 50))) {
-    return { error: "gate count is not plausible for the submitted duration." };
-  }
-  if (styleBonuses > Math.max(20, Math.floor(durationMs / 500))) {
-    return { error: "style bonus count is not plausible for the submitted duration." };
-  }
-  if (level > Math.floor(durationMs / 1_000) + 12) {
-    return { error: "level is not plausible for the submitted duration." };
+  if (gameSlug === "orbit-shift") {
+    if (typeof difficulty !== "string" || !ORBIT_DIFFICULTIES.has(difficulty)) {
+      return { error: "ORBIT//SHIFT difficulty must be Easy, Medium, or Hard." };
+    }
+    if (score > 50_000_000 || level > 999 || gates > 250_000 || styleBonuses > 100_000 || durationMs < 2_000) {
+      return { error: "ORBIT//SHIFT run values are outside the accepted range." };
+    }
+    // Preserve the original ORBIT//SHIFT sanity ceilings.
+    if (score > Math.max(10_000, durationMs * 50)) return { error: "score is not plausible for the submitted duration." };
+    if (gates > Math.max(200, Math.floor(durationMs / 50))) return { error: "gate count is not plausible for the submitted duration." };
+    if (styleBonuses > Math.max(20, Math.floor(durationMs / 500))) return { error: "style bonus count is not plausible for the submitted duration." };
+    if (level > Math.floor(durationMs / 1_000) + 12) return { error: "level is not plausible for the submitted duration." };
+  } else {
+    if (difficulty !== "Standard") return { error: "NEXT. difficulty must be Standard." };
+    if (score > 10_000 || level !== score + 1 || gates !== 0 || styleBonuses !== 0) {
+      return { error: "NEXT. run values are inconsistent." };
+    }
+    if (durationMs < 400 || score > Math.floor(durationMs / 250) + 2) {
+      return { error: "NEXT. run is not plausible for the submitted duration." };
+    }
   }
 
   return {
     data: {
+      gameSlug: gameSlug as RunPayload["gameSlug"],
       clientRunId,
       score,
       difficulty: difficulty as RunPayload["difficulty"],
@@ -178,7 +178,7 @@ Deno.serve(async (request: Request): Promise<Response> => {
   const { data: game, error: gameError } = await supabaseAdmin
     .from("games")
     .select("id")
-    .eq("slug", GAME_SLUG)
+    .eq("slug", payload.gameSlug)
     .eq("active", true)
     .maybeSingle();
 
@@ -205,7 +205,7 @@ Deno.serve(async (request: Request): Promise<Response> => {
   const { data, error } = await supabaseAdmin.rpc("submit_run", {
     p_client_run_id: payload.clientRunId,
     p_player_id: user.id,
-    p_game_slug: GAME_SLUG,
+    p_game_slug: payload.gameSlug,
     p_score: payload.score,
     p_difficulty: payload.difficulty,
     p_level: payload.level,

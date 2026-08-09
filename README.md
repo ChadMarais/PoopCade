@@ -11,7 +11,7 @@ Poopcade is a static, mobile-first progressive web app containing small arcade g
 ├── service-worker.js                # Offline shell and caching strategies
 ├── _headers                         # Cloudflare Static Assets response headers
 ├── account/                         # Gamer profile and personal bests
-├── leaderboard/orbit-shift/         # Public ORBIT//SHIFT leaderboard
+├── leaderboard/                     # Public per-game leaderboards
 ├── js/                              # Shared Supabase client/auth/API modules
 ├── assets/
 │   └── icons/                       # PWA PNG icons and editable SVG master
@@ -19,8 +19,8 @@ Poopcade is a static, mobile-first progressive web app containing small arcade g
 │   ├── migrations/                  # Reviewed database schema and RLS
 │   └── functions/submit-run/        # Authenticated score submission
 └── games/
-    └── orbit-shift/
-        └── index.html               # ORBIT//SHIFT
+    ├── orbit-shift/index.html        # ORBIT//SHIFT
+    └── next/index.html               # NEXT.
 ```
 
 New games belong in their own directory under `games/`, with an `index.html` entry point. For example, a new game at `games/example/index.html` is available at `/games/example/`. Add its production route to the homepage and to the service worker's core or optional cache list as appropriate.
@@ -41,19 +41,19 @@ When testing service-worker changes, use the browser's Application/Storage devel
 
 - `index.html` links the manifest, exposes the install prompt when supported, and registers the root-scoped service worker.
 - `manifest.webmanifest` defines standalone, portrait-first behavior and the intended production icon paths.
-- `service-worker.js` precaches the homepage and ORBIT//SHIFT. Navigations are network-first so updated HTML is preferred, with cached pages and the homepage as offline fallbacks. Same-origin static assets use stale-while-revalidate behavior.
+- `service-worker.js` precaches the homepage, ORBIT//SHIFT, NEXT., and both leaderboard pages. Navigations are network-first so updated HTML is preferred, with cached pages and the homepage as offline fallbacks. Same-origin static assets use stale-while-revalidate behavior.
 - Missing optional icon files are ignored during service-worker installation, so they cannot prevent the offline shell from installing.
 - Supabase API, authentication, Edge Function, and leaderboard responses are never cached by the service worker.
 
 ## Accounts and leaderboards
 
-Guest play remains the default. Players may optionally sign in with Google, choose a separate public gamer name, save ORBIT//SHIFT runs, and sync personal bests across devices.
+Guest play remains the default. Players may optionally sign in with Google, choose a separate public gamer name, save ORBIT//SHIFT and NEXT. runs, and sync personal bests across devices.
 
 The browser uses one Supabase client from `js/supabase-config.js`, with `@supabase/supabase-js` pinned to version `2.111.0`. The publishable browser key in that file is not a secret. Never add a secret key, service-role key, database password, OAuth client secret, or access token to frontend code or source control.
 
 The backend foundation is source-only and has not been deployed. Before accounts work in production:
 
-1. Apply `supabase/migrations/20260808_initial_poocade.sql` to the intended Supabase project.
+1. Apply `supabase/migrations/20260808_initial_poocade.sql` and later migrations in timestamp order, including `20260809133000_add_next_game.sql` for NEXT.
 2. Deploy the `submit-run` Edge Function with JWT verification enabled.
 3. Enable Google under Supabase Authentication providers and configure its real Google OAuth client ID and secret in the dashboard.
 4. Set the Supabase Site URL and redirect allow list to `https://poopcade.com/`.
@@ -79,7 +79,7 @@ The repository is configured for Cloudflare Workers Static Assets:
 - Worker JavaScript entry point: none
 - Static asset directory: repository root (`.`)
 - Upload exclusions: `.assetsignore` (including `android/` and `supabase/` source)
-- Production routes: `/`, `/games/orbit-shift/`, `/leaderboard/orbit-shift/`, and `/account/`
+- Production routes include `/`, `/games/orbit-shift/`, `/games/next/`, `/leaderboard/orbit-shift/`, `/leaderboard/next/`, and `/account/`
 - Custom response headers: `_headers`
 
 No Content Security Policy is set yet because the current homepage and game use inline CSS and JavaScript, and the game uses WebAudio. A CSP should be designed and tested separately rather than added in a way that breaks the application.
