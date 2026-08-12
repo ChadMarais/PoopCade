@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#26132f">
+  <meta name="description" content="Dusty Orbit, Poopcade Game 03 multiplayer development build.">
+  <title>DUSTY ORBIT — Poopcade Game 03</title>
+  <style>
+    :root { color-scheme: dark; font-family: ui-sans-serif, system-ui, sans-serif; }
+    * { box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: #20102a; color: #fff; user-select: none; -webkit-user-select: none; }
+    canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; cursor: crosshair; outline: none; touch-action: none; user-select: none; -webkit-user-select: none; }
+    .panel { position: fixed; z-index: 2; pointer-events: none; border: 1px solid rgba(117,239,255,.4); border-radius: 11px; background: rgba(18,8,27,.9); box-shadow: 0 12px 35px rgba(10,0,20,.38); backdrop-filter: blur(9px); }
+    .title { top: 12px; left: 12px; display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 9px; padding: 8px 11px 8px 8px; pointer-events: auto; }
+    .home-link { display: grid; width: 31px; height: 31px; place-items: center; border: 1px solid rgba(255,255,255,.16); border-radius: 8px; color: #fff; text-decoration: none; background: rgba(255,255,255,.06); }
+    .title-copy { min-width: 0; }
+    .title strong { display: block; letter-spacing: .14em; font-size: 14px; }
+    .title span { display: block; margin-top: 3px; color: #75efff; font: 900 9px ui-monospace, monospace; letter-spacing: .13em; }
+    .status { top: 12px; right: 12px; padding: 8px 11px; font: 900 10px ui-monospace, monospace; color: #ffd66e; }
+    .status.online { color: #a6ff65; }
+    .hud { left: 12px; bottom: 12px; min-width: 310px; padding: 10px 12px; font: 700 10px/1.46 ui-monospace, Consolas, monospace; white-space: pre; }
+    .events { right: 12px; top: 56px; width: min(330px, calc(100vw - 24px)); padding: 8px 10px; font: 800 10px/1.45 ui-monospace, monospace; color: #f7dcff; white-space: pre-line; }
+    .controls { right: 12px; bottom: 12px; padding: 8px 10px; color: rgba(255,255,255,.82); font: 800 10px system-ui; }
+    .dev-badge { position: fixed; z-index: 3; top: 12px; left: 50%; transform: translateX(-50%); padding: 6px 9px; border: 1px solid rgba(255,213,100,.55); border-radius: 999px; background: rgba(18,8,27,.86); color: #ffdf7f; font: 900 8px ui-monospace,monospace; letter-spacing: .12em; pointer-events: none; }
+    [hidden] { display: none !important; }
+    .loading { position: fixed; z-index: 4; inset: 0; display: grid; place-items: center; background: radial-gradient(circle, #5b276d, #26112f 60%, #120719); transition: opacity .2s; }
+    .loading.done { opacity: 0; pointer-events: none; }
+    .loading div { width: min(360px, 82vw); text-align: center; }
+    .loading h1 { margin: 0; font-size: 42px; letter-spacing: -.04em; }
+    .loading p { color: #a9f7ff; font: 900 11px ui-monospace, monospace; }
+    .track { height: 5px; border-radius: 9px; background: rgba(255,255,255,.1); overflow: hidden; }
+    .bar { height: 100%; width: 0; background: linear-gradient(90deg,#e66dff,#58efff); transition: width .12s; }
+    .mobile-controls { display: none; position: fixed; z-index: 3; inset: 0; pointer-events: none; }
+    .mobile-move-guide { position: fixed; width: 104px; height: 104px; transform: translate(-50%,-50%); border: 1.5px solid rgba(117,239,255,.55); border-radius: 50%; background: radial-gradient(circle,rgba(117,239,255,.05) 0 44%,rgba(9,3,18,.34) 46% 100%); box-shadow: inset 0 0 24px rgba(117,239,255,.1),0 0 20px rgba(4,0,13,.25); }
+    .mobile-move-guide[hidden] { display: none; }
+    .mobile-move-knob { position: absolute; left: 50%; top: 50%; width: 42px; height: 42px; transform: translate(-50%,-50%); border: 1px solid rgba(255,255,255,.7); border-radius: 50%; background: radial-gradient(circle at 36% 30%,#eaffff,#52e8ff 48%,#187d9b); box-shadow: 0 0 18px rgba(82,232,255,.5); }
+    .mobile-fire-button { --aim-x: 0px; --aim-y: 0px; position: absolute; right: max(18px,env(safe-area-inset-right)); bottom: max(18px,env(safe-area-inset-bottom)); width: clamp(66px,17vw,78px); aspect-ratio: 1; padding: 0; border: 1.5px solid rgba(255,159,239,.7); border-radius: 50%; background: radial-gradient(circle,rgba(80,20,99,.86) 0 48%,rgba(17,5,27,.88) 51% 100%); color: #fff; box-shadow: 0 8px 24px rgba(6,0,15,.42),inset 0 0 18px rgba(240,87,255,.16); pointer-events: auto; touch-action: none; -webkit-tap-highlight-color: transparent; }
+    .mobile-fire-core { position: absolute; left: 50%; top: 45%; width: 29px; height: 29px; transform: translate(calc(-50% + var(--aim-x)),calc(-50% + var(--aim-y))); border-radius: 50%; background: radial-gradient(circle at 35% 28%,#fff,#8af8ff 38%,#e95cff 72%); box-shadow: 0 0 15px rgba(110,245,255,.65); transition: transform 45ms linear; }
+    .mobile-fire-label { position: absolute; left: 50%; bottom: 8px; transform: translateX(-50%); color: #f9dfff; font: 900 7px ui-monospace,monospace; letter-spacing: .12em; }
+    .mobile-fire-button.active { border-color: #8af8ff; box-shadow: 0 0 24px rgba(110,245,255,.48),inset 0 0 22px rgba(240,87,255,.24); transform: scale(.96); }
+    .mobile-preview .mobile-controls { display: block; }
+    .mobile-preview .controls { display: none; }
+    .mobile-preview .hud, .mobile-preview .events { display: none; }
+    @media (pointer: coarse), (max-width: 700px) { .mobile-controls { display: block; } }
+    @media (max-width: 700px) { .hud, .controls, .events { display: none; } }
+  </style>
+</head>
+<body>
+  <canvas id="world" tabindex="0" aria-label="Dusty Orbit multiplayer arena"></canvas>
+  <header class="panel title"><a id="homeLink" class="home-link" href="/" aria-label="Back to Poopcade">←</a><div class="title-copy"><strong>DUSTY ORBIT</strong><span>MULTIPLAYER DEVELOPMENT BUILD</span></div></header>
+  <div id="devBadge" class="dev-badge" hidden>DEV TEST</div>
+  <div id="connection" class="panel status">LOADING</div>
+  <pre id="debugHud" class="panel hud">Waiting for server…</pre>
+  <div id="events" class="panel events">Open this URL in a second tab to join the same arena.</div>
+  <div class="panel controls">WASD MOVE · ARROWS AIM/FIRE · MOUSE AIM/CLICK · C COLLISION</div>
+  <div id="mobileControls" class="mobile-controls" aria-label="Mobile controls">
+    <div id="mobileMoveGuide" class="mobile-move-guide" hidden aria-hidden="true"><i class="mobile-move-knob"></i></div>
+    <button id="mobileFireButton" class="mobile-fire-button" type="button" aria-label="Hold to fire; drag to aim"><i class="mobile-fire-core"></i><span class="mobile-fire-label">FIRE</span></button>
+  </div>
+  <div id="loading" class="loading"><div><h1>DUSTY ORBIT</h1><p id="loadingText">LOADING MULTIPLAYER ASSETS…</p><div class="track"><div id="loadingBar" class="bar"></div></div></div></div>
+  <script type="module" src="./game.js?v=20260812-3"></script>
+</body>
+</html>

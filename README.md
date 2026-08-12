@@ -25,6 +25,8 @@ Poopcade is a static, mobile-first progressive web app containing small arcade g
 
 New games belong in their own directory under `games/`, with an `index.html` entry point. For example, a new game at `games/example/index.html` is available at `/games/example/`. Add its production route to the homepage and to the service worker's core or optional cache list as appropriate.
 
+Game 03 is the Dusty Orbit multiplayer development build at `games/game-03/`. Its separate Cloudflare Worker and Durable Object backend lives in `multiplayer/`; that directory is excluded from the static-assets upload and is deployed independently.
+
 ## Run locally
 
 A service worker requires a secure context. Browsers treat `localhost` as secure for development, so serve the repository root instead of opening `index.html` directly:
@@ -41,7 +43,7 @@ When testing service-worker changes, use the browser's Application/Storage devel
 
 - `index.html` links the manifest, exposes the install prompt when supported, and registers the root-scoped service worker.
 - `manifest.webmanifest` defines standalone, portrait-first behavior and the intended production icon paths.
-- `service-worker.js` precaches the homepage, ORBIT//SHIFT, NEXT., and both leaderboard pages. Navigations are network-first so updated HTML is preferred, with cached pages and the homepage as offline fallbacks. Same-origin static assets use stale-while-revalidate behavior.
+- `service-worker.js` precaches the homepage, ORBIT//SHIFT, NEXT., and both leaderboard pages. Navigations are network-first so updated HTML is preferred, with cached pages and the homepage as offline fallbacks. Same-origin static assets use stale-while-revalidate behavior, except Game 03 resources, which are network-first to prevent incompatible multiplayer builds from being mixed by an older cache.
 - Missing optional icon files are ignored during service-worker installation, so they cannot prevent the offline shell from installing.
 - Supabase API, authentication, Edge Function, and leaderboard responses are never cached by the service worker.
 
@@ -79,10 +81,12 @@ The repository is configured for Cloudflare Workers Static Assets:
 - Worker JavaScript entry point: none
 - Static asset directory: repository root (`.`)
 - Upload exclusions: `.assetsignore` (including `android/` and `supabase/` source)
-- Production routes include `/`, `/games/orbit-shift/`, `/games/next/`, `/leaderboard/orbit-shift/`, `/leaderboard/next/`, and `/account/`
+- Production routes include `/`, `/games/orbit-shift/`, `/games/next/`, `/games/game-03/`, `/leaderboard/orbit-shift/`, `/leaderboard/next/`, and `/account/`. Game 03 is linked from the homepage only when the query contains exactly `devtest=true`.
 - Custom response headers: `_headers`
 
 No Content Security Policy is set yet because the current homepage and game use inline CSS and JavaScript, and the game uses WebAudio. A CSP should be designed and tested separately rather than added in a way that breaks the application.
+
+Before deploying Game 03, deploy and validate the `multiplayer/` Worker first, then set the confirmed secure Worker origin in `games/game-03/config.js`. The value must be a `wss://` origin and must not include the arena route.
 
 ### Production icon artwork
 

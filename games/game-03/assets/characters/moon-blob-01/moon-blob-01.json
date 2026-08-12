@@ -1,0 +1,24 @@
+{
+  "id": "moon-blob-01",
+  "sprite": "moon-blob-01.png",
+  "shadow": "moon-blob-01-shadow.png",
+  "bodyPivot": {
+    "sourcePixels": { "x": 507, "y": 513 },
+    "normalized": { "x": 0.4951171875, "y": 0.5009765625 }
+  },
+  "sourceForwardAngleDegrees": 90,
+  "shadowSourceBounds": { "x": 395, "y": 404, "width": 745, "height": 236 },
+  "shadowPivot": { "x": 0.5, "y": 0.5 },
+  "shadowOffset": { "x": 10, "y": 10 },
+  "drawSize": { "width": 84, "height": 84 },
+  "shadowDrawSize": { "width": 62, "height": 44 },
+  "physicsRadius": 17,
+  "muzzleDistance": 36,
+  "hover": {
+    "idleAmplitude": 1.35,
+    "idleRateHz": 0.72,
+    "movingAmplitude": 1.7,
+    "movingRateHz": 1.05,
+    "movementOffset": 1.6
+  }
+}

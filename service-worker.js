@@ -1,5 +1,5 @@
 const CACHE_PREFIX = 'poopcade-';
-const CACHE_NAME = `${CACHE_PREFIX}shell-v16`;
+const CACHE_NAME = `${CACHE_PREFIX}shell-v17`;
 const SUPABASE_ORIGIN = 'https://kpssybcwwmtcdhrmfcgc.supabase.co';
 
 // These routes must exist for the offline shell to install successfully.
@@ -85,6 +85,15 @@ self.addEventListener('fetch', (event) => {
       return;
     }
     event.respondWith(networkFirst(request, event.preloadResponse));
+    return;
+  }
+
+  // Game 03 is an active multiplayer development build. Prefer the network
+  // for its modules and artwork so a previously cached prototype cannot mix
+  // with a newly deployed canonical build. Successful responses remain
+  // available as an offline fallback.
+  if (url.pathname.startsWith('/games/game-03/')) {
+    event.respondWith(networkFirst(request));
     return;
   }
 

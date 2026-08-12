@@ -325,6 +325,23 @@
       let installPrompt = null;
 
       const query = new URLSearchParams(window.location.search);
+      if (query.get('devtest') === 'true') {
+        const gameList = document.querySelector('.game-list');
+        const dustyOrbitCard = document.createElement('article');
+        dustyOrbitCard.className = 'game-card';
+        dustyOrbitCard.dataset.game = 'game-03';
+        dustyOrbitCard.innerHTML = `
+          <div class="game-copy">
+            <span class="game-label">Game 03 · Dev test</span>
+            <h3 class="game-title">DUSTY ORBIT</h3>
+            <p class="game-description">A multiplayer moon-skirmish development build. Drift, aim, and test the arena with other players.</p>
+            <ul class="meta" aria-label="Game attributes"><li>Multiplayer</li><li>Arena</li><li>Development</li></ul>
+            <div class="game-actions">
+              <a class="button primary" href="/games/game-03/?devtest=true">Open dev test <span aria-hidden="true">→</span></a>
+            </div>
+          </div>`;
+        gameList.append(dustyOrbitCard);
+      }
       if (query.get('account_deleted') === '1') {
         document.querySelector('[data-account-deleted]').hidden = false;
         query.delete('account_deleted');

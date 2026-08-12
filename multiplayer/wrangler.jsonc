@@ -1,0 +1,23 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "poopcade-arena",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-08",
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "DUSTY_ARENAS",
+        "class_name": "DustyOrbitArena"
+      }
+    ]
+  },
+  "exports": {
+    "DustyOrbitArena": {
+      "type": "durable-object",
+      "storage": "sqlite"
+    }
+  },
+  "observability": {
+    "enabled": true
+  }
+}

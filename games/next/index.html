@@ -2485,7 +2485,10 @@
     recentCategories.push(categoryFor(fn));if(recentCategories.length>4)recentCategories.shift();
   }
   function weightedChallenge(pool){
-    const weighted=pool.map(fn=>{
+    // A lower weight still allowed immediate repeats occasionally. Remove the
+    // previous challenge outright so two consecutive rounds can never match.
+    const candidates=pool.filter(fn=>fn.name!==previousType);
+    const weighted=candidates.map(fn=>{
       const category=categoryFor(fn);
       let weight=CHALLENGE_META[fn.name]?.weight??1;
       if(recentTypes.includes(fn.name))weight*=.08;
@@ -2520,17 +2523,16 @@
       unhinged:.15
     }[personalityStage()];
     if(n>8 && Math.random()<personalityChance){
-      if(Math.random()<.55){
-        currentRoundFn=insultRound;debugRound.textContent='insultRound';
-        rememberChallenge(insultRound);insultRound();previousType='insultRound';return;
-      }
-      currentRoundFn=rareRound;debugRound.textContent='rareRound';rareRound();
-      previousType='rare';return;
+      let fn=Math.random()<.55?insultRound:rareRound;
+      if(fn.name===previousType)fn=fn===insultRound?rareRound:insultRound;
+      currentRoundFn=fn;debugRound.textContent=fn.name;
+      if(fn===insultRound)rememberChallenge(fn);
+      previousType=fn.name;fn();return;
     }
 
-    // guaranteed milestones to create "what comes next"
-    if(n===10 || n===25 || (n>=50 && n%25===0)){
-      currentRoundFn=bossRound;debugRound.textContent='bossRound';rememberChallenge(bossRound);bossRound();previousType='boss';return;
+    // Milestone bosses never repeat after a failed attempt with lives remaining.
+    if((n===10 || n===25 || (n>=50 && n%25===0)) && previousType!==bossRound.name){
+      currentRoundFn=bossRound;debugRound.textContent='bossRound';rememberChallenge(bossRound);previousType=bossRound.name;bossRound();return;
     }
 
     let pool=[];
@@ -2573,7 +2575,7 @@
     if(score>=20)pool.push(machineIsLyingRound);
 
     // Weighted category memory keeps the sequence varied without becoming a
-    // rigid rotation. Exact repeats and tap-selection chains are heavily taxed.
+    // rigid rotation. Exact repeats are excluded; similar categories are taxed.
     const fn=weightedChallenge(pool);
     currentRoundFn=fn;
     debugRound.textContent=fn.name;

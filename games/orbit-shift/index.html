@@ -1216,7 +1216,7 @@
       outerRadius: 450,
       viewportSpeedScale: 1,
       viewportGeometryScale: 1,
-      innerArenaScale: 1,
+      arenaScale: 1,
       compactArena: false,
       playerAngle: -Math.PI / 2,
       playerDirection: 1,
@@ -1340,24 +1340,24 @@
         state.orbitRadius = legacyOrbit;
       }
 
-      // Intentional arena shrink:
-      //  - every screen size uses an inner play circle 20% smaller than the
-      //    responsive base geometry.
+      // Zoom the complete arena out by 25% so the player orbit and incoming
+      // gates remain proportional while more of each approaching gate is visible.
       const compactness = clamp((700 - state.width) / 280, 0, 1);
-      state.innerArenaScale = .80;
-      state.orbitRadius *= state.innerArenaScale;
+      state.arenaScale = .75;
+      state.outerRadius *= state.arenaScale;
+      state.orbitRadius *= state.arenaScale;
 
       const inboundTravel = Math.max(1, state.outerRadius - state.orbitRadius);
 
       // Keep reaction time sane on a smaller physical arena. This only compensates
       // for viewport geometry; Easy/Medium/Hard still apply on top of it.
       state.viewportSpeedScale = responsiveBlend > 0
-        ? lerp(1, clamp(inboundTravel / 155, .58, 1), responsiveBlend)
-        : 1;
+        ? lerp(state.arenaScale, clamp(inboundTravel / 155, .58, 1), responsiveBlend)
+        : state.arenaScale;
 
       state.viewportGeometryScale =
         clamp(state.outerRadius / 300, .68, 1)
-        * state.innerArenaScale
+        * state.arenaScale
         * lerp(1, .90, compactness);
       state.compactArena = responsiveBlend > .55;
       state.playerSize = Math.max(5.2, Math.min(9.5, state.orbitRadius * 0.058));
