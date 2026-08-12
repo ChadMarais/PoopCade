@@ -53,6 +53,11 @@ export class DustyOrbitMultiplayerRenderer {
   }
 
   playerHit(id) { this.hitUntil.set(id, performance.now() + 180); }
+  shieldHit(event) { this.effects.push({ type: "shield", x: event.x, y: event.y, born: performance.now(), life: 380 }); }
+  teleport(event) { this.effects.push({ type: "teleport", x: event.x, y: event.y, born: performance.now(), life: 480 }); }
+  blocked() { this.effects.push({ type: "blocked", born: performance.now(), life: 700 }); }
+  nukeWarning(event) { this.effects.push({ type: "nuke-warning", id: event.id, x: event.x, y: event.y, radius: event.radius, born: performance.now(), life: Math.max(100, event.detonateAt - event.startedAt) }); }
+  nukeDetonated(event) { this.effects.push({ type: "nuke-blast", x: event.x, y: event.y, radius: event.radius, born: performance.now(), life: 650 }); }
 
   render(snapshot, localId, predicted, delta, inputVisual) {
     const { ctx } = this;
@@ -70,23 +75,27 @@ export class DustyOrbitMultiplayerRenderer {
     ctx.fillStyle = "#371447";
     ctx.fillRect(0, 0, width, height);
     this.drawTerrain();
+    this.drawFartClouds(snapshot?.fartClouds || []);
+    this.drawNukes(snapshot?.nukes || []);
 
     const players = (snapshot?.players || []).map((player) => player.id === localId && predicted
       ? { ...player, x: predicted.x, y: predicted.y, aimX: inputVisual?.aimX ?? player.aimX, aimY: inputVisual?.aimY ?? player.aimY }
       : player);
     const layers = [
       ...this.assets.rocks.map((rock) => ({ type: "rock", depth: rock.depthY, value: rock })),
+      ...(snapshot?.pickups || []).map((pickup) => ({ type: "pickup", depth: pickup.y, value: pickup })),
       ...players.map((player) => ({ type: "player", depth: player.y, value: player })),
     ].sort((a, b) => a.depth - b.depth);
     for (const layer of layers) {
       if (layer.type === "rock") this.drawRock(layer.value);
+      else if (layer.type === "pickup") this.drawPickup(layer.value);
       else this.drawPlayer(layer.value, layer.value.id === localId);
     }
     this.drawProjectiles(snapshot?.projectiles || []);
     this.drawLocalProjectiles();
     this.drawEffects();
     if (this.debug) this.drawCollision(players);
-    this.drawMinimap(players.find((player) => player.id === localId));
+    this.drawMinimap(snapshot, players.find((player) => player.id === localId));
   }
 
   drawTerrain() {
@@ -119,7 +128,11 @@ export class DustyOrbitMultiplayerRenderer {
     const shadowOffset = definition.shadowOffset;
     const ctx = this.ctx;
     ctx.save();
-    ctx.globalAlpha = player.protectedUntil > Date.now() ? 0.64 + Math.sin(now / 70) * 0.2 : 1;
+    ctx.globalAlpha = player.moleMode && local ? .38 : (player.protectedUntil > Date.now() ? 0.64 + Math.sin(now / 70) * 0.2 : 1);
+    if (player.moleMode && local) {
+      ctx.strokeStyle = "rgba(70,28,83,.9)"; ctx.lineWidth = 4;
+      ctx.beginPath(); ctx.ellipse(x, y + 8, 27 + Math.sin(now / 120) * 3, 10, 0, 0, Math.PI * 2); ctx.stroke();
+    }
     ctx.drawImage(shadow, shadowBounds.x, shadowBounds.y, shadowBounds.width, shadowBounds.height,
       x + shadowOffset.x - shadowSize.width * definition.shadowPivot.x,
       y + shadowOffset.y - shadowSize.height * definition.shadowPivot.y,
@@ -137,13 +150,19 @@ export class DustyOrbitMultiplayerRenderer {
     }
     ctx.restore();
 
+    if (player.shieldHits) {
+      ctx.save(); ctx.strokeStyle = "rgba(120,241,255,.86)"; ctx.lineWidth = 2; ctx.shadowColor = "#72efff"; ctx.shadowBlur = 10;
+      ctx.beginPath(); ctx.arc(x, y - 8, 31 + Math.sin(now / 160) * 2, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
+    }
+
     ctx.save();
     ctx.fillStyle = "rgba(17,6,28,.9)";
     ctx.fillRect(x - 38, y - 66, 76, 15);
     ctx.fillStyle = "#fff";
     ctx.textAlign = "center";
     ctx.font = "800 9px system-ui";
-    ctx.fillText(player.name, x, y - 55);
+    const label = this.debug && !local ? `${player.name} · HP${player.hp} · T${player.weaponTier} · S${player.killScore}` : player.name;
+    ctx.fillText(label, x, y - 55);
     this.drawHealthBar(x, y - 48, player.hp, local ? "#a6ff65" : (player.color || "#ff6cca"));
     ctx.restore();
   }
@@ -176,9 +195,11 @@ export class DustyOrbitMultiplayerRenderer {
       const x = projectile.x - this.camera.x;
       const y = projectile.y - this.camera.y;
       ctx.save();
-      ctx.shadowColor = "#74f6ff";
-      ctx.shadowBlur = 11;
-      ctx.fillStyle = "#e9ffff";
+      const plasma = projectile.tier === 6;
+      const colors = ["#d8ff8a", "#fff0a4", "#98f8ff", "#ffb1f0", "#ffc977", "#c89cff"];
+      ctx.shadowColor = plasma ? "#9c63ff" : (colors[(projectile.tier || 1) - 1] || "#74f6ff");
+      ctx.shadowBlur = plasma ? 19 : 11;
+      ctx.fillStyle = plasma ? "#f8efff" : ctx.shadowColor;
       ctx.beginPath(); ctx.arc(x, y, projectile.radius || 3.5, 0, Math.PI * 2); ctx.fill();
       ctx.restore();
     }
@@ -219,6 +240,23 @@ export class DustyOrbitMultiplayerRenderer {
         this.ctx.restore();
         continue;
       }
+      if (effect.type === "blocked") {
+        this.ctx.globalAlpha = 1 - amount;
+        this.ctx.fillStyle = "#ffdc70"; this.ctx.textAlign = "center"; this.ctx.font = "1000 24px ui-monospace,monospace";
+        this.ctx.fillText("BLOCKED", this.viewport.width / 2, this.viewport.height * .35); this.ctx.restore(); continue;
+      }
+      if (effect.type === "shield" || effect.type === "teleport") {
+        this.ctx.strokeStyle = effect.type === "shield" ? "#7ef6ff" : "#ef8cff";
+        this.ctx.lineWidth = 3; this.ctx.beginPath();
+        this.ctx.arc(effect.x - this.camera.x, effect.y - this.camera.y, 12 + amount * 35, 0, Math.PI * 2); this.ctx.stroke(); this.ctx.restore(); continue;
+      }
+      if (effect.type === "nuke-warning" || effect.type === "nuke-blast") {
+        const expansion = effect.type === "nuke-warning" ? amount : Math.min(1, amount * 2.2);
+        this.ctx.strokeStyle = effect.type === "nuke-warning" ? "#ffdd62" : "#fff3c2";
+        this.ctx.fillStyle = effect.type === "nuke-blast" ? `rgba(255,225,120,${(1 - amount) * .2})` : "transparent";
+        this.ctx.lineWidth = effect.type === "nuke-warning" ? 5 : 9;
+        this.ctx.beginPath(); this.ctx.arc(effect.x - this.camera.x, effect.y - this.camera.y, effect.radius * expansion, 0, Math.PI * 2); this.ctx.fill(); this.ctx.stroke(); this.ctx.restore(); continue;
+      }
       this.ctx.strokeStyle = "#91fbff";
       this.ctx.lineWidth = 2;
       this.ctx.beginPath(); this.ctx.arc(effect.x - this.camera.x, effect.y - this.camera.y, 4 + amount * 16, 0, Math.PI * 2); this.ctx.stroke();
@@ -241,7 +279,94 @@ export class DustyOrbitMultiplayerRenderer {
     ctx.restore();
   }
 
-  drawMinimap(localPlayer) {
+  drawPickup(pickup) {
+    const labels = { spy: "SPY", speed: "SPD", health: "HP", shield: "SHD", teleport: "TP", mole: "MOLE", fart: "FART" };
+    const colors = { spy: "#8cecff", speed: "#ffeb67", health: "#8cff82", shield: "#81adff", teleport: "#e788ff", mole: "#c49a72", fart: "#adff70" };
+    const now = performance.now();
+    const phase = now / 1000 * Math.PI * 1.8 + pickup.id * 1.73;
+    const x = pickup.x - this.camera.x, y = pickup.y - this.camera.y;
+    const bob = Math.sin(phase) * 3.4;
+    const lift = 7 - bob;
+    const pulse = 1 + Math.sin(phase * .72) * .035;
+    const color = colors[pickup.type] || "#fff";
+    const art = this.assets.powerups?.[pickup.type];
+    const ctx = this.ctx;
+
+    // The shadow remains grounded while its width/opacity respond to height,
+    // making the pickup read as a hovering world object rather than a decal.
+    ctx.save();
+    ctx.globalAlpha = .3 - lift * .009;
+    ctx.fillStyle = "#100517";
+    ctx.shadowColor = "rgba(4,0,10,.75)";
+    ctx.shadowBlur = 7;
+    ctx.beginPath();
+    ctx.ellipse(x, y + 12, 14 - lift * .22, 5 - lift * .055, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
+    ctx.save();
+    ctx.globalAlpha = .34 + Math.sin(phase * .72) * .08;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1.4;
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 12;
+    ctx.beginPath();
+    ctx.arc(x, y - lift, 21 + Math.sin(phase * .72) * 2.2, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+
+    if (art) {
+      const source = art.sourceBounds;
+      const maxDrawSize = 40; // Moon Blob is 84x84: pickups stay under half-size.
+      const aspect = source.width / source.height;
+      const drawWidth = (aspect >= 1 ? maxDrawSize : maxDrawSize * aspect) * pulse;
+      const drawHeight = (aspect >= 1 ? maxDrawSize / aspect : maxDrawSize) * pulse;
+      ctx.save();
+      ctx.translate(x, y - lift);
+      ctx.rotate(Math.sin(phase * .55) * .035);
+      ctx.shadowColor = color;
+      ctx.shadowBlur = 10 + Math.sin(phase * .72) * 2;
+      ctx.drawImage(art.image, source.x, source.y, source.width, source.height, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight);
+      ctx.restore();
+      return;
+    }
+
+    const radius = 16 * pulse;
+    ctx.save();
+    ctx.translate(x, y - lift);
+    ctx.fillStyle = color;
+    ctx.globalAlpha = .92;
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 12;
+    ctx.beginPath(); ctx.arc(0, 0, radius, 0, Math.PI * 2); ctx.fill();
+    ctx.shadowBlur = 0; ctx.fillStyle = "#180820"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.font = `1000 ${pickup.type === "fart" || pickup.type === "mole" ? 7 : 9}px ui-monospace,monospace`;
+    ctx.fillText(labels[pickup.type] || "?", 0, .5);
+    ctx.restore();
+  }
+
+  drawFartClouds(clouds) {
+    const ctx = this.ctx;
+    for (const cloud of clouds) {
+      const x = cloud.x - this.camera.x, y = cloud.y - this.camera.y;
+      ctx.save(); ctx.globalAlpha = .2 + Math.sin(performance.now() / 240 + cloud.id) * .035;
+      const gradient = ctx.createRadialGradient(x, y, cloud.radius * .12, x, y, cloud.radius);
+      gradient.addColorStop(0, "rgba(221,255,87,.85)"); gradient.addColorStop(.62, "rgba(116,174,44,.55)"); gradient.addColorStop(1, "rgba(71,113,35,0)");
+      ctx.fillStyle = gradient; ctx.beginPath(); ctx.arc(x, y, cloud.radius, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+    }
+  }
+
+  drawNukes(nukes) {
+    const ctx = this.ctx;
+    for (const nuke of nukes) {
+      const duration = Math.max(1, nuke.detonateAt - nuke.startedAt), amount = clamp((Date.now() - nuke.startedAt) / duration, 0, 1);
+      ctx.save(); ctx.strokeStyle = "rgba(255,218,82,.9)"; ctx.lineWidth = 4; ctx.setLineDash([14, 9]); ctx.shadowColor = "#ff9b46"; ctx.shadowBlur = 12;
+      ctx.beginPath(); ctx.arc(nuke.x - this.camera.x, nuke.y - this.camera.y, nuke.radius * amount, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
+      ctx.fillStyle = "#fff1a3"; ctx.textAlign = "center"; ctx.font = "1000 18px ui-monospace,monospace"; ctx.fillText("NUKE INCOMING", nuke.x - this.camera.x, nuke.y - this.camera.y - 28); ctx.restore();
+    }
+  }
+
+  drawMinimap(snapshot, localPlayer) {
     const ctx = this.ctx;
     const compact = this.viewport.width < 700 || document.documentElement.classList.contains("mobile-preview");
     const width = compact ? 142 : 190;
@@ -263,7 +388,7 @@ export class DustyOrbitMultiplayerRenderer {
     ctx.fillStyle = "#c9fbff";
     ctx.font = "900 9px ui-monospace, monospace";
     ctx.textAlign = "left";
-    ctx.fillText("MINIMAP · YOU ONLY", left, top - 9);
+    ctx.fillText(localPlayer?.spyRemaining > 0 ? "MINIMAP · SPY ACTIVE" : "MINIMAP", left, top - 9);
 
     ctx.save();
     ctx.beginPath();
@@ -284,6 +409,19 @@ export class DustyOrbitMultiplayerRenderer {
       ctx.strokeStyle = "#fff";
       ctx.lineWidth = 1.25;
       ctx.stroke();
+    }
+    for (const marker of snapshot?.minimapPlayers || []) {
+      const markerX = left + marker.x * scaleX, markerY = top + marker.y * scaleY;
+      ctx.save();
+      if (marker.threat) {
+        const pulse = 6 + Math.sin(performance.now() / 130) * 1.4;
+        ctx.strokeStyle = "#ffd84f"; ctx.fillStyle = "#ff6b50"; ctx.lineWidth = 2.5; ctx.shadowColor = "#ffd84f"; ctx.shadowBlur = 9;
+        ctx.beginPath(); ctx.arc(markerX, markerY, pulse, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = "#fff2a0"; ctx.font = "1000 8px sans-serif"; ctx.textAlign = "center"; ctx.fillText("♛", markerX, markerY - 8);
+      } else {
+        ctx.fillStyle = marker.color || "#ff66ca"; ctx.beginPath(); ctx.arc(markerX, markerY, 3.2, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.restore();
     }
     ctx.restore();
     ctx.restore();

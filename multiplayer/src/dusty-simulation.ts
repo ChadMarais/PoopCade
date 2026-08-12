@@ -1,5 +1,6 @@
-import { moveCircleWithSliding, sweptCircleIntersectsPolygon } from "../../games/game-03/collision-geometry.js";
-import { DUSTY_MAP, DUSTY_PLAYER_RADIUS, DUSTY_PLAYER_SPEED, DUSTY_POLYGONS, DUSTY_SPAWNS, type Point } from "./dusty-map.ts";
+import { distanceToPolygon, moveCircleWithSliding, pointInPolygon, sweptCircleIntersectsPolygon } from "../../games/game-03/collision-geometry.js";
+import { DUSTY_MAP, DUSTY_PLAYER_RADIUS, DUSTY_POLYGONS, DUSTY_SPAWNS, type Point } from "./dusty-map.ts";
+import { DUSTY_GAMEPLAY, DUSTY_WEAPONS, POWERUP_TYPES, weaponForTier, type PowerupType, type WeaponDefinition } from "./dusty-gameplay.ts";
 import type { ClientInput } from "./protocol.ts";
 
 export const DUSTY_TICK_RATE = 30;
@@ -11,72 +12,72 @@ export const DUSTY_STALE_INPUT_MS = 300;
 export const DUSTY_STALE_PLAYER_MS = 15000;
 export const DUSTY_DISCONNECT_GRACE_MS = 5000;
 export const DUSTY_MAX_PLAYERS = 20;
-const MAX_PROJECTILES = 300;
 
-export const DUSTY_WEAPON = Object.freeze({
-  tier: 1,
-  name: "MOON PULSE",
-  cooldownMs: 600,
-  speed: 680,
-  damage: 1,
-  radius: 3.5,
-  lifetimeMs: 1800,
-  muzzleDistance: 36,
-});
+// Backwards-compatible exports for the arena welcome packet and older tests.
+export const DUSTY_WEAPON = DUSTY_WEAPONS[0];
 
 export type DustyPlayer = {
-  id: string; name: string; x: number; y: number; vx: number; vy: number;
-  aimX: number; aimY: number; hp: number; kills: number; alive: boolean;
-  respawnAt: number; protectedUntil: number; lastInputAt: number; lastMessageAt: number;
-  lastInputSeq: number; lastFireAt: number; disconnectedAt: number; color: string;
-  lastProcessedInputSeq: number; input: ClientInput; pendingInput: ClientInput | null;
+  id: string; name: string; joinOrder: number; x: number; y: number; vx: number; vy: number;
+  aimX: number; aimY: number; hp: number; kills: number; deaths: number; killScore: number;
+  weaponTier: number; nukeProgress: number; nukeReady: boolean; shieldHits: number;
+  spyUntil: number; speedUntil: number; moleMode: boolean; moleUntil: number; moleForceAt: number;
+  emergeBlockedUntil: number; alive: boolean; respawnAt: number; protectedUntil: number;
+  lastInputAt: number; lastMessageAt: number; lastInputSeq: number; lastFireAt: number;
+  lastFireInput: boolean; suppressFireUntilRelease: boolean; lastNukeInput: boolean;
+  burstRemaining: number; burstIndex: number; nextBurstAt: number; burstAimX: number; burstAimY: number;
+  disconnectedAt: number; color: string; lastProcessedInputSeq: number;
+  input: ClientInput; pendingInput: ClientInput | null;
 };
 
 export type DustyProjectile = {
-  id: number; ownerId: string; x: number; y: number; vx: number; vy: number;
+  id: number; ownerId: string; tier: number; x: number; y: number; vx: number; vy: number;
   radius: number; damage: number; spawnedAt: number; expiresAt: number;
 };
 
+export type DustyPickup = {
+  id: number; type: PowerupType; x: number; y: number; active: boolean; respawnAt: number;
+};
+
+export type DustyFartCloud = {
+  id: number; ownerId: string; x: number; y: number; radius: number; createdAt: number; expiresAt: number;
+};
+
+export type DustyNuke = {
+  id: number; ownerId: string; x: number; y: number; radius: number; startedAt: number; detonateAt: number;
+};
+
 const COLORS = ["#55efff", "#ff66ca", "#c6ff58", "#9f75ff", "#ffbd5d", "#ff6784"];
-const EMPTY_INPUT: ClientInput = { type: "input", seq: 0, moveX: 0, moveY: 0, aimX: 1, aimY: 0, fire: false };
+const EMPTY_INPUT: ClientInput = { type: "input", seq: 0, moveX: 0, moveY: 0, aimX: 1, aimY: 0, fire: false, nuke: false };
 
-function clamp(value: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, value));
-}
-
+function clamp(value: number, min: number, max: number): number { return Math.max(min, Math.min(max, value)); }
+function round(value: number, precision = 10): number { return Math.round(value * precision) / precision; }
 function normalized(x: number, y: number): { x: number; y: number; length: number } {
   const length = Math.hypot(x, y);
   return length > 0.0001 ? { x: x / length, y: y / length, length } : { x: 0, y: 0, length: 0 };
 }
-
+function rotated(x: number, y: number, degrees: number): Point {
+  if (!degrees) return { x, y };
+  const angle = degrees * Math.PI / 180;
+  return { x: x * Math.cos(angle) - y * Math.sin(angle), y: x * Math.sin(angle) + y * Math.cos(angle) };
+}
 function segmentCircle(start: Point, end: Point, center: Point, radius: number): number | null {
-  const dx = end.x - start.x;
-  const dy = end.y - start.y;
-  const fx = start.x - center.x;
-  const fy = start.y - center.y;
+  const dx = end.x - start.x, dy = end.y - start.y, fx = start.x - center.x, fy = start.y - center.y;
   const a = dx * dx + dy * dy;
   if (a < 0.00001) return null;
-  const b = 2 * (fx * dx + fy * dy);
-  const c = fx * fx + fy * fy - radius * radius;
+  const b = 2 * (fx * dx + fy * dy), c = fx * fx + fy * fy - radius * radius;
   const discriminant = b * b - 4 * a * c;
   if (discriminant < 0) return null;
-  const root = Math.sqrt(discriminant);
-  const first = (-b - root) / (2 * a);
-  const second = (-b + root) / (2 * a);
+  const root = Math.sqrt(discriminant), first = (-b - root) / (2 * a), second = (-b + root) / (2 * a);
   if (first >= 0 && first <= 1) return first;
-  if (second >= 0 && second <= 1) return second;
-  return null;
+  return second >= 0 && second <= 1 ? second : null;
 }
-
 function sweptPolygonTime(start: Point, end: Point, radius: number, polygon: Point[]): number | null {
   if (!sweptCircleIntersectsPolygon(start, end, radius, polygon)) return null;
-  let low = 0;
-  let high = 1;
+  let low = 0, high = 1;
   for (let pass = 0; pass < 12; pass++) {
     const middle = (low + high) / 2;
     const probe = { x: start.x + (end.x - start.x) * middle, y: start.y + (end.y - start.y) * middle };
-    if (sweptCircleIntersectsPolygon(start, probe, radius, polygon)) high = middle;
-    else low = middle;
+    if (sweptCircleIntersectsPolygon(start, probe, radius, polygon)) high = middle; else low = middle;
   }
   return high;
 }
@@ -84,28 +85,45 @@ function sweptPolygonTime(start: Point, end: Point, radius: number, polygon: Poi
 export class DustyOrbitSimulation {
   readonly players = new Map<string, DustyPlayer>();
   readonly projectiles: DustyProjectile[] = [];
+  readonly pickups: DustyPickup[] = [];
+  readonly fartClouds: DustyFartCloud[] = [];
+  readonly nukes: DustyNuke[] = [];
   private events: Array<Record<string, unknown>> = [];
   private projectileId = 0;
+  private pickupId = 0;
+  private cloudId = 0;
+  private nukeId = 0;
   private spawnCursor = 0;
+  private joinCursor = 0;
+  private readonly random: () => number;
+  private readonly validWorldPoints: Point[];
+  threatLeaderId: string | null = null;
   tick = 0;
+
+  constructor(random: () => number = Math.random) {
+    this.random = random;
+    this.validWorldPoints = this.buildValidWorldPoints();
+    this.maintainPickups(0);
+  }
 
   addPlayer(id: string, name: string, now: number): DustyPlayer {
     const existing = this.players.get(id);
-    if (existing) {
-      existing.name = name;
-      existing.disconnectedAt = 0;
-      existing.lastMessageAt = now;
-      return existing;
-    }
+    if (existing) { existing.name = name; existing.disconnectedAt = 0; existing.lastMessageAt = now; return existing; }
     if (this.players.size >= DUSTY_MAX_PLAYERS) throw new Error("arena-full");
     const spawn = this.chooseInitialSpawn();
     const player: DustyPlayer = {
-      id, name, x: spawn.x, y: spawn.y, vx: 0, vy: 0, aimX: 1, aimY: 0,
-      hp: 3, kills: 0, alive: true, respawnAt: 0, protectedUntil: now + DUSTY_SPAWN_PROTECTION_MS,
-      lastInputAt: now, lastMessageAt: now, lastInputSeq: 0, lastFireAt: 0, disconnectedAt: 0,
+      id, name, joinOrder: ++this.joinCursor, x: spawn.x, y: spawn.y, vx: 0, vy: 0, aimX: 1, aimY: 0,
+      hp: DUSTY_GAMEPLAY.maxHp, kills: 0, deaths: 0, killScore: 0, weaponTier: 1, nukeProgress: 0,
+      nukeReady: false, shieldHits: 0, spyUntil: 0, speedUntil: 0, moleMode: false, moleUntil: 0,
+      moleForceAt: 0, emergeBlockedUntil: 0, alive: true, respawnAt: 0,
+      protectedUntil: now + DUSTY_SPAWN_PROTECTION_MS, lastInputAt: now, lastMessageAt: now,
+      lastInputSeq: 0, lastFireAt: Number.NEGATIVE_INFINITY, lastFireInput: false,
+      suppressFireUntilRelease: false, lastNukeInput: false, burstRemaining: 0, burstIndex: 0,
+      nextBurstAt: 0, burstAimX: 1, burstAimY: 0, disconnectedAt: 0,
       lastProcessedInputSeq: 0, color: COLORS[this.players.size % COLORS.length], input: { ...EMPTY_INPUT }, pendingInput: null,
     };
     this.players.set(id, player);
+    this.updateThreatLeader();
     this.events.push({ type: "player_joined", player: { id, name } });
     return player;
   }
@@ -113,111 +131,154 @@ export class DustyOrbitSimulation {
   markDisconnected(id: string, now: number): void {
     const player = this.players.get(id);
     if (!player) return;
-    player.disconnectedAt = now;
-    player.pendingInput = null;
-    player.input = { ...player.input, moveX: 0, moveY: 0, fire: false };
+    player.disconnectedAt = now; player.pendingInput = null;
+    player.input = { ...player.input, moveX: 0, moveY: 0, fire: false, nuke: false };
   }
 
   removePlayer(id: string): void {
     const player = this.players.get(id);
     if (!player) return;
     this.players.delete(id);
-    for (let index = this.projectiles.length - 1; index >= 0; index--) {
-      if (this.projectiles[index].ownerId === id) this.projectiles.splice(index, 1);
-    }
+    for (let index = this.projectiles.length - 1; index >= 0; index--) if (this.projectiles[index].ownerId === id) this.projectiles.splice(index, 1);
+    for (let index = this.nukes.length - 1; index >= 0; index--) if (this.nukes[index].ownerId === id) this.nukes.splice(index, 1);
+    this.updateThreatLeader();
     this.events.push({ type: "player_left", player: { id, name: player.name } });
   }
 
   applyInput(id: string, input: ClientInput, now: number): boolean {
     const player = this.players.get(id);
     if (!player || input.seq <= player.lastInputSeq || input.seq > player.lastInputSeq + 1000) return false;
-    const move = normalized(input.moveX, input.moveY);
-    const aim = normalized(input.aimX, input.aimY);
-    const sanitizedInput: ClientInput = {
-      ...input,
-      moveX: move.length > 1 ? move.x : input.moveX,
-      moveY: move.length > 1 ? move.y : input.moveY,
-      aimX: aim.length ? aim.x : player.aimX,
-      aimY: aim.length ? aim.y : player.aimY,
+    const move = normalized(input.moveX, input.moveY), aim = normalized(input.aimX, input.aimY);
+    player.pendingInput = {
+      ...input, moveX: move.length > 1 ? move.x : input.moveX, moveY: move.length > 1 ? move.y : input.moveY,
+      aimX: aim.length ? aim.x : player.aimX, aimY: aim.length ? aim.y : player.aimY, nuke: input.nuke === true,
     };
-    player.pendingInput = sanitizedInput;
-    player.lastInputSeq = input.seq;
-    player.lastInputAt = now;
-    player.lastMessageAt = now;
-    player.disconnectedAt = 0;
+    player.lastInputSeq = input.seq; player.lastInputAt = now; player.lastMessageAt = now; player.disconnectedAt = 0;
     return true;
   }
 
-  noteMessage(id: string, now: number): void {
+  noteMessage(id: string, now: number): void { const player = this.players.get(id); if (player) player.lastMessageAt = now; }
+
+  debugGrantPowerup(id: string, type: PowerupType, now: number): boolean {
     const player = this.players.get(id);
-    if (player) player.lastMessageAt = now;
+    if (!player?.alive || player.moleMode) return false;
+    const applied = this.applyPowerup(player, type, now);
+    if (applied) this.events.push({ type: "powerup_collected", playerId: player.id, pickupId: "debug", powerup: type });
+    return applied;
   }
 
+  debugArmNuke(id: string): boolean {
+    const player = this.players.get(id);
+    if (!player?.alive) return false;
+    player.nukeProgress = DUSTY_GAMEPLAY.nukeRequirement; player.nukeReady = true;
+    return true;
+  }
+
+  /** Tick order: input/effect expiry, movement, pickup collection, actions/bursts,
+   * nukes, projectile simulation/damage, cloud expiry, threat selection, snapshot. */
   step(dt = DUSTY_FIXED_DT, now = Date.now()): void {
     this.tick++;
+    this.maintainPickups(now);
     for (const player of [...this.players.values()]) {
       if ((player.disconnectedAt && now - player.disconnectedAt >= DUSTY_DISCONNECT_GRACE_MS) || now - player.lastMessageAt >= DUSTY_STALE_PLAYER_MS) {
-        this.events.push({ type: "stale", playerId: player.id });
-        this.removePlayer(player.id);
-        continue;
+        this.events.push({ type: "stale", playerId: player.id }); this.removePlayer(player.id); continue;
       }
       if (!player.alive) {
-        player.pendingInput = null;
-        player.lastProcessedInputSeq = player.lastInputSeq;
+        player.pendingInput = null; player.lastProcessedInputSeq = player.lastInputSeq;
         if (now >= player.respawnAt) this.respawnPlayer(player, now);
         continue;
       }
-      if (now - player.lastInputAt > DUSTY_STALE_INPUT_MS) {
-        player.pendingInput = null;
-        player.input = { ...player.input, moveX: 0, moveY: 0, fire: false };
-      } else {
-        const nextInput = player.pendingInput;
-        if (nextInput) {
-          player.input = nextInput;
-          player.lastProcessedInputSeq = nextInput.seq;
-          player.pendingInput = null;
-        }
-      }
+      this.consumePendingInput(player, now);
+      this.expirePlayerEffects(player, now);
       const aim = normalized(player.input.aimX, player.input.aimY);
       if (aim.length) { player.aimX = aim.x; player.aimY = aim.y; }
       const move = normalized(player.input.moveX, player.input.moveY);
-      player.vx = move.x * DUSTY_PLAYER_SPEED;
-      player.vy = move.y * DUSTY_PLAYER_SPEED;
-      const moved = moveCircleWithSliding(
-        { x: player.x, y: player.y },
-        { x: player.vx * dt, y: player.vy * dt },
-        DUSTY_PLAYER_RADIUS,
-        DUSTY_POLYGONS,
-      );
+      const speed = DUSTY_GAMEPLAY.baseMovementSpeed * (player.speedUntil > now ? DUSTY_GAMEPLAY.speedMultiplier : 1);
+      player.vx = move.x * speed; player.vy = move.y * speed;
+      const displacement = { x: player.vx * dt, y: player.vy * dt };
+      const moved = player.moleMode ? { x: player.x + displacement.x, y: player.y + displacement.y } :
+        moveCircleWithSliding(player, displacement, DUSTY_PLAYER_RADIUS, DUSTY_POLYGONS);
       player.x = clamp(moved.x, DUSTY_PLAYER_RADIUS, DUSTY_MAP.width - DUSTY_PLAYER_RADIUS);
       player.y = clamp(moved.y, DUSTY_PLAYER_RADIUS, DUSTY_MAP.height - DUSTY_PLAYER_RADIUS);
-      this.processFire(player, now);
+      this.collectPickups(player, now);
+      this.processActions(player, now);
     }
+    this.updateNukes(now);
     this.updateProjectiles(dt, now);
+    for (let index = this.fartClouds.length - 1; index >= 0; index--) if (now >= this.fartClouds[index].expiresAt) this.fartClouds.splice(index, 1);
+    this.updateThreatLeader();
   }
 
-  private processFire(player: DustyPlayer, now: number): void {
-    if (!player.input.fire || now - player.lastFireAt < DUSTY_WEAPON.cooldownMs || this.projectiles.length >= MAX_PROJECTILES) return;
-    player.protectedUntil = 0;
-    player.lastFireAt = now;
-    const direction = normalized(player.aimX, player.aimY);
-    const x = player.x + direction.x * DUSTY_WEAPON.muzzleDistance;
-    const y = player.y + direction.y * DUSTY_WEAPON.muzzleDistance;
+  private consumePendingInput(player: DustyPlayer, now: number): void {
+    if (now - player.lastInputAt > DUSTY_STALE_INPUT_MS) {
+      player.pendingInput = null; player.input = { ...player.input, moveX: 0, moveY: 0, fire: false, nuke: false };
+    } else if (player.pendingInput) {
+      player.input = player.pendingInput; player.lastProcessedInputSeq = player.pendingInput.seq; player.pendingInput = null;
+    }
+  }
+
+  private expirePlayerEffects(player: DustyPlayer, now: number): void {
+    if (player.spyUntil <= now) player.spyUntil = 0;
+    if (player.speedUntil <= now) player.speedUntil = 0;
+    if (!player.moleMode || now < player.moleUntil) return;
+    if (this.isValidNormalPosition(player)) { this.emerge(player, now, "timeout"); return; }
+    if (!player.moleForceAt) player.moleForceAt = now + DUSTY_GAMEPLAY.moleForcedEmergenceGraceMs;
+    if (now >= player.moleForceAt) {
+      const safe = this.nearestValidPoint(player);
+      player.x = safe.x; player.y = safe.y;
+      this.emerge(player, now, "forced");
+    }
+  }
+
+  private processActions(player: DustyPlayer, now: number): void {
+    const fire = player.input.fire;
+    if (player.moleMode) {
+      if (fire && !player.lastFireInput) {
+        if (this.isValidNormalPosition(player)) { this.emerge(player, now, "manual"); player.suppressFireUntilRelease = true; }
+        else { player.emergeBlockedUntil = now + 700; this.events.push({ type: "mole_blocked", playerId: player.id }); }
+      }
+    } else {
+      if (!fire) player.suppressFireUntilRelease = false;
+      if (!player.suppressFireUntilRelease) this.processWeapon(player, now);
+    }
+    const nukePressed = player.input.nuke === true;
+    if (nukePressed && !player.lastNukeInput) this.activateNuke(player, now);
+    player.lastFireInput = fire; player.lastNukeInput = nukePressed;
+  }
+
+  private processWeapon(player: DustyPlayer, now: number): void {
+    const weapon = weaponForTier(player.weaponTier);
+    while (player.burstRemaining > 0 && now >= player.nextBurstAt && this.projectiles.length < DUSTY_GAMEPLAY.maxProjectiles) {
+      this.spawnProjectile(player, weapon, player.burstAimX, player.burstAimY, weapon.spreadDegrees[player.burstIndex] ?? 0, now);
+      player.burstRemaining--; player.burstIndex++; player.nextBurstAt += weapon.burstSpacingMs;
+    }
+    if (!player.input.fire || player.burstRemaining > 0 || now - player.lastFireAt < weapon.cooldownMs || this.projectiles.length >= DUSTY_GAMEPLAY.maxProjectiles) return;
+    player.protectedUntil = 0; player.lastFireAt = now;
+    if (weapon.tier === 3) {
+      player.burstAimX = player.aimX; player.burstAimY = player.aimY; player.burstIndex = 0;
+      player.burstRemaining = weapon.count; player.nextBurstAt = now;
+      this.processWeapon(player, now);
+      return;
+    }
+    if (weapon.tier === 5) {
+      for (const spread of weapon.spreadDegrees) this.spawnProjectile(player, weapon, player.aimX, player.aimY, spread, now);
+      return;
+    }
+    const spread = weapon.spreadDegrees.length > 1 ? weapon.spreadDegrees[(this.projectileId + 1) % weapon.spreadDegrees.length] : 0;
+    this.spawnProjectile(player, weapon, player.aimX, player.aimY, spread, now);
+  }
+
+  private spawnProjectile(player: DustyPlayer, weapon: WeaponDefinition, aimX: number, aimY: number, spread: number, now: number): void {
+    if (this.projectiles.length >= DUSTY_GAMEPLAY.maxProjectiles) return;
+    const direction = rotated(aimX, aimY, spread);
+    const x = player.x + direction.x * weapon.muzzleDistance, y = player.y + direction.y * weapon.muzzleDistance;
     const projectile: DustyProjectile = {
-      id: ++this.projectileId, ownerId: player.id, x, y,
-      vx: direction.x * DUSTY_WEAPON.speed, vy: direction.y * DUSTY_WEAPON.speed,
-      radius: DUSTY_WEAPON.radius, damage: DUSTY_WEAPON.damage,
-      spawnedAt: now, expiresAt: now + DUSTY_WEAPON.lifetimeMs,
+      id: ++this.projectileId, ownerId: player.id, tier: weapon.tier, x, y,
+      vx: direction.x * weapon.speed, vy: direction.y * weapon.speed, radius: weapon.radius,
+      damage: weapon.damage, spawnedAt: now, expiresAt: now + weapon.lifetimeMs,
     };
     this.projectiles.push(projectile);
-    this.events.push({
-      type: "shot", playerId: player.id, x, y,
-      projectile: {
-        id: projectile.id, ownerId: projectile.ownerId,
-        x: projectile.x, y: projectile.y, vx: projectile.vx, vy: projectile.vy,
-        radius: projectile.radius, spawnedAt: projectile.spawnedAt, expiresAt: projectile.expiresAt,
-      },
-    });
+    this.events.push({ type: "shot", playerId: player.id, x, y, projectile: { ...projectile } });
   }
 
   private updateProjectiles(dt: number, now: number): void {
@@ -233,89 +294,228 @@ export class DustyOrbitSimulation {
         if (t !== null && (!hit || t < hit.t)) hit = { t, kind: "rock" };
       }
       for (const player of this.players.values()) {
-        if (!player.alive || player.id === projectile.ownerId || player.protectedUntil > now) continue;
+        if (!player.alive || player.moleMode || player.id === projectile.ownerId || player.protectedUntil > now) continue;
         const t = segmentCircle(start, end, player, DUSTY_PLAYER_RADIUS + projectile.radius);
         if (t !== null && (!hit || t < hit.t)) hit = { t, kind: "player", id: player.id };
       }
       if (!hit) { projectile.x = end.x; projectile.y = end.y; continue; }
-      const impactX = start.x + (end.x - start.x) * hit.t;
-      const impactY = start.y + (end.y - start.y) * hit.t;
+      const impactX = start.x + (end.x - start.x) * hit.t, impactY = start.y + (end.y - start.y) * hit.t;
       if (hit.kind === "player" && hit.id) this.damagePlayer(hit.id, projectile, now);
-      this.events.push({
-        type: "impact", projectileId: projectile.id, ownerId: projectile.ownerId,
-        x: impactX, y: impactY, target: hit.kind,
-      });
+      this.events.push({ type: "impact", projectileId: projectile.id, ownerId: projectile.ownerId, x: impactX, y: impactY, target: hit.kind });
       this.projectiles.splice(index, 1);
     }
   }
 
   private damagePlayer(id: string, projectile: DustyProjectile, now: number): void {
     const player = this.players.get(id);
-    if (!player?.alive || player.protectedUntil > now) return;
+    if (!player?.alive || player.moleMode || player.protectedUntil > now) return;
+    if (player.shieldHits > 0) {
+      player.shieldHits = 0;
+      this.events.push({ type: "shield_hit", playerId: id, ownerId: projectile.ownerId, x: player.x, y: player.y });
+      return;
+    }
     player.hp -= projectile.damage;
     this.events.push({ type: "player_hit", playerId: id, ownerId: projectile.ownerId, hp: Math.max(0, player.hp), damage: projectile.damage });
-    if (player.hp <= 0) this.killPlayer(player, projectile.ownerId, now);
+    if (player.hp <= 0) this.killPlayer(player, projectile.ownerId, now, "projectile");
   }
 
-  private killPlayer(victim: DustyPlayer, killerId: string, now: number): void {
+  private killPlayer(victim: DustyPlayer, killerId: string, now: number, cause: "projectile" | "nuke"): void {
+    if (!victim.alive) return;
     const killer = this.players.get(killerId);
-    victim.alive = false;
-    victim.hp = 0;
-    victim.vx = victim.vy = 0;
-    victim.input = { ...victim.input, moveX: 0, moveY: 0, fire: false };
-    victim.pendingInput = null;
-    victim.lastProcessedInputSeq = victim.lastInputSeq;
-    victim.respawnAt = now + DUSTY_RESPAWN_MS;
-    victim.protectedUntil = 0;
-    if (killer && killer.id !== victim.id) killer.kills++;
-    this.events.push({ type: "kill", killerId, killerName: killer?.name ?? "DUSTY ORBIT", victimId: victim.id, victimName: victim.name, kills: killer?.kills ?? 0 });
-    this.events.push({ type: "death", victimId: victim.id, victimName: victim.name, killerId, killerName: killer?.name ?? "DUSTY ORBIT", respawnAt: victim.respawnAt });
+    victim.alive = false; victim.hp = 0; victim.vx = victim.vy = 0; victim.deaths++; victim.killScore--;
+    victim.weaponTier = Math.max(DUSTY_GAMEPLAY.minWeaponTier, victim.weaponTier - 1);
+    victim.spyUntil = 0; victim.speedUntil = 0; victim.shieldHits = 0; victim.moleMode = false;
+    victim.moleUntil = 0; victim.moleForceAt = 0; victim.burstRemaining = 0; victim.suppressFireUntilRelease = false;
+    victim.input = { ...victim.input, moveX: 0, moveY: 0, fire: false, nuke: false };
+    victim.pendingInput = null; victim.lastProcessedInputSeq = victim.lastInputSeq;
+    victim.respawnAt = now + DUSTY_RESPAWN_MS; victim.protectedUntil = 0;
+    if (killer && killer.id !== victim.id) this.creditKill(killer);
+    this.events.push({ type: "kill", cause, killerId, killerName: killer?.name ?? "DUSTY ORBIT", victimId: victim.id, victimName: victim.name, kills: killer?.kills ?? 0 });
+    this.events.push({ type: "death", cause, victimId: victim.id, victimName: victim.name, killerId, killerName: killer?.name ?? "DUSTY ORBIT", respawnAt: victim.respawnAt });
+  }
+
+  private creditKill(killer: DustyPlayer): void {
+    killer.kills++; killer.killScore++;
+    killer.weaponTier = Math.min(DUSTY_GAMEPLAY.maxWeaponTier, killer.weaponTier + 1);
+    if (!killer.nukeReady) {
+      killer.nukeProgress = Math.min(DUSTY_GAMEPLAY.nukeRequirement, killer.nukeProgress + 1);
+      if (killer.nukeProgress >= DUSTY_GAMEPLAY.nukeRequirement) killer.nukeReady = true;
+    }
+  }
+
+  private activateNuke(player: DustyPlayer, now: number): void {
+    if (!player.alive || !player.nukeReady) return;
+    // Consume/reset first; kills from detonation charge the next nuke.
+    player.nukeReady = false; player.nukeProgress = 0;
+    const nuke: DustyNuke = { id: ++this.nukeId, ownerId: player.id, x: player.x, y: player.y, radius: DUSTY_GAMEPLAY.nukeRadius, startedAt: now, detonateAt: now + DUSTY_GAMEPLAY.nukeWarningMs };
+    this.nukes.push(nuke);
+    this.events.push({ type: "nuke_warning", ...nuke });
+  }
+
+  private updateNukes(now: number): void {
+    for (let index = this.nukes.length - 1; index >= 0; index--) {
+      const nuke = this.nukes[index];
+      if (now < nuke.detonateAt) continue;
+      const victims = [...this.players.values()].filter((player) => player.alive && player.id !== nuke.ownerId && Math.hypot(player.x - nuke.x, player.y - nuke.y) <= nuke.radius);
+      victims.sort((a, b) => a.joinOrder - b.joinOrder || a.id.localeCompare(b.id));
+      for (const victim of victims) this.killPlayer(victim, nuke.ownerId, now, "nuke");
+      this.events.push({ type: "nuke_detonated", id: nuke.id, ownerId: nuke.ownerId, x: nuke.x, y: nuke.y, radius: nuke.radius, victims: victims.map((player) => player.id) });
+      this.nukes.splice(index, 1);
+    }
+  }
+
+  private collectPickups(player: DustyPlayer, now: number): void {
+    if (!player.alive || player.moleMode) return;
+    const distance = DUSTY_PLAYER_RADIUS + DUSTY_GAMEPLAY.pickupRadius;
+    for (const pickup of this.pickups) {
+      if (!pickup.active || Math.hypot(player.x - pickup.x, player.y - pickup.y) > distance) continue;
+      if (!this.applyPowerup(player, pickup.type, now)) continue;
+      pickup.active = false; pickup.respawnAt = now + DUSTY_GAMEPLAY.pickupRespawnMs;
+      this.events.push({ type: "powerup_collected", playerId: player.id, pickupId: pickup.id, powerup: pickup.type });
+    }
+  }
+
+  private applyPowerup(player: DustyPlayer, type: PowerupType, now: number): boolean {
+    switch (type) {
+      case "spy": player.spyUntil = now + DUSTY_GAMEPLAY.spyDurationMs; return true;
+      case "speed": player.speedUntil = now + DUSTY_GAMEPLAY.speedDurationMs; return true;
+      case "health": if (player.hp >= DUSTY_GAMEPLAY.maxHp) return false; player.hp++; return true;
+      case "shield": if (player.shieldHits > 0) return false; player.shieldHits = 1; return true;
+      case "teleport": {
+        const destination = this.chooseTeleport(player.id);
+        player.x = destination.x; player.y = destination.y; player.vx = player.vy = 0;
+        this.events.push({ type: "teleport", playerId: player.id, x: player.x, y: player.y }); return true;
+      }
+      case "mole": player.moleMode = true; player.moleUntil = now + DUSTY_GAMEPLAY.moleMaxDurationMs; player.moleForceAt = 0; player.burstRemaining = 0; player.lastFireInput = player.input.fire; return true;
+      case "fart": {
+        const cloud: DustyFartCloud = { id: ++this.cloudId, ownerId: player.id, x: player.x, y: player.y, radius: DUSTY_GAMEPLAY.fartCloudRadius, createdAt: now, expiresAt: now + DUSTY_GAMEPLAY.fartCloudDurationMs };
+        this.fartClouds.push(cloud); this.events.push({ type: "fart_cloud", ...cloud }); return true;
+      }
+    }
+  }
+
+  private emerge(player: DustyPlayer, now: number, reason: string): void {
+    player.moleMode = false; player.moleUntil = 0; player.moleForceAt = 0;
+    if (player.input.fire) player.suppressFireUntilRelease = true;
+    this.events.push({ type: "mole_emerged", playerId: player.id, x: player.x, y: player.y, reason, at: now });
+  }
+
+  private maintainPickups(now: number): void {
+    while (this.pickups.length < DUSTY_GAMEPLAY.pickupActiveCount) this.pickups.push({ id: ++this.pickupId, type: "health", x: 0, y: 0, active: false, respawnAt: 0 });
+    for (const pickup of this.pickups) {
+      if (pickup.active || now < pickup.respawnAt) continue;
+      const point = this.choosePickupPoint(pickup.id);
+      pickup.type = POWERUP_TYPES[Math.floor(this.random() * POWERUP_TYPES.length) % POWERUP_TYPES.length];
+      pickup.x = point.x; pickup.y = point.y; pickup.active = true; pickup.respawnAt = 0;
+    }
+  }
+
+  private buildValidWorldPoints(): Point[] {
+    const points: Point[] = [];
+    for (let y = 140; y <= DUSTY_MAP.height - 140; y += 180) for (let x = 140; x <= DUSTY_MAP.width - 140; x += 220) {
+      const point = { x, y };
+      if (this.isValidNormalPosition(point)) points.push(point);
+    }
+    return points;
+  }
+
+  isValidNormalPosition(point: Point): boolean {
+    if (point.x < DUSTY_PLAYER_RADIUS || point.y < DUSTY_PLAYER_RADIUS || point.x > DUSTY_MAP.width - DUSTY_PLAYER_RADIUS || point.y > DUSTY_MAP.height - DUSTY_PLAYER_RADIUS) return false;
+    return DUSTY_POLYGONS.every((polygon) => !pointInPolygon(point, polygon) && distanceToPolygon(point, polygon) >= DUSTY_PLAYER_RADIUS);
+  }
+
+  private choosePickupPoint(ignorePickupId: number): Point {
+    const start = Math.floor(this.random() * this.validWorldPoints.length);
+    for (let offset = 0; offset < this.validWorldPoints.length; offset++) {
+      const point = this.validWorldPoints[(start + offset) % this.validWorldPoints.length];
+      const clearPickups = this.pickups.every((pickup) => !pickup.active || pickup.id === ignorePickupId || Math.hypot(point.x - pickup.x, point.y - pickup.y) >= DUSTY_GAMEPLAY.pickupMinimumSpacing);
+      const clearPlayers = [...this.players.values()].every((player) => !player.alive || Math.hypot(point.x - player.x, point.y - player.y) >= DUSTY_GAMEPLAY.pickupPlayerClearance);
+      if (clearPickups && clearPlayers) return point;
+    }
+    return this.validWorldPoints[start] ?? DUSTY_SPAWNS[0];
+  }
+
+  private chooseTeleport(playerId: string): Point {
+    const candidates = this.validWorldPoints.filter((point) => [...this.players.values()].every((other) => !other.alive || other.id === playerId || Math.hypot(point.x - other.x, point.y - other.y) >= DUSTY_GAMEPLAY.teleportPlayerClearance));
+    const source = candidates.length ? candidates : this.validWorldPoints;
+    return source[Math.floor(this.random() * source.length) % source.length] ?? DUSTY_SPAWNS[0];
+  }
+
+  private nearestValidPoint(point: Point): Point {
+    let best = this.validWorldPoints[0] ?? DUSTY_SPAWNS[0], distance = Number.POSITIVE_INFINITY;
+    for (const candidate of this.validWorldPoints) {
+      const next = Math.hypot(point.x - candidate.x, point.y - candidate.y);
+      if (next < distance) { best = candidate; distance = next; }
+    }
+    return best;
   }
 
   private respawnPlayer(player: DustyPlayer, now: number): void {
     const spawn = this.chooseRespawn(player.id);
-    Object.assign(player, { x: spawn.x, y: spawn.y, vx: 0, vy: 0, hp: 3, alive: true, respawnAt: 0, protectedUntil: now + DUSTY_SPAWN_PROTECTION_MS, lastFireAt: 0 });
+    Object.assign(player, { x: spawn.x, y: spawn.y, vx: 0, vy: 0, hp: DUSTY_GAMEPLAY.maxHp, alive: true, respawnAt: 0, protectedUntil: now + DUSTY_SPAWN_PROTECTION_MS, lastFireAt: Number.NEGATIVE_INFINITY, lastFireInput: false, lastNukeInput: false });
     this.events.push({ type: "respawn", playerId: player.id, x: player.x, y: player.y, protectedUntil: player.protectedUntil });
   }
 
-  private chooseInitialSpawn(): Point {
-    const spawn = DUSTY_SPAWNS[this.spawnCursor % DUSTY_SPAWNS.length];
-    this.spawnCursor++;
-    return spawn;
-  }
-
+  private chooseInitialSpawn(): Point { const spawn = DUSTY_SPAWNS[this.spawnCursor % DUSTY_SPAWNS.length]; this.spawnCursor++; return spawn; }
   private chooseRespawn(ignoreId: string): Point {
     const living = [...this.players.values()].filter((player) => player.alive && player.id !== ignoreId);
     if (!living.length) return this.chooseInitialSpawn();
-    return [...DUSTY_SPAWNS].sort((a, b) => {
-      const aDistance = Math.min(...living.map((player) => Math.hypot(a.x - player.x, a.y - player.y)));
-      const bDistance = Math.min(...living.map((player) => Math.hypot(b.x - player.x, b.y - player.y)));
-      return bDistance - aDistance;
-    })[0];
+    let best = DUSTY_SPAWNS[0], bestDistance = -1;
+    for (const spawn of DUSTY_SPAWNS) {
+      let nearest = Number.POSITIVE_INFINITY;
+      for (const player of living) nearest = Math.min(nearest, Math.hypot(spawn.x - player.x, spawn.y - player.y));
+      if (nearest > bestDistance) { best = spawn; bestDistance = nearest; }
+    }
+    return best;
   }
 
-  drainEvents(): Array<Record<string, unknown>> {
-    const output = this.events;
-    this.events = [];
-    return output;
+  private isConcealed(player: DustyPlayer, now: number): boolean {
+    if (!player.alive) return false;
+    for (const cloud of this.fartClouds) if (cloud.expiresAt > now && Math.hypot(player.x - cloud.x, player.y - cloud.y) <= cloud.radius) return true;
+    return false;
   }
+
+  private updateThreatLeader(): void {
+    let leader: DustyPlayer | null = null;
+    for (const player of this.players.values()) {
+      if (!leader || player.killScore > leader.killScore ||
+          (player.killScore === leader.killScore && player.weaponTier > leader.weaponTier) ||
+          (player.killScore === leader.killScore && player.weaponTier === leader.weaponTier && player.kills > leader.kills) ||
+          (player.killScore === leader.killScore && player.weaponTier === leader.weaponTier && player.kills === leader.kills && (player.joinOrder < leader.joinOrder || (player.joinOrder === leader.joinOrder && player.id < leader.id)))) leader = player;
+    }
+    this.threatLeaderId = leader?.id ?? null;
+  }
+
+  drainEvents(): Array<Record<string, unknown>> { const output = this.events; this.events = []; return output; }
 
   snapshot(viewerId: string, now = Date.now()): Record<string, unknown> {
     const viewer = this.players.get(viewerId);
+    const serializePlayer = (player: DustyPlayer) => ({
+      id: player.id, name: player.name, x: round(player.x), y: round(player.y), vx: Math.round(player.vx), vy: Math.round(player.vy),
+      aimX: round(player.aimX, 1000), aimY: round(player.aimY, 1000), hp: player.hp, kills: player.kills,
+      deaths: player.deaths, killScore: player.killScore, weaponTier: player.weaponTier, nukeProgress: player.nukeProgress,
+      nukeReady: player.nukeReady, shieldHits: player.shieldHits, spyRemaining: Math.max(0, player.spyUntil - now),
+      speedRemaining: Math.max(0, player.speedUntil - now), moleMode: player.moleMode,
+      moleRemaining: player.moleMode ? Math.max(0, player.moleUntil - now) : 0,
+      emergeBlocked: player.emergeBlockedUntil > now, concealed: this.isConcealed(player, now), alive: player.alive,
+      respawnAt: player.respawnAt, protectedUntil: player.protectedUntil, color: player.color,
+    });
+    const visiblePlayers = [...this.players.values()].filter((player) => player.id === viewerId || (!player.moleMode && !this.isConcealed(player, now)));
+    const minimapPlayers: Array<Record<string, unknown>> = [];
+    if (viewer) for (const player of visiblePlayers) {
+      if (!player.alive || player.id === viewerId) continue;
+      const threat = player.id === this.threatLeaderId;
+      if (threat || viewer.spyUntil > now) minimapPlayers.push({ id: player.id, x: round(player.x), y: round(player.y), color: player.color, threat });
+    }
     return {
       type: "snapshot", t: now, tick: this.tick, you: { id: viewerId, ack: viewer?.lastProcessedInputSeq ?? 0 },
-      players: [...this.players.values()].map((player) => ({
-        id: player.id, name: player.name, x: Math.round(player.x * 10) / 10, y: Math.round(player.y * 10) / 10,
-        vx: Math.round(player.vx), vy: Math.round(player.vy), aimX: Math.round(player.aimX * 1000) / 1000,
-        aimY: Math.round(player.aimY * 1000) / 1000, hp: player.hp, kills: player.kills, weaponTier: 1,
-        alive: player.alive, respawnAt: player.respawnAt, protectedUntil: player.protectedUntil, color: player.color,
-      })),
-      projectiles: this.projectiles.map((projectile) => ({
-        id: projectile.id, ownerId: projectile.ownerId, tier: 1,
-        x: Math.round(projectile.x * 10) / 10, y: Math.round(projectile.y * 10) / 10,
-        vx: Math.round(projectile.vx), vy: Math.round(projectile.vy), radius: projectile.radius,
-        spawnedAt: projectile.spawnedAt,
-      })),
+      players: visiblePlayers.map(serializePlayer),
+      projectiles: this.projectiles.map((projectile) => ({ id: projectile.id, ownerId: projectile.ownerId, tier: projectile.tier, x: round(projectile.x), y: round(projectile.y), vx: Math.round(projectile.vx), vy: Math.round(projectile.vy), radius: projectile.radius, spawnedAt: projectile.spawnedAt, expiresAt: projectile.expiresAt })),
+      pickups: this.pickups.filter((pickup) => pickup.active).map(({ id, type, x, y, active }) => ({ id, type, x, y, active })),
+      fartClouds: this.fartClouds.map((cloud) => ({ ...cloud })),
+      nukes: this.nukes.map((nuke) => ({ ...nuke })),
+      threatLeaderId: this.threatLeaderId,
+      minimapPlayers,
     };
   }
 }

@@ -37,4 +37,8 @@ The health check is `GET /health` and returns JSON shaped as `{ "ok": true, "wor
 - Otherwise-stale connections are removed after 15 seconds.
 - The active tick stops when the arena is empty, allowing the Durable Object to hibernate.
 
+Gameplay balance is centralized in `src/dusty-gameplay.ts`. The authoritative tick order is input/effect expiry, movement and rock collision, pickup collection, weapon/nuke actions, projectile movement and damage, cloud expiry, Threat Leader selection, then recipient-specific snapshot creation. Mole and fart-cloud stealth is enforced by omitting hidden remote players from each recipient's snapshot; it is not a renderer-only flag.
+
+With the local frontend opened using `?debug=1`, number keys 1–7 grant Spy, Speed, Health, Shield, Teleport, Mole, and Fart respectively, while `U` arms a nuke. These messages are accepted only by a WebSocket connected to a `localhost` or `127.0.0.1` Worker URL that also requested debug mode; production hosts reject them.
+
 The client supplies only `Guest-XXXX` identities in this slice. A production pass must verify Poopcade access tokens server-side before trusting signed-in display names.

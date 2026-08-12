@@ -260,7 +260,11 @@ export class InputController {
       event.stopPropagation();
       this.firePointerId = event.pointerId;
       this.touchModeUntil = performance.now() + 1500;
-      fireOrigin = { x: event.clientX, y: event.clientY };
+      const rect = fireButton.getBoundingClientRect();
+      fireOrigin = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+      // Resolve a directional tap before the first fire input is sampled. A
+      // pointer near the centre deliberately keeps the player's current aim.
+      updateFireAim(event);
       this.aimTouch = { ...this.aimTouch, firing: true };
       this.touchFireQueuedUntil = performance.now() + MOUSE_FIRE_BUFFER_MS;
       try { fireButton.setPointerCapture(event.pointerId); } catch {}

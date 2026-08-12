@@ -103,18 +103,20 @@ test("mobile free-move and draggable fire controls work simultaneously", () => {
 
   canvas.dispatch("pointerdown", { pointerId: 1, clientX: 100, clientY: 100 });
   canvas.dispatch("pointermove", { pointerId: 1, clientX: 152, clientY: 100 });
-  fireButton.dispatch("pointerdown", { pointerId: 2, clientX: 700, clientY: 400 });
-  fireButton.dispatch("pointermove", { pointerId: 2, clientX: 700, clientY: 350 });
+  fireButton.clientWidth = 80;
+  fireButton.clientHeight = 80;
+  fireButton.dispatch("pointerdown", { pointerId: 2, clientX: 40, clientY: 40 });
+  fireButton.dispatch("pointermove", { pointerId: 2, clientX: 40, clientY: 0 });
   controller.lastSampleAt = performance.now() - 50;
   const simultaneous = controller.sample();
   assert.ok(simultaneous.moveX > .7);
   close(simultaneous.moveY, 0);
   close(simultaneous.aimX, 0);
-  close(simultaneous.aimY, -1);
+  assert.ok(simultaneous.aimY < -.85);
   assert.equal(simultaneous.fire, true);
   assert.equal(guide.hidden, false);
 
-  fireButton.dispatch("pointerup", { pointerId: 2, clientX: 700, clientY: 350 });
+  fireButton.dispatch("pointerup", { pointerId: 2, clientX: 40, clientY: 0 });
   controller.lastSampleAt = performance.now() - 20;
   assert.equal(controller.sample().fire, true, "a quick tap remains queued until the shot is acknowledged");
   controller.acknowledgeFire();
@@ -125,4 +127,42 @@ test("mobile free-move and draggable fire controls work simultaneously", () => {
   assert.equal(movementAim.fire, false);
   canvas.dispatch("pointerup", { pointerId: 1, clientX: 152, clientY: 100 });
   assert.equal(guide.hidden, true);
+});
+
+test("a directional fire tap uses its new aim on the very first sample", () => {
+  class FakeElement {
+    constructor(width = 80, height = 80) {
+      this.listeners = new Map();
+      this.style = { setProperty() {}, removeProperty() {} };
+      this.classList = { add() {}, remove() {} };
+      this.clientWidth = width;
+      this.clientHeight = height;
+    }
+    addEventListener(type, callback) { this.listeners.set(type, [...(this.listeners.get(type) || []), callback]); }
+    dispatch(type, event) {
+      const value = { preventDefault() {}, stopPropagation() {}, pointerType: "touch", button: 0, ...event };
+      for (const callback of this.listeners.get(type) || []) callback(value);
+    }
+    querySelector() { return null; }
+    setPointerCapture() {}
+    releasePointerCapture() {}
+    getBoundingClientRect() { return { left: 0, top: 0, width: this.clientWidth, height: this.clientHeight }; }
+  }
+
+  const fakeWindow = new FakeElement(800, 500);
+  globalThis.window = fakeWindow;
+  globalThis.matchMedia = () => ({ matches: true });
+  const canvas = new FakeElement(800, 500);
+  const fireButton = new FakeElement();
+  const controller = new InputController(canvas, null, null, { movementSurface: canvas, fireButton });
+  controller.enabled = true;
+  controller.aimTouch = { x: 0, y: -1, firing: false };
+
+  fireButton.dispatch("pointerdown", { pointerId: 9, clientX: 40, clientY: 80 });
+  controller.lastSampleAt = performance.now() - 20;
+  const firstShot = controller.sample();
+
+  close(firstShot.aimX, 0);
+  assert.ok(firstShot.aimY > .85);
+  assert.equal(firstShot.fire, true);
 });

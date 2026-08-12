@@ -41,7 +41,7 @@ test("input acknowledgement advances only when the newest pending intent is simu
   assert.equal((simulation.snapshot(player.id, 1034).you as { ack: number }).ack, 2);
 });
 
-test("server swept projectile collision stops Moon Pulse shots at canonical rocks", () => {
+test("server swept projectile collision stops Pea Shooter shots at canonical rocks", () => {
   const simulation = new DustyOrbitSimulation();
   const player = simulation.addPlayer("10000000-0000-4000-8000-000000000002", "Guest-0002", 1000);
   player.x = 1350;
@@ -70,10 +70,10 @@ test("a projectile grazing outside a polygon continues and can never hit its own
   player.protectedUntil = 0;
   simulation.applyInput(player.id, input(1, 0, 0, 1, 0, true), 1000);
   simulation.step(DUSTY_FIXED_DT, 1000);
-  for (let step = 1; step < 30; step++) simulation.step(DUSTY_FIXED_DT, 1000 + step * 34);
+  for (let step = 1; step < 8; step++) simulation.step(DUSTY_FIXED_DT, 1000 + step * 34);
   assert.equal(player.hp, 3);
   assert.equal(simulation.projectiles.length, 1);
-  assert.ok(simulation.projectiles[0].x > 1600);
+  assert.ok(simulation.projectiles[0].x > 1100);
   assert.equal(simulation.drainEvents().some((event) => event.type === "impact" && event.target === "rock"), false);
 });
 
@@ -86,14 +86,14 @@ test("three authoritative hits kill, preserve the killer counter, and respawn af
   attacker.aimX = 1;
   attacker.aimY = 0;
   for (let shot = 0; shot < 3; shot++) {
-    const fireAt = 1000 + shot * 700;
+    const fireAt = 1000 + shot * 1100;
     simulation.applyInput(attacker.id, input(shot + 1, 0, 0, 1, 0, true), fireAt);
     for (let frame = 0; frame < 12; frame++) simulation.step(DUSTY_FIXED_DT, fireAt + frame * 34);
   }
   assert.equal(victim.alive, false);
   assert.equal(victim.hp, 0);
   assert.equal(attacker.kills, 1);
-  assert.ok(victim.respawnAt >= 2400 + DUSTY_RESPAWN_MS);
+  assert.ok(victim.respawnAt >= 3200 + DUSTY_RESPAWN_MS);
   const respawnAt = victim.respawnAt;
   simulation.step(DUSTY_FIXED_DT, respawnAt);
   assert.equal(victim.alive, true);

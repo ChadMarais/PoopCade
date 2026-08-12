@@ -7,11 +7,11 @@ import {
   DUSTY_MAX_PLAYERS,
   DUSTY_SNAPSHOT_RATE,
   DUSTY_TICK_RATE,
-  DUSTY_WEAPON,
 } from "./dusty-simulation.ts";
+import { DUSTY_GAMEPLAY, DUSTY_WEAPONS } from "./dusty-gameplay.ts";
 
 type Env = Record<string, never>;
-type Session = { playerId: string; name: string; windowStartedAt: number; messageCount: number; invalidCount: number };
+type Session = { playerId: string; name: string; debug: boolean; windowStartedAt: number; messageCount: number; invalidCount: number };
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export class DustyOrbitArena extends DurableObject<Env> {
@@ -25,7 +25,7 @@ export class DustyOrbitArena extends DurableObject<Env> {
     for (const socket of this.ctx.getWebSockets()) {
       const attachment = socket.deserializeAttachment() as Partial<Session> | null;
       if (!attachment?.playerId || !UUID_PATTERN.test(attachment.playerId)) continue;
-      const session: Session = { playerId: attachment.playerId, name: safeGuestName(attachment.name), windowStartedAt: now, messageCount: 0, invalidCount: 0 };
+      const session: Session = { playerId: attachment.playerId, name: safeGuestName(attachment.name), debug: attachment.debug === true, windowStartedAt: now, messageCount: 0, invalidCount: 0 };
       this.sessions.set(socket, session);
       try { this.simulation.addPlayer(session.playerId, session.name, now); } catch { socket.close(1013, "Arena full"); }
     }
@@ -37,6 +37,7 @@ export class DustyOrbitArena extends DurableObject<Env> {
     const url = new URL(request.url);
     const playerId = url.searchParams.get("session") ?? "";
     const name = safeGuestName(url.searchParams.get("name"));
+    const debug = (url.hostname === "127.0.0.1" || url.hostname === "localhost") && url.searchParams.get("debug") === "1";
     if (!UUID_PATTERN.test(playerId)) return new Response("A valid session UUID is required.", { status: 400 });
 
     for (const [existingSocket, session] of this.sessions) {
@@ -51,7 +52,7 @@ export class DustyOrbitArena extends DurableObject<Env> {
 
     const pair = new WebSocketPair();
     const [client, server] = Object.values(pair) as [WebSocket, WebSocket];
-    const session: Session = { playerId, name, windowStartedAt: Date.now(), messageCount: 0, invalidCount: 0 };
+    const session: Session = { playerId, name, debug, windowStartedAt: Date.now(), messageCount: 0, invalidCount: 0 };
     server.serializeAttachment(session);
     this.ctx.acceptWebSocket(server, [playerId]);
     this.sessions.set(server, session);
@@ -63,7 +64,8 @@ export class DustyOrbitArena extends DurableObject<Env> {
       map: DUSTY_MAP,
       collision: DUSTY_CANONICAL_COLLISION,
       rates: { tick: DUSTY_TICK_RATE, snapshot: DUSTY_SNAPSHOT_RATE, interpolationMs: 100 },
-      weapons: [DUSTY_WEAPON], player, maxPlayers: DUSTY_MAX_PLAYERS,
+      weapons: DUSTY_WEAPONS, gameplay: DUSTY_GAMEPLAY,
+      player: { id: player.id, x: player.x, y: player.y, lastInputSeq: player.lastInputSeq }, maxPlayers: DUSTY_MAX_PLAYERS,
     }));
     server.send(encode(this.simulation.snapshot(playerId)));
     this.flushEvents();
@@ -89,6 +91,8 @@ export class DustyOrbitArena extends DurableObject<Env> {
       return;
     }
     if (message.type === "ping") { socket.send(encode({ type: "pong", nonce: message.nonce, serverTime: now, tick: this.simulation.tick })); return; }
+    if (message.type === "debug_powerup") { if (session.debug) this.simulation.debugGrantPowerup(session.playerId, message.powerup, now); return; }
+    if (message.type === "debug_nuke") { if (session.debug) this.simulation.debugArmNuke(session.playerId); return; }
     this.simulation.applyInput(session.playerId, message, now);
   }
 
@@ -98,7 +102,7 @@ export class DustyOrbitArena extends DurableObject<Env> {
   private restoreSession(socket: WebSocket): Session | null {
     const attachment = socket.deserializeAttachment() as Partial<Session> | null;
     if (!attachment?.playerId || !UUID_PATTERN.test(attachment.playerId)) return null;
-    const session: Session = { playerId: attachment.playerId, name: safeGuestName(attachment.name), windowStartedAt: Date.now(), messageCount: 0, invalidCount: 0 };
+    const session: Session = { playerId: attachment.playerId, name: safeGuestName(attachment.name), debug: attachment.debug === true, windowStartedAt: Date.now(), messageCount: 0, invalidCount: 0 };
     this.sessions.set(socket, session);
     this.simulation.addPlayer(session.playerId, session.name, Date.now());
     this.startLoop();

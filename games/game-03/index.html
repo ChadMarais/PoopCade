@@ -20,6 +20,7 @@
     .status { top: 12px; right: 12px; padding: 8px 11px; font: 900 10px ui-monospace, monospace; color: #ffd66e; }
     .status.online { color: #a6ff65; }
     .hud { left: 12px; bottom: 12px; min-width: 310px; padding: 10px 12px; font: 700 10px/1.46 ui-monospace, Consolas, monospace; white-space: pre; }
+    .gameplay-hud { left: 12px; top: 68px; min-width: 188px; padding: 9px 11px; color: #effcff; font: 900 10px/1.5 ui-monospace, Consolas, monospace; white-space: pre; }
     .events { right: 12px; top: 56px; width: min(330px, calc(100vw - 24px)); padding: 8px 10px; font: 800 10px/1.45 ui-monospace, monospace; color: #f7dcff; white-space: pre-line; }
     .controls { right: 12px; bottom: 12px; padding: 8px 10px; color: rgba(255,255,255,.82); font: 800 10px system-ui; }
     .dev-badge { position: fixed; z-index: 3; top: 12px; left: 50%; transform: translateX(-50%); padding: 6px 9px; border: 1px solid rgba(255,213,100,.55); border-radius: 999px; background: rgba(18,8,27,.86); color: #ffdf7f; font: 900 8px ui-monospace,monospace; letter-spacing: .12em; pointer-events: none; }
@@ -39,11 +40,14 @@
     .mobile-fire-core { position: absolute; left: 50%; top: 45%; width: 29px; height: 29px; transform: translate(calc(-50% + var(--aim-x)),calc(-50% + var(--aim-y))); border-radius: 50%; background: radial-gradient(circle at 35% 28%,#fff,#8af8ff 38%,#e95cff 72%); box-shadow: 0 0 15px rgba(110,245,255,.65); transition: transform 45ms linear; }
     .mobile-fire-label { position: absolute; left: 50%; bottom: 8px; transform: translateX(-50%); color: #f9dfff; font: 900 7px ui-monospace,monospace; letter-spacing: .12em; }
     .mobile-fire-button.active { border-color: #8af8ff; box-shadow: 0 0 24px rgba(110,245,255,.48),inset 0 0 22px rgba(240,87,255,.24); transform: scale(.96); }
+    .mobile-nuke-button { position: absolute; right: max(31px,calc(env(safe-area-inset-right) + 13px)); bottom: max(105px,calc(env(safe-area-inset-bottom) + 105px)); width: 52px; height: 32px; border: 1px solid rgba(255,219,92,.75); border-radius: 9px; background: rgba(92,25,24,.92); color: #fff099; font: 900 9px ui-monospace,monospace; letter-spacing: .08em; box-shadow: 0 0 17px rgba(255,125,54,.35); pointer-events: auto; touch-action: manipulation; }
+    .mobile-nuke-button:disabled { opacity: .28; box-shadow: none; }
     .mobile-preview .mobile-controls { display: block; }
     .mobile-preview .controls { display: none; }
     .mobile-preview .hud, .mobile-preview .events { display: none; }
+    .mobile-preview .gameplay-hud { top: 59px; left: 8px; min-width: 152px; padding: 7px 8px; font-size: 8px; }
     @media (pointer: coarse), (max-width: 700px) { .mobile-controls { display: block; } }
-    @media (max-width: 700px) { .hud, .controls, .events { display: none; } }
+    @media (max-width: 700px) { .hud, .controls, .events { display: none; } .gameplay-hud { top: 59px; left: 8px; min-width: 152px; padding: 7px 8px; font-size: 8px; } }
   </style>
 </head>
 <body>
@@ -51,14 +55,16 @@
   <header class="panel title"><a id="homeLink" class="home-link" href="/" aria-label="Back to Poopcade">←</a><div class="title-copy"><strong>DUSTY ORBIT</strong><span>MULTIPLAYER DEVELOPMENT BUILD</span></div></header>
   <div id="devBadge" class="dev-badge" hidden>DEV TEST</div>
   <div id="connection" class="panel status">LOADING</div>
+  <pre id="gameplayHud" class="panel gameplay-hud">HP: ---\nSHIELD: NO\nWEAPON: T1 PEA SHOOTER\nSCORE: 0\nNUKE: 0/10</pre>
   <pre id="debugHud" class="panel hud">Waiting for server…</pre>
   <div id="events" class="panel events">Open this URL in a second tab to join the same arena.</div>
-  <div class="panel controls">WASD MOVE · ARROWS AIM/FIRE · MOUSE AIM/CLICK · C COLLISION</div>
+  <div class="panel controls">WASD MOVE · ARROWS AIM/FIRE · MOUSE AIM/CLICK · N NUKE · C COLLISION · DEBUG 1–7 POWERUPS / U ARM</div>
   <div id="mobileControls" class="mobile-controls" aria-label="Mobile controls">
     <div id="mobileMoveGuide" class="mobile-move-guide" hidden aria-hidden="true"><i class="mobile-move-knob"></i></div>
     <button id="mobileFireButton" class="mobile-fire-button" type="button" aria-label="Hold to fire; drag to aim"><i class="mobile-fire-core"></i><span class="mobile-fire-label">FIRE</span></button>
+    <button id="mobileNukeButton" class="mobile-nuke-button" type="button" aria-label="Activate nuke" disabled>NUKE</button>
   </div>
   <div id="loading" class="loading"><div><h1>DUSTY ORBIT</h1><p id="loadingText">LOADING MULTIPLAYER ASSETS…</p><div class="track"><div id="loadingBar" class="bar"></div></div></div></div>
-  <script type="module" src="./game.js?v=20260812-3"></script>
+  <script type="module" src="./game.js?v=20260812-5"></script>
 </body>
 </html>
