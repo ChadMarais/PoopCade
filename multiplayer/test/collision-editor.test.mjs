@@ -2,11 +2,15 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   applyCollisionDraft,
+  applyPlacementDraft,
   editorCameraPanVector,
   normalizedCollisionPoints,
+  rotationHandlePosition,
+  serializeMapPlacement,
   serializeCollisionDefinition,
   worldToNormalized,
 } from "../../games/game-03/collision-editor.js";
+import { depthSortY } from "../../games/game-03/collision-geometry.js";
 import { transformNormalizedPolygon } from "../../games/game-03/collision-geometry.js";
 
 function instance(id, assetId, definition, x, width) {
@@ -68,4 +72,23 @@ test("collision editor camera pans at a stable normalized speed", () => {
   const diagonal = editorCameraPanVector(new Set(["ArrowLeft", "ArrowUp"]), .5, 400);
   assert.ok(Math.abs(diagonal.x + Math.SQRT1_2 * 200) < 1e-9);
   assert.ok(Math.abs(diagonal.y + Math.SQRT1_2 * 200) < 1e-9);
+});
+
+test("instance placement moves and rotates artwork collision around its world anchor", () => {
+  const definition = {
+    id: "rock",
+    anchor: { x: .5, y: .5 },
+    depthSortAnchor: { x: .5, y: .8 },
+    collision: { points: [{ x: .25, y: .25 }, { x: .75, y: .25 }, { x: .5, y: .75 }] },
+  };
+  const selected = instance("ROCK A", "rock", definition, 200, 100);
+  selected.depthY = depthSortY(definition, selected);
+
+  applyPlacementDraft(selected, { x: 600, y: 400, rotation: 90 });
+
+  assert.deepEqual(selected.polygon[0], { x: 625, y: 375 });
+  assert.equal(selected.depthY, 400);
+  assert.deepEqual(worldToNormalized(selected.polygon[0], definition, selected), { x: .25, y: .25 });
+  assert.equal(serializeMapPlacement(selected), '{ id: "ROCK A", x: 600, y: 400, rotation: 90 }');
+  assert.deepEqual(rotationHandlePosition(selected), { x: 696, y: 400 });
 });

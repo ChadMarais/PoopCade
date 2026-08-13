@@ -341,16 +341,19 @@ export class DustyOrbitMultiplayerRenderer {
   drawEnvironmentObject(item, satelliteActive) {
     const x = item.x - this.camera.x;
     const y = item.y - this.camera.y;
-    if (x + item.width / 2 < -20 || x - item.width / 2 > this.viewport.width + 20 || y + item.height / 2 < -20 || y - item.height / 2 > this.viewport.height + 20) return;
+    const cullRadius = Math.hypot(item.width, item.height) / 2;
+    if (x + cullRadius < -20 || x - cullRadius > this.viewport.width + 20 || y + cullRadius < -20 || y - cullRadius > this.viewport.height + 20) return;
     this.ctx.save();
     this.ctx.translate(x, y);
+    const rotation = (Number(item.rotation) || 0) * Math.PI / 180;
+    if (rotation) this.ctx.rotate(rotation);
     if (item.definition.render?.flipX === true) this.ctx.scale(-1, 1);
     this.ctx.drawImage(item.image, -item.width / 2, -item.height / 2, item.width, item.height);
+    if (item.kind === "satellite" && satelliteActive) this.drawSatelliteActivePulse(item);
     this.ctx.restore();
-    if (item.kind === "satellite" && satelliteActive) this.drawSatelliteActivePulse(item, x, y);
   }
 
-  drawSatelliteActivePulse(item, x, y) {
+  drawSatelliteActivePulse(item) {
     const pulse = .5 + .5 * Math.sin(performance.now() / 180);
     const ctx = this.ctx;
     ctx.save();
@@ -361,8 +364,7 @@ export class DustyOrbitMultiplayerRenderer {
     ctx.shadowBlur = 12;
     ctx.lineWidth = 1.5;
     ctx.beginPath();
-    const mirror = item.definition.render?.flipX === true ? -1 : 1;
-    ctx.ellipse(x + item.width * .035 * mirror, y - item.height * .18, item.width * (.08 + pulse * .018), item.height * (.025 + pulse * .008), -.15 * mirror, 0, Math.PI * 2);
+    ctx.ellipse(item.width * .035, -item.height * .18, item.width * (.08 + pulse * .018), item.height * (.025 + pulse * .008), -.15, 0, Math.PI * 2);
     ctx.stroke();
     ctx.restore();
   }

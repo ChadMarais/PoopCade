@@ -76,7 +76,7 @@ test("joinedAt starts on admission, survives reconnect/death/respawn, and resets
   assert.equal(rejoined.joinedAt, 9000);
 });
 
-test("lobby roster carries live signed scores, skin IDs, join times, and deterministic ranking", () => {
+test("lobby roster carries live non-negative scores, skin IDs, join times, and deterministic ranking", () => {
   const simulation = new DustyOrbitSimulation(() => .5);
   const first = simulation.addPlayer(id(1), "Profile Pilot", 1000, { skinId: "moon-blob-01" });
   const second = simulation.addPlayer(id(2), "Guest-0002", 1500, { skinId: "made-up" });
@@ -87,6 +87,7 @@ test("lobby roster carries live signed scores, skin IDs, join times, and determi
   assert.equal(state.activePlayers, 2);
   assert.deepEqual(state.players.map((player: any) => player.id), [second.id, first.id]);
   assert.deepEqual(state.players[0], { id: second.id, name: second.name, skinId: "moon-blob-01", killScore: 4, kills: 7, joinedAt: 1500 });
+  assert.equal(state.players[1].killScore, 0);
   first.killScore = 6;
   assert.equal((simulation.lobbyState(5100) as any).players[0].killScore, 6);
   assert.equal((simulation.snapshot(first.id, 5100) as any).players.find((player: any) => player.id === first.id).skinId, "moon-blob-01");

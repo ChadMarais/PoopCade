@@ -39,6 +39,7 @@
     .collision-editor button:disabled { cursor: wait; opacity: .55; }
     .collision-editor button.active { border-color: #a6ff65; background: #23411d; color: #d9ffc7; box-shadow: 0 0 12px rgba(166,255,101,.24); }
     .collision-editor label { display: grid; gap: 4px; color: #f1d8ff; letter-spacing: .08em; }
+    .collision-editor label + label { margin-top: 6px; }
     .collision-editor select { width: 100%; min-height: 30px; padding: 4px 6px; }
     .collision-editor-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 8px; }
     .collision-editor-status { margin: 8px 0 0; padding-top: 8px; border-top: 1px solid rgba(255,255,255,.12); color: #d6eef1; font: 700 9px/1.45 ui-monospace,Consolas,monospace; white-space: pre-wrap; user-select: text; -webkit-user-select: text; }
@@ -90,20 +91,21 @@
     </div>
   </main>
   <canvas id="world" tabindex="0" aria-label="Dusty Orbit multiplayer arena"></canvas>
-  <header class="panel title"><a id="homeLink" class="home-link" href="/" aria-label="Back to Poopcade">←</a><div class="title-copy"><strong>DUSTY ORBIT</strong><span>MULTIPLAYER DEVELOPMENT BUILD</span></div></header>
+  <header class="panel title"><a id="homeLink" class="home-link" href="/" aria-label="Back to Poopcade">←</a><div class="title-copy"><strong>DUSTY ORBIT</strong><span>MULTIPLAYER DEVELOPMENT BUILD</span></div><a class="leave-button" href="/leaderboard/dusty-orbit/">SCORES</a></header>
   <button id="leaveGame" class="panel leave-button" type="button">LOBBY</button>
   <div id="devBadge" class="dev-badge" hidden>DEV TEST</div>
   <div id="connection" class="panel status">LOADING</div>
-  <pre id="gameplayHud" class="panel gameplay-hud">HP: ---\nSHIELD: NO\nWEAPON: T1 PEA SHOOTER\nSCORE: 0\nNUKE: 0/10</pre>
+  <pre id="gameplayHud" class="panel gameplay-hud">HP: ---\nSHIELD: NO\nWEAPON: T1 PEA SHOOTER\nSCORE: 0\nHIGHSCORE: ---\nNUKE: 0/10</pre>
   <pre id="debugHud" class="panel hud">Waiting for server…</pre>
   <div id="events" class="panel events">Open this URL in a second tab to join the same arena.</div>
-  <section id="collisionEditor" class="panel collision-editor" hidden aria-label="Static collision editor">
-    <div class="collision-editor-header"><strong>STATIC COLLISION EDITOR</strong><div class="collision-editor-header-actions"><span id="collisionEditorPersistence" class="collision-editor-persistence offline">SAVE OFFLINE</span><button id="collisionEditorToggle" type="button">EDIT: OFF</button></div></div>
+  <section id="collisionEditor" class="panel collision-editor" hidden aria-label="Static map editor">
+    <div class="collision-editor-header"><strong>STATIC MAP EDITOR</strong><div class="collision-editor-header-actions"><span id="collisionEditorPersistence" class="collision-editor-persistence offline">SAVE OFFLINE</span><button id="collisionEditorToggle" type="button">EDIT: OFF</button></div></div>
     <label>OBJECT<select id="collisionEditorObject" aria-label="Static object"></select></label>
+    <label>MODE<select id="collisionEditorMode" aria-label="Editing mode"><option value="transform">MOVE / ROTATE</option><option value="collision">COLLISION SHAPE</option></select></label>
     <div class="collision-editor-actions">
-      <button id="collisionEditorSave" type="button">SAVE JSON</button>
-      <button id="collisionEditorCopy" type="button">COPY JSON</button>
-      <button id="collisionEditorReset" type="button">RESET</button>
+      <button id="collisionEditorSave" type="button">SAVE PLACEMENT</button>
+      <button id="collisionEditorCopy" type="button">COPY PLACEMENT</button>
+      <button id="collisionEditorReset" type="button">RESET PLACEMENT</button>
       <button id="collisionEditorDelete" type="button">DELETE POINT</button>
     </div>
     <pre id="collisionEditorStatus" class="collision-editor-status"></pre>
@@ -117,6 +119,6 @@
     </div>
   </div>
   <div id="loading" class="loading"><div><h1>DUSTY ORBIT</h1><p id="loadingText">LOADING MULTIPLAYER ASSETS…</p><div class="track"><div id="loadingBar" class="bar"></div></div></div></div>
-  <script type="module" src="./game.js?v=20260813-36"></script>
+  <script type="module" src="./game.js?v=20260813-38"></script>
 </body>
 </html>

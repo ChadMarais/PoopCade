@@ -1,7 +1,7 @@
 import { supabase } from "./supabase-config.js";
 import { getCurrentUser, getMyBests } from "./auth.js";
 
-const ALLOWED_DIFFICULTIES = new Set(["All", "Easy", "Medium", "Hard"]);
+const ALLOWED_DIFFICULTIES = new Set(["All", "Easy", "Medium", "Hard", "Standard", "Arena"]);
 
 export async function getLeaderboard(gameSlug = "orbit-shift", difficulty = "All", limit = 50) {
   const selectedDifficulty = ALLOWED_DIFFICULTIES.has(difficulty) ? difficulty : "All";
@@ -41,6 +41,9 @@ function renderRows(body, entries, gameSlug) {
     addCell(row, Number(entry.score).toLocaleString(), "score-cell");
     if (gameSlug === "next") {
       addCell(row, formatAchievedAt(entry.achieved_at), "difficulty-cell");
+    } else if (gameSlug === "dusty-orbit") {
+      addCell(row, Math.max(0, Number(entry.level) - 1).toLocaleString(), "level-cell");
+      addCell(row, formatAchievedAt(entry.achieved_at), "difficulty-cell");
     } else {
       addCell(row, entry.level, "level-cell");
       addCell(row, entry.difficulty, "difficulty-cell");
@@ -79,7 +82,11 @@ async function renderOwnBest(page, difficulty, gameSlug) {
       return;
     }
     score.textContent = Number(best.score).toLocaleString();
-    meta.textContent = gameSlug === "next" ? `Challenge ${best.level} reached` : `${best.difficulty} · Level ${best.level}`;
+    meta.textContent = gameSlug === "next"
+      ? `Challenge ${best.level} reached`
+      : gameSlug === "dusty-orbit"
+        ? `${Math.max(0, Number(best.level) - 1).toLocaleString()} total kills in that arena session`
+        : `${best.difficulty} · Level ${best.level}`;
   } catch {
     setVisible(signedOut, true);
   }

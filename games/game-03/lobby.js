@@ -3,7 +3,7 @@ import { CHARACTER_SKINS, DEFAULT_CHARACTER_SKIN_ID, characterSkinById, enabledC
 const STORAGE_KEY = "poopcade.game03.skin";
 
 function score(value) {
-  const number = Number(value) || 0;
+  const number = Math.max(0, Number(value) || 0);
   return number > 0 ? `+${number}` : String(number);
 }
 

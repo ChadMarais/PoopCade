@@ -164,10 +164,11 @@ function bindAccountControl(root) {
 function renderBestCards(container, bests) {
   container.replaceChildren();
   const isNext = container.dataset.game === "next";
+  const isDusty = container.dataset.game === "dusty-orbit";
   if (!bests.length) {
     const empty = document.createElement("p");
     empty.className = "empty-copy";
-    empty.textContent = isNext ? "No saved runs yet. The machine is waiting." : "No saved runs yet. The orbit awaits.";
+    empty.textContent = isNext ? "No saved runs yet. The machine is waiting." : isDusty ? "No saved arena score yet. The dust awaits." : "No saved runs yet. The orbit awaits.";
     container.append(empty);
     return;
   }
@@ -177,11 +178,11 @@ function renderBestCards(container, bests) {
     card.className = "best-card";
 
     const difficulty = document.createElement("span");
-    difficulty.textContent = isNext ? "Challenges" : best.difficulty;
+    difficulty.textContent = isNext ? "Challenges" : isDusty ? "Arena score" : best.difficulty;
     const score = document.createElement("strong");
     score.textContent = Number(best.score).toLocaleString();
     const meta = document.createElement("small");
-    meta.textContent = isNext ? `Challenge ${best.level} reached` : `Level ${best.level}`;
+    meta.textContent = isNext ? `Challenge ${best.level} reached` : isDusty ? `${Math.max(0, Number(best.level) - 1).toLocaleString()} total kills` : `Level ${best.level}`;
 
     card.append(difficulty, score, meta);
     container.append(card);
@@ -206,10 +207,11 @@ async function renderAccountPage(page) {
       return;
     }
 
-    const [profile, orbitBests, nextBests] = await Promise.all([
+    const [profile, orbitBests, nextBests, dustyBests] = await Promise.all([
       getMyProfile(),
       getMyBests("orbit-shift"),
       getMyBests("next"),
+      getMyBests("dusty-orbit"),
     ]);
     const displayName = profile?.display_name ?? "Poopcade Player";
     page.querySelectorAll("[data-page-display-name]").forEach((element) => {
@@ -219,8 +221,10 @@ async function renderAccountPage(page) {
     if (input) input.value = displayName;
     const orbitContainer = page.querySelector('[data-my-bests][data-game="orbit-shift"]');
     const nextContainer = page.querySelector('[data-my-bests][data-game="next"]');
+    const dustyContainer = page.querySelector('[data-my-bests][data-game="dusty-orbit"]');
     if (orbitContainer) renderBestCards(orbitContainer, orbitBests);
     if (nextContainer) renderBestCards(nextContainer, nextBests);
+    if (dustyContainer) renderBestCards(dustyContainer, dustyBests);
     setVisible(signedIn, true);
   } catch {
     setMessage(pageError, "Your account could not be loaded. Please try again.");

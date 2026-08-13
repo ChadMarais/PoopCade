@@ -429,7 +429,7 @@ export class DustyOrbitSimulation {
     const killer = this.players.get(killerId);
     const deathX = victim.x, deathY = victim.y;
     victim.alive = false; victim.hp = 0; victim.vx = victim.vy = 0; victim.deaths++;
-    victim.killScore--;
+    victim.killScore = Math.max(0, victim.killScore - 1);
     victim.weaponTier = Math.max(DUSTY_GAMEPLAY.minWeaponTier, victim.weaponTier - 1);
     victim.spyUntil = 0; victim.speedUntil = 0; victim.shieldHits = 0; victim.moleMode = false; victim.connectedSatelliteId = null;
     victim.moleUntil = 0; victim.moleForceAt = 0; victim.burstRemaining = 0; victim.suppressFireUntilRelease = false;
@@ -651,7 +651,7 @@ export class DustyOrbitSimulation {
     const serializePlayer = (player: DustyPlayer) => ({
       id: player.id, name: player.name, x: round(player.x), y: round(player.y), vx: Math.round(player.vx), vy: Math.round(player.vy),
       aimX: round(player.aimX, 1000), aimY: round(player.aimY, 1000), hp: player.hp, kills: player.kills,
-      deaths: player.deaths, killScore: player.killScore, skinId: player.skinId, joinedAt: player.joinedAt,
+      deaths: player.deaths, killScore: Math.max(0, player.killScore), skinId: player.skinId, joinedAt: player.joinedAt,
       weaponTier: player.weaponTier, nukeProgress: player.nukeProgress,
       nukeReady: player.nukeReady, shieldHits: player.shieldHits, spyRemaining: Math.max(0, player.spyUntil - now),
       speedRemaining: Math.max(0, player.speedUntil - now), moleMode: player.moleMode,
@@ -692,12 +692,12 @@ export class DustyOrbitSimulation {
 
   lobbyState(now = Date.now()): Record<string, unknown> {
     const players = [...this.players.values()]
-      .sort((a, b) => b.killScore - a.killScore || b.kills - a.kills || a.joinOrder - b.joinOrder || a.id.localeCompare(b.id))
+      .sort((a, b) => Math.max(0, b.killScore) - Math.max(0, a.killScore) || b.kills - a.kills || a.joinOrder - b.joinOrder || a.id.localeCompare(b.id))
       .map((player) => ({
         id: player.id,
         name: player.name,
         skinId: player.skinId,
-        killScore: player.killScore,
+        killScore: Math.max(0, player.killScore),
         kills: player.kills,
         joinedAt: player.joinedAt,
       }));

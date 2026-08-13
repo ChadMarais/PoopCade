@@ -153,7 +153,7 @@ test("three authoritative hits kill, preserve the killer counter, and respawn af
   }
   assert.equal(victim.alive, false);
   assert.equal(victim.hp, 0);
-  assert.equal(victim.killScore, -1);
+  assert.equal(victim.killScore, 0);
   assert.equal(attacker.kills, 1);
   const deathEvent = simulation.drainEvents().find((event) => event.type === "death") as { x?: number; y?: number } | undefined;
   assert.deepEqual({ x: deathEvent?.x, y: deathEvent?.y }, { x: 1650, y: 931 });

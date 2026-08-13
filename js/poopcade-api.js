@@ -20,10 +20,15 @@ export function submitNextRun(run) {
   return submitGameRun("next", run);
 }
 
+export function submitDustyOrbitRun(run) {
+  return submitGameRun("dusty-orbit", run);
+}
+
 export const PoopcadeAPI = Object.freeze({
   getCurrentUser,
   submitOrbitShiftRun,
   submitNextRun,
+  submitDustyOrbitRun,
 });
 
 window.PoopcadeAPI = PoopcadeAPI;

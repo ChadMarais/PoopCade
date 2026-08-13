@@ -1,13 +1,14 @@
-import { moveCircleWithSliding } from "./collision-geometry.js?v=20260813";
-import { CollisionEditor } from "./collision-editor.js?v=20260813-8";
-import { loadDustyOrbitAssets } from "./assets.js?v=20260813-11";
+import { moveCircleWithSliding } from "./collision-geometry.js?v=20260813-2";
+import { CollisionEditor } from "./collision-editor.js?v=20260813-9";
+import { loadDustyOrbitAssets } from "./assets.js?v=20260813-12";
 import { PRODUCTION_ARENA_WSS } from "./config.js?v=20260812";
-import { DustyOrbitMultiplayerRenderer } from "./renderer.js?v=20260813-22";
+import { DustyOrbitMultiplayerRenderer } from "./renderer.js?v=20260813-23";
 import { InputController } from "./input.js?v=20260813-3";
 import { claimSessionIdentity, resolvePoopcadePlayerIdentity } from "./identity.js?v=20260813-2";
 import { ArenaNetwork } from "./network.js?v=20260813";
 import { consumeFixedStep, convergeVisualPosition } from "./timing.js?v=20260813-2";
-import { DustyLobby } from "./lobby.js?v=20260813";
+import { DustyLobby } from "./lobby.js?v=20260813-2";
+import { DustyOrbitHighscoreTracker } from "./highscore.js?v=20260813";
 
 const INPUT_RATE = 30;
 const INPUT_DT = 1 / INPUT_RATE;
@@ -53,6 +54,8 @@ const identity = await claimSessionIdentity();
 const { sessionId, guestName } = identity;
 const poopcadeIdentity = await resolvePoopcadePlayerIdentity(guestName);
 const { playerName, accessToken, authenticated } = poopcadeIdentity;
+const scoreApi = authenticated ? await import("/js/poopcade-api.js").catch(() => null) : null;
+const guestAnalytics = authenticated ? null : await import("/js/guest-analytics.js").catch(() => null);
 const canvas = document.querySelector("#world");
 const loading = document.querySelector("#loading");
 const loadingBar = document.querySelector("#loadingBar");
@@ -94,6 +97,7 @@ const collisionEditor = debugMode ? new CollisionEditor({
   input,
   panel: document.querySelector("#collisionEditor"),
   select: document.querySelector("#collisionEditorObject"),
+  mode: document.querySelector("#collisionEditorMode"),
   toggle: document.querySelector("#collisionEditorToggle"),
   copy: document.querySelector("#collisionEditorCopy"),
   save: document.querySelector("#collisionEditorSave"),
@@ -138,6 +142,13 @@ const eventLines = [];
 let nukeQueuedUntil = 0;
 let localSpeedBoostUntil = 0;
 let network;
+let highscoreStatus = authenticated ? "READY" : "SIGN IN TO SAVE";
+const highscoreTracker = new DustyOrbitHighscoreTracker({
+  authenticated,
+  submit: scoreApi?.submitDustyOrbitRun,
+  recordGuest: guestAnalytics?.recordRun,
+  onStatus(status) { highscoreStatus = status; },
+});
 
 const lobby = new DustyLobby(document.querySelector("#lobby"), {
   playerName,
@@ -172,6 +183,7 @@ network = new ArenaNetwork({
       sendAccumulator = 0;
       inputStepTimes.length = 0;
       localSpeedBoostUntil = 0;
+      highscoreTracker.reset();
       applicationState = state === "connecting" ? "CONNECTING" : "DISCONNECTED";
       lobby.setApplicationState(applicationState);
       lobby.show();
@@ -231,7 +243,9 @@ network = new ArenaNetwork({
     }
     if (message.type === "snapshot") {
       for (const player of message.players || []) preloadCharacterSkin(player.skinId);
-      latestSnapshot = message; reconcile(message); return;
+      latestSnapshot = message;
+      highscoreTracker.observe(message.players?.find((item) => item.id === localId));
+      reconcile(message); return;
     }
     if (message.type === "shot") {
       const localShot = message.playerId === localId;
@@ -384,6 +398,7 @@ function updateHud(snapshot) {
     `SHIELD: ${player?.shieldHits ? "YES" : "NO"}`,
     `WEAPON: T${player?.weaponTier || 1} ${weapon?.name || "PEA SHOOTER"}`,
     `SCORE: ${player?.killScore ?? 0}`,
+    `HIGHSCORE: ${highscoreStatus}`,
     `NUKE: ${player?.nukeReady ? "READY" : `${player?.nukeProgress ?? 0}/${gameplay.nukeRequirement}`}`,
     ...effects,
   ].join("\n");

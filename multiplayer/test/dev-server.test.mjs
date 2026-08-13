@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import test from "node:test";
-import { COLLISION_ASSET_PATHS, createDustyDevServer } from "../../tools/dusty-dev-server.mjs";
+import { COLLISION_ASSET_PATHS, createDustyDevServer, replaceMapPlacementSource, validateMapPlacement } from "../../tools/dusty-dev-server.mjs";
 
 function listen(server) {
   return new Promise((resolve, reject) => {
@@ -16,12 +16,15 @@ function close(server) {
   return new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
 }
 
-test("local authoring server saves only canonical collision JSON definitions", async () => {
+test("local authoring server saves canonical collision and map placement code", async () => {
   const root = await mkdtemp(join(tmpdir(), "dusty-authoring-"));
   const relativePath = COLLISION_ASSET_PATHS["satellite-relay-01-left"];
   const target = join(root, relativePath);
   await mkdir(dirname(target), { recursive: true });
   await writeFile(target, "{}\n", "utf8");
+  const mapPath = join(root, "games/game-03/map.js");
+  const mapSource = 'export const ROCK_INSTANCES = Object.freeze([\n  Object.freeze({ id: "ROCK A", assetId: "rock-cluster-01", x: 650, y: 450, width: 240, height: 240 }),\n]);\n';
+  await writeFile(mapPath, mapSource, "utf8");
   await writeFile(join(root, "index.html"), "<!doctype html><title>Dusty QA</title>", "utf8");
   const server = createDustyDevServer({ root, logger: { error() {} } });
   const port = await listen(server);
@@ -47,6 +50,16 @@ test("local authoring server saves only canonical collision JSON definitions", a
     assert.deepEqual(await response.json(), { ok: true, assetId: definition.id, path: relativePath });
     assert.deepEqual(JSON.parse(await readFile(target, "utf8")), definition);
 
+    const placementResponse = await fetch(`http://127.0.0.1:${port}/__dusty-orbit/save-placement`, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain;charset=UTF-8", Origin: `http://localhost:${port}` },
+      body: JSON.stringify({ placement: { id: "ROCK A", x: 712.34, y: 488.76, rotation: 405 } }),
+    });
+    assert.equal(placementResponse.status, 200);
+    const placementResult = await placementResponse.json();
+    assert.deepEqual(placementResult.placement, { id: "ROCK A", x: 712.3, y: 488.8, rotation: 45 });
+    assert.match(await readFile(mapPath, "utf8"), /id: "ROCK A".*x: 712\.3, y: 488\.8.*rotation: 45/);
+
     const rejected = await fetch(`http://127.0.0.1:${port}/__dusty-orbit/save-collision`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Origin: "https://example.com" },
@@ -61,4 +74,16 @@ test("local authoring server saves only canonical collision JSON definitions", a
     await close(server);
     await rm(root, { recursive: true, force: true });
   }
+});
+
+test("map placement serialization is bounded and only rewrites the selected instance", () => {
+  assert.deepEqual(validateMapPlacement({ id: "ROCK B", x: 100, y: 200, rotation: -540 }), { id: "ROCK B", x: 100, y: 200, rotation: -180 });
+  assert.throws(() => validateMapPlacement({ id: "UNKNOWN", x: 100, y: 200, rotation: 0 }), /Unknown map instance/);
+  const source = [
+    '  Object.freeze({ id: "ROCK A", assetId: "rock-cluster-01", x: 650, y: 450, width: 240, height: 240 }),',
+    '  Object.freeze({ id: "ROCK B", assetId: "rock-cluster-01", x: 1350, y: 420, width: 320, height: 320, rotation: 5 }),',
+  ].join("\n");
+  const updated = replaceMapPlacementSource(source, { id: "ROCK B", x: 1400, y: 500, rotation: 25 });
+  assert.match(updated, /ROCK A.*x: 650, y: 450/);
+  assert.match(updated, /ROCK B.*x: 1400, y: 500.*rotation: 25/);
 });

@@ -1,11 +1,16 @@
 import { createReadStream } from "node:fs";
-import { stat, writeFile } from "node:fs/promises";
+import { readFile, stat, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { dirname, extname, relative, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const REPOSITORY_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const MAX_BODY_BYTES = 256 * 1024;
+const MAP_SOURCE_PATH = "games/game-03/map.js";
+const MAP_INSTANCE_IDS = new Set([
+  "ROCK A", "ROCK B", "ROCK C", "ROCK D", "ROCK E", "ROCK F",
+  "SATELLITE RELAY WEST", "SATELLITE RELAY EAST",
+]);
 
 export const COLLISION_ASSET_PATHS = Object.freeze({
   "rock-cluster-01": "games/game-03/assets/dusty-orbit/rocks/rock-cluster-01.json",
@@ -91,13 +96,76 @@ async function saveCollisionDefinition(request, response, root) {
   jsonResponse(response, 200, { ok: true, assetId: payload.assetId, path: relativePath });
 }
 
+function rounded(value) {
+  return Math.round(value * 10) / 10;
+}
+
+function normalizedRotation(value) {
+  const normalized = ((value % 360) + 540) % 360 - 180;
+  return Object.is(normalized, -0) ? 0 : rounded(normalized);
+}
+
+export function validateMapPlacement(placement) {
+  if (!placement || typeof placement !== "object" || Array.isArray(placement)) throw new Error("Placement must be an object.");
+  if (!MAP_INSTANCE_IDS.has(placement.id)) throw new Error("Unknown map instance.");
+  if (!Number.isFinite(placement.x) || placement.x < 0 || placement.x > 3200 || !Number.isFinite(placement.y) || placement.y < 0 || placement.y > 2000) {
+    throw new Error("Map placement must stay inside the Dusty Orbit world.");
+  }
+  if (!Number.isFinite(placement.rotation)) throw new Error("Map rotation must be finite.");
+  return { id: placement.id, x: rounded(placement.x), y: rounded(placement.y), rotation: normalizedRotation(placement.rotation) };
+}
+
+function escapedRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+export function replaceMapPlacementSource(source, candidate) {
+  const placement = validateMapPlacement(candidate);
+  const id = escapedRegExp(JSON.stringify(placement.id));
+  const linePattern = new RegExp(`^([ \\t]*Object\\.freeze\\(\\{[^\\r\\n]*id:\\s*${id}[^\\r\\n]*\\}\\),?)[ \\t]*$`, "m");
+  const match = source.match(linePattern);
+  if (!match) throw new Error("Map instance was not found in the canonical map source.");
+  let replacement = match[1]
+    .replace(/,\s*x:\s*-?\d+(?:\.\d+)?/, `, x: ${placement.x}`)
+    .replace(/,\s*y:\s*-?\d+(?:\.\d+)?/, `, y: ${placement.y}`);
+  if (/,\s*rotation:\s*-?\d+(?:\.\d+)?/.test(replacement)) {
+    replacement = replacement.replace(/,\s*rotation:\s*-?\d+(?:\.\d+)?/, `, rotation: ${placement.rotation}`);
+  } else {
+    replacement = replacement.replace(/(,\s*height:\s*-?\d+(?:\.\d+)?)(\s*\}\),?)$/, `$1, rotation: ${placement.rotation}$2`);
+  }
+  if (!replacement.includes(`x: ${placement.x}`) || !replacement.includes(`y: ${placement.y}`) || !replacement.includes(`rotation: ${placement.rotation}`)) {
+    throw new Error("Map placement source could not be updated safely.");
+  }
+  return source.replace(linePattern, replacement);
+}
+
+async function saveMapPlacement(request, response, root) {
+  if (!localAuthoringOrigin(request.headers.origin)) {
+    jsonResponse(response, 403, { ok: false, error: "Map authoring is restricted to localhost." });
+    return;
+  }
+  if (request.headers.origin) response.setHeader("Access-Control-Allow-Origin", request.headers.origin);
+  let placement;
+  try {
+    const payload = JSON.parse(await requestBody(request));
+    placement = validateMapPlacement(payload?.placement);
+  } catch (error) {
+    jsonResponse(response, error.statusCode || 400, { ok: false, error: error.message });
+    return;
+  }
+  const target = resolve(root, MAP_SOURCE_PATH);
+  const source = await readFile(target, "utf8");
+  await writeFile(target, replaceMapPlacementSource(source, placement), "utf8");
+  jsonResponse(response, 200, { ok: true, instanceId: placement.id, path: MAP_SOURCE_PATH, placement });
+}
+
 function authoringHealth(request, response) {
   if (!localAuthoringOrigin(request.headers.origin)) {
     jsonResponse(response, 403, { ok: false, error: "Collision authoring is restricted to localhost." });
     return;
   }
   if (request.headers.origin) response.setHeader("Access-Control-Allow-Origin", request.headers.origin);
-  jsonResponse(response, 200, { ok: true, service: "dusty-collision-authoring", writableAssets: Object.keys(COLLISION_ASSET_PATHS) });
+  jsonResponse(response, 200, { ok: true, service: "dusty-collision-authoring", writableAssets: Object.keys(COLLISION_ASSET_PATHS), writableMap: MAP_SOURCE_PATH });
 }
 
 function safeStaticPath(root, pathname) {
@@ -147,6 +215,10 @@ export function createDustyDevServer({ root = REPOSITORY_ROOT, logger = console 
         await saveCollisionDefinition(request, response, resolvedRoot);
         return;
       }
+      if (request.method === "POST" && url.pathname === "/__dusty-orbit/save-placement") {
+        await saveMapPlacement(request, response, resolvedRoot);
+        return;
+      }
       if (request.method !== "GET" && request.method !== "HEAD") {
         response.writeHead(405, { Allow: "GET, HEAD, POST" }).end("Method not allowed");
         return;
@@ -166,7 +238,7 @@ if (isMain) {
   const port = 8081;
   const server = createDustyDevServer();
   server.listen(port, host, () => {
-    console.log(`Dusty Orbit collision authoring helper: http://localhost:${port}`);
-    console.log("Collision Save JSON writes directly to the canonical repository asset files.");
+    console.log(`Dusty Orbit map authoring helper: http://localhost:${port}`);
+    console.log("Save writes collision JSON or instance placement directly to the canonical repository files.");
   });
 }

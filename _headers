@@ -34,6 +34,12 @@
 /leaderboard/orbit-shift/index.html
   Cache-Control: no-cache
 
+/leaderboard/dusty-orbit/
+  Cache-Control: no-cache
+
+/leaderboard/dusty-orbit/index.html
+  Cache-Control: no-cache
+
 /privacy/
   Cache-Control: no-cache
 

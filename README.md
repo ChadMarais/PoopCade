@@ -43,19 +43,19 @@ When testing service-worker changes, use the browser's Application/Storage devel
 
 - `index.html` links the manifest, exposes the install prompt when supported, and registers the root-scoped service worker.
 - `manifest.webmanifest` defines standalone, portrait-first behavior and the intended production icon paths.
-- `service-worker.js` precaches the homepage, ORBIT//SHIFT, NEXT., and both leaderboard pages. Navigations are network-first so updated HTML is preferred, with cached pages and the homepage as offline fallbacks. Same-origin static assets use stale-while-revalidate behavior, except Game 03 resources, which are network-first to prevent incompatible multiplayer builds from being mixed by an older cache.
+- `service-worker.js` precaches the homepage, ORBIT//SHIFT, NEXT., and all three leaderboard pages. Navigations are network-first so updated HTML is preferred, with cached pages and the homepage as offline fallbacks. Same-origin static assets use stale-while-revalidate behavior, except Game 03 resources, which are network-first to prevent incompatible multiplayer builds from being mixed by an older cache.
 - Missing optional icon files are ignored during service-worker installation, so they cannot prevent the offline shell from installing.
 - Supabase API, authentication, Edge Function, and leaderboard responses are never cached by the service worker.
 
 ## Accounts and leaderboards
 
-Guest play remains the default. Players may optionally sign in with Google, choose a separate public gamer name, save ORBIT//SHIFT and NEXT. runs, and sync personal bests across devices.
+Guest play remains the default. Players may optionally sign in with Google, choose a separate public gamer name, save ORBIT//SHIFT, NEXT., and DUSTY ORBIT runs, and sync personal bests across devices. DUSTY ORBIT submits each newly reached positive arena-score high from the server-reported player snapshot, so a later death penalty cannot erase a previously saved best.
 
 The browser uses one Supabase client from `js/supabase-config.js`, with `@supabase/supabase-js` pinned to version `2.111.0`. The publishable browser key in that file is not a secret. Never add a secret key, service-role key, database password, OAuth client secret, or access token to frontend code or source control.
 
 The backend foundation is source-only and has not been deployed. Before accounts work in production:
 
-1. Apply `supabase/migrations/20260808_initial_poocade.sql` and later migrations in timestamp order, including `20260809133000_add_next_game.sql` for NEXT.
+1. Apply `supabase/migrations/20260808_initial_poocade.sql` and later migrations in timestamp order, including `20260809133000_add_next_game.sql` for NEXT. and `20260813190000_add_dusty_orbit_highscores.sql` for DUSTY ORBIT.
 2. Deploy the `submit-run` Edge Function with JWT verification enabled.
 3. Enable Google under Supabase Authentication providers and configure its real Google OAuth client ID and secret in the dashboard.
 4. Set the Supabase Site URL and redirect allow list to `https://poopcade.com/`.
@@ -81,7 +81,7 @@ The repository is configured for Cloudflare Workers Static Assets:
 - Worker JavaScript entry point: none
 - Static asset directory: repository root (`.`)
 - Upload exclusions: `.assetsignore` (including `android/` and `supabase/` source)
-- Production routes include `/`, `/games/orbit-shift/`, `/games/next/`, `/games/game-03/`, `/leaderboard/orbit-shift/`, `/leaderboard/next/`, and `/account/`. Game 03 is linked from the homepage only when the query contains exactly `devtest=true`.
+- Production routes include `/`, `/games/orbit-shift/`, `/games/next/`, `/games/game-03/`, `/leaderboard/orbit-shift/`, `/leaderboard/next/`, `/leaderboard/dusty-orbit/`, and `/account/`. Game 03 is linked from the homepage only when the query contains exactly `devtest=true`.
 - Custom response headers: `_headers`
 
 No Content Security Policy is set yet because the current homepage and game use inline CSS and JavaScript, and the game uses WebAudio. A CSP should be designed and tested separately rather than added in a way that breaks the application.

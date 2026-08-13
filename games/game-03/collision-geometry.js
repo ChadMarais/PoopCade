@@ -4,12 +4,21 @@ export function transformNormalizedPolygon(definition, instance) {
   const { width, height, x, y } = instance;
   const left = x - definition.anchor.x * width;
   const top = y - definition.anchor.y * height;
+  const rotation = (Number(instance.rotation) || 0) * Math.PI / 180;
+  const cosine = Math.cos(rotation);
+  const sine = Math.sin(rotation);
   const normalizedPoints = definition.collision?.points ?? definition.collisionPolygon;
   if (!Array.isArray(normalizedPoints)) throw new Error(`Asset ${definition.id || "unknown"} has no normalized collision polygon.`);
-  return normalizedPoints.map((point) => ({
-    x: left + point.x * width,
-    y: top + point.y * height,
-  }));
+  return normalizedPoints.map((point) => {
+    const unrotatedX = left + point.x * width;
+    const unrotatedY = top + point.y * height;
+    const offsetX = unrotatedX - x;
+    const offsetY = unrotatedY - y;
+    return {
+      x: x + offsetX * cosine - offsetY * sine,
+      y: y + offsetX * sine + offsetY * cosine,
+    };
+  });
 }
 
 export function collisionBlocksMovement(definition) {
@@ -22,7 +31,8 @@ export function collisionBlocksProjectiles(definition) {
 
 export function depthSortY(definition, instance) {
   const normalizedY = definition.depthSortAnchor?.y ?? definition.depth?.sortAnchorY ?? definition.anchor.y;
-  return instance.y + (normalizedY - definition.anchor.y) * instance.height;
+  const rotation = (Number(instance.rotation) || 0) * Math.PI / 180;
+  return instance.y + (normalizedY - definition.anchor.y) * instance.height * Math.cos(rotation);
 }
 
 export function polygonSignedArea(points) {

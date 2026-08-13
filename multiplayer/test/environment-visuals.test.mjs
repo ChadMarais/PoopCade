@@ -27,3 +27,29 @@ test("east relay renders as a horizontal mirror around its world anchor", () => 
     ["restore"],
   ]);
 });
+
+test("map instance orientation rotates artwork around its canonical anchor", () => {
+  const calls = [];
+  const renderer = Object.create(DustyOrbitMultiplayerRenderer.prototype);
+  renderer.camera = { x: 100, y: 200 };
+  renderer.viewport = { width: 1200, height: 800 };
+  renderer.ctx = {
+    save: () => calls.push(["save"]),
+    translate: (x, y) => calls.push(["translate", x, y]),
+    rotate: (angle) => calls.push(["rotate", angle]),
+    drawImage: (...args) => calls.push(["drawImage", ...args]),
+    restore: () => calls.push(["restore"]),
+  };
+  const image = {};
+  renderer.drawEnvironmentObject({
+    id: "ROCK A", kind: "rock", x: 650, y: 450, rotation: 90,
+    width: 240, height: 240, image, definition: {},
+  }, false);
+  assert.deepEqual(calls, [
+    ["save"],
+    ["translate", 550, 250],
+    ["rotate", Math.PI / 2],
+    ["drawImage", image, -120, -120, 240, 240],
+    ["restore"],
+  ]);
+});

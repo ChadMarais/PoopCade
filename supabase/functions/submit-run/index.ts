@@ -4,7 +4,7 @@ const PRODUCTION_ORIGIN = "https://poopcade.com";
 const MAX_BODY_BYTES = 16_384;
 const MAX_DURATION_MS = 6 * 60 * 60 * 1000;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const GAME_SLUGS = new Set(["orbit-shift", "next"]);
+const GAME_SLUGS = new Set(["orbit-shift", "next", "dusty-orbit"]);
 const ORBIT_DIFFICULTIES = new Set(["Easy", "Medium", "Hard"]);
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL");
@@ -25,10 +25,10 @@ const supabaseAdmin = createClient(supabaseUrl, serverCredential, {
 });
 
 type RunPayload = {
-  gameSlug: "orbit-shift" | "next";
+  gameSlug: "orbit-shift" | "next" | "dusty-orbit";
   clientRunId: string;
   score: number;
-  difficulty: "Easy" | "Medium" | "Hard" | "Standard";
+  difficulty: "Easy" | "Medium" | "Hard" | "Standard" | "Arena";
   level: number;
   gates: number;
   styleBonuses: number;
@@ -103,13 +103,22 @@ function validatePayload(value: unknown): { data?: RunPayload; error?: string } 
     if (gates > Math.max(200, Math.floor(durationMs / 50))) return { error: "gate count is not plausible for the submitted duration." };
     if (styleBonuses > Math.max(20, Math.floor(durationMs / 500))) return { error: "style bonus count is not plausible for the submitted duration." };
     if (level > Math.floor(durationMs / 1_000) + 12) return { error: "level is not plausible for the submitted duration." };
-  } else {
+  } else if (gameSlug === "next") {
     if (difficulty !== "Standard") return { error: "NEXT. difficulty must be Standard." };
     if (score > 10_000 || level !== score + 1 || gates !== 0 || styleBonuses !== 0) {
       return { error: "NEXT. run values are inconsistent." };
     }
     if (durationMs < 400 || score > Math.floor(durationMs / 250) + 2) {
       return { error: "NEXT. run is not plausible for the submitted duration." };
+    }
+  } else {
+    const kills = level - 1;
+    if (difficulty !== "Arena") return { error: "DUSTY ORBIT difficulty must be Arena." };
+    if (score > 100_000 || kills > 100_000 || gates > 100_000 || styleBonuses !== 0 || score > kills) {
+      return { error: "DUSTY ORBIT run values are inconsistent." };
+    }
+    if (durationMs < 1_000 || kills > Math.floor(durationMs / 100) + 5 || gates > Math.floor(durationMs / 250) + 5) {
+      return { error: "DUSTY ORBIT run is not plausible for the submitted duration." };
     }
   }
 
