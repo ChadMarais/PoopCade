@@ -56,7 +56,7 @@ test("central weapon table defines the six requested tiers and range progression
   assert.equal(DUSTY_WEAPONS[5].speed * DUSTY_WEAPONS[5].lifetimeMs / 1000, 1200);
 });
 
-test("server schedules Burst rounds, enforces SMG cooldown, and creates the Shotgun fan", () => {
+test("server schedules Burst rounds, enforces SMG cooldown, and emits five collinear Shotgun rounds", () => {
   const simulation = fresh();
   const player = add(simulation, A, "Guest-1001");
   player.weaponTier = 3;
@@ -77,7 +77,65 @@ test("server schedules Burst rounds, enforces SMG cooldown, and creates the Shot
   simulation.applyInput(A, intent(7, { fire: true }), 1600); simulation.step(DUSTY_FIXED_DT, 1600);
   const shots = eventsOf(simulation, "shot") as Array<{ projectile: DustyProjectile }>;
   assert.equal(shots.length, 5);
-  assert.equal(new Set(shots.map((shot) => Math.round(Math.atan2(shot.projectile.vy, shot.projectile.vx) * 180 / Math.PI))).size, 5);
+  assert.equal(new Set(shots.map((shot) => Math.round(Math.atan2(shot.projectile.vy, shot.projectile.vx) * 1e9))).size, 1);
+});
+
+test("every ordinary bullet uses the exact live aim vector at its firing tick", () => {
+  const expected = { x: .28, y: -.96 };
+  for (const tier of [1, 2, 4, 6]) {
+    const simulation = fresh();
+    const player = add(simulation, A, "Guest-1001");
+    player.weaponTier = tier;
+    simulation.applyInput(A, intent(1, { aimX: expected.x, aimY: expected.y, fire: true }), 1000);
+    simulation.step(DUSTY_FIXED_DT, 1000);
+    const shot = eventsOf(simulation, "shot")[0] as { projectile: DustyProjectile };
+    const speed = Math.hypot(shot.projectile.vx, shot.projectile.vy);
+    assert.ok(Math.abs(shot.projectile.vx / speed - expected.x) < 1e-12, `tier ${tier} changed aim X`);
+    assert.ok(Math.abs(shot.projectile.vy / speed - expected.y) < 1e-12, `tier ${tier} changed aim Y`);
+  }
+});
+
+test("each Burst round re-reads the live aim instead of keeping the first round's direction", () => {
+  const simulation = fresh();
+  const player = add(simulation, A, "Guest-1001");
+  player.weaponTier = 3;
+  const aims = [{ x: 1, y: 0 }, { x: 0, y: -1 }, { x: -.6, y: .8 }];
+  for (const [index, aim] of aims.entries()) {
+    const now = 1000 + index * 100;
+    simulation.applyInput(A, intent(index + 1, { aimX: aim.x, aimY: aim.y, fire: true }), now);
+    simulation.step(DUSTY_FIXED_DT, now);
+    const shot = eventsOf(simulation, "shot")[0] as { projectile: DustyProjectile };
+    const speed = Math.hypot(shot.projectile.vx, shot.projectile.vy);
+    assert.ok(Math.abs(shot.projectile.vx / speed - aim.x) < 1e-12, `round ${index + 1} changed aim X`);
+    assert.ok(Math.abs(shot.projectile.vy / speed - aim.y) < 1e-12, `round ${index + 1} changed aim Y`);
+  }
+});
+
+test("every tier spawns every round at its exact muzzle and along its barrel", () => {
+  const directions = [
+    { x: 1, y: 0 },
+    { x: 0, y: 1 },
+    { x: -.8, y: -.6 },
+    { x: Math.SQRT1_2, y: -Math.SQRT1_2 },
+  ];
+  for (let tier = 1; tier <= 6; tier++) for (const aim of directions) {
+    const simulation = fresh();
+    const player = add(simulation, A, "Guest-1001");
+    player.weaponTier = tier;
+    simulation.applyInput(A, intent(1, { aimX: aim.x, aimY: aim.y, fire: true }), 1000);
+    simulation.step(DUSTY_FIXED_DT, 1000);
+    const shots = eventsOf(simulation, "shot") as Array<{ projectile: DustyProjectile }>;
+    const expectedMuzzle = weaponPose({ ...player, aimX: aim.x, aimY: aim.y }, weaponVisualForTier(tier)).muzzleWorld;
+    assert.equal(shots.length, tier === 5 ? 5 : 1, `tier ${tier} round count`);
+    for (const { projectile: shot } of shots) {
+      const speed = Math.hypot(shot.vx, shot.vy);
+      assert.ok(Math.abs(shot.x - expectedMuzzle.x) < 1e-9, `tier ${tier} muzzle X`);
+      assert.ok(Math.abs(shot.y - expectedMuzzle.y) < 1e-9, `tier ${tier} muzzle Y`);
+      assert.ok(Math.abs(shot.vx / speed - aim.x) < 1e-12, `tier ${tier} barrel X`);
+      assert.ok(Math.abs(shot.vy / speed - aim.y) < 1e-12, `tier ${tier} barrel Y`);
+      assert.equal(shot.inputSeq, 1);
+    }
+  }
 });
 
 test("Plasma is server-authored at tier 6 with two damage", () => {

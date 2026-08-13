@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { existsSync } from "node:fs";
+import { resolve } from "node:path";
 import { DustyOrbitMultiplayerRenderer } from "../../games/game-03/renderer.js";
 import { SHOULDER_SIDE_OFFSET, WEAPON_VISUALS, weaponPose, weaponVisualForTier } from "../../games/game-03/weapon-visuals.js";
 
@@ -7,13 +9,40 @@ function close(actual, expected, tolerance = .001) {
   assert.ok(Math.abs(actual - expected) <= tolerance, `${actual} should be within ${tolerance} of ${expected}`);
 }
 
-test("weapon visual table maps all six tiers and only Tier 1 requires production art", () => {
+test("weapon visual table maps all six tiers to production art", () => {
   assert.deepEqual(Object.keys(WEAPON_VISUALS), ["1", "2", "3", "4", "5", "6"]);
   assert.equal(WEAPON_VISUALS[1].id, "pea-shooter");
   assert.equal(WEAPON_VISUALS[1].kind, "sprite");
   assert.equal(WEAPON_VISUALS[1].asset, "peaShooter");
-  for (let tier = 2; tier <= 6; tier++) assert.equal(WEAPON_VISUALS[tier].kind, "procedural");
+  assert.equal(WEAPON_VISUALS[2].id, "pistol");
+  assert.equal(WEAPON_VISUALS[2].kind, "sprite");
+  assert.equal(WEAPON_VISUALS[2].asset, "pistol");
+  assert.deepEqual(
+    Object.values(WEAPON_VISUALS).map(({ id, kind, asset }) => ({ id, kind, asset })),
+    [
+      { id: "pea-shooter", kind: "sprite", asset: "peaShooter" },
+      { id: "pistol", kind: "sprite", asset: "pistol" },
+      { id: "burst", kind: "sprite", asset: "burst" },
+      { id: "smg", kind: "sprite", asset: "smg" },
+      { id: "shotgun", kind: "sprite", asset: "shotgun" },
+      { id: "plasma-cannon", kind: "sprite", asset: "plasmaCannon" },
+    ],
+  );
+  assert.equal(WEAPON_VISUALS[1].muzzle.x, .985);
+  for (let tier = 2; tier <= 6; tier++) assert.equal(WEAPON_VISUALS[tier].muzzle.x, .997);
+  for (const sprite of ["pea-shooter", "pistol", "burst", "smg", "shotgun", "plasma-cannon"]) {
+    assert.equal(existsSync(resolve("..", "games", "game-03", "assets", "weapons", `weapon-${sprite}.png`)), true);
+  }
   assert.equal(weaponVisualForTier(999), WEAPON_VISUALS[1]);
+});
+
+test("new production sprites preserve their authored projectile launch distances", () => {
+  const expectedDistances = new Map([[3, 36], [4, 36], [5, 36], [6, 42]]);
+  for (const [tier, expected] of expectedDistances) {
+    const visual = WEAPON_VISUALS[tier];
+    const distance = visual.forwardOffset + (visual.muzzle.x - visual.pivot.x) * visual.drawSize.width;
+    close(distance, expected, .01);
+  }
 });
 
 test("Pea Shooter stays right-side docked and muzzle-aligned through 360 degrees", () => {
@@ -33,7 +62,7 @@ test("Pea Shooter stays right-side docked and muzzle-aligned through 360 degrees
     close(muzzleDelta.x * forward.x + muzzleDelta.y * forward.y, expectedForward);
     close(muzzleDelta.x * perpendicular.x + muzzleDelta.y * perpendicular.y, expectedSide);
   }
-  close(expectedForward, 35.98);
+  close(expectedForward, 37.87);
   close(expectedSide, SHOULDER_SIDE_OFFSET);
 });
 
@@ -64,7 +93,9 @@ test("character drawing always completes before the shoulder weapon foreground p
 
 test("local confirmed shots stay on the currently rendered muzzle line without convergence", () => {
   const renderer = Object.create(DustyOrbitMultiplayerRenderer.prototype);
-  renderer.weaponPoses = new Map([["local", { muzzleWorld: { x: 411, y: 277 } }]]);
+  renderer.localPlayerId = "local";
+  renderer.pendingLocalShotConfirmations = [];
+  renderer.weaponPoses = new Map([["local", { muzzleWorld: { x: 411, y: 277 }, forward: { x: 1, y: 0 } }]]);
   renderer.weaponRecoil = new Map();
   renderer.effects = [];
   renderer.localProjectiles = new Map();
@@ -72,10 +103,146 @@ test("local confirmed shots stay on the currently rendered muzzle line without c
     playerId: "local",
     projectile: { id: 7, tier: 1, x: 400, y: 266, vx: 500, vy: 0, spawnedAt: 1000, expiresAt: 1500 },
   }, true);
+  assert.equal(renderer.localProjectiles.size, 0, "the network callback must not use a cached muzzle pose");
+  renderer.flushLocalShotConfirmations();
   const shot = renderer.localProjectiles.get(7);
   assert.deepEqual({ x: shot.startX, y: shot.startY }, { x: 411, y: 277 });
+  assert.equal(shot.firstFrame, true);
   assert.equal("visualOffsetX" in shot, false);
   assert.equal("convergeMs" in shot, false);
+});
+
+test("network transit never fast-forwards a bullet away from its muzzle", () => {
+  const renderer = Object.create(DustyOrbitMultiplayerRenderer.prototype);
+  renderer.localPlayerId = "local";
+  renderer.pendingLocalShotConfirmations = [];
+  renderer.weaponPoses = new Map([["local", { muzzleWorld: { x: 411, y: 277 }, forward: { x: 1, y: 0 } }]]);
+  renderer.weaponRecoil = new Map();
+  renderer.effects = [];
+  renderer.localProjectiles = new Map();
+  const beforeConfirmation = performance.now();
+  const oldServerTime = Date.now() - 500;
+  renderer.confirmShot({
+    playerId: "local",
+    projectile: { id: 70, tier: 1, x: 400, y: 266, vx: 500, vy: 0, spawnedAt: oldServerTime, expiresAt: oldServerTime + 750 },
+  }, true);
+  renderer.flushLocalShotConfirmations();
+  const shot = renderer.localProjectiles.get(70);
+  assert.ok(shot.born >= beforeConfirmation, "the visual projectile must start now, not at the server's historical timestamp");
+  assert.deepEqual({ x: shot.startX, y: shot.startY }, { x: 411, y: 277 });
+});
+
+test("the first rendered projectile sample is exactly the nozzle coordinate", () => {
+  const renderer = Object.create(DustyOrbitMultiplayerRenderer.prototype);
+  renderer.localProjectiles = new Map([[72, {
+    id: 72,
+    startX: 411,
+    startY: 277,
+    previousX: 411,
+    previousY: 277,
+    vx: 500,
+    vy: 0,
+    born: performance.now() - 250,
+    life: 750,
+    firstFrame: true,
+  }]]);
+  renderer.lastLocalLaunch = { projectileId: 72, muzzleWorld: { x: 411, y: 277 }, direction: { x: 1, y: 0 }, firstRenderError: null };
+  let drawn = null;
+  renderer.drawProjectiles = (projectiles) => { drawn = projectiles[0]; };
+  renderer.drawLocalProjectiles();
+  assert.deepEqual({ x: drawn.x, y: drawn.y }, { x: 411, y: 277 });
+  assert.deepEqual({ x: drawn.trailStartX, y: drawn.trailStartY }, { x: 411, y: 277 });
+  assert.equal(renderer.lastLocalLaunch.firstRenderError, 0);
+  assert.equal(renderer.localProjectiles.get(72).firstFrame, false);
+
+  const stored = renderer.localProjectiles.get(72);
+  stored.born = performance.now() - 16;
+  renderer.drawLocalProjectiles();
+  assert.ok(drawn.x > 411, "the second frame advances forward");
+  assert.deepEqual({ x: drawn.trailStartX, y: drawn.trailStartY }, { x: 411, y: 277 });
+});
+
+test("movement during confirmation delay still launches from the currently visible aligned muzzle", () => {
+  const renderer = Object.create(DustyOrbitMultiplayerRenderer.prototype);
+  renderer.localPlayerId = "local";
+  renderer.pendingLocalShotConfirmations = [];
+  renderer.localProjectiles = new Map();
+  renderer.weaponRecoil = new Map();
+  renderer.effects = [];
+  renderer.weaponPoses = new Map([["local", {
+    tier: 1,
+    angle: 0,
+    forward: { x: 1, y: 0 },
+    muzzleWorld: { x: 321, y: 456 },
+  }]]);
+  renderer.confirmShot({
+    playerId: "local",
+    projectile: { id: 71, inputSeq: 40, tier: 1, x: 300, y: 400, vx: 500, vy: 0, spawnedAt: Date.now(), expiresAt: Date.now() + 500 },
+  }, true);
+  // This is the pose drawPlayer() calculates on the confirmation's actual
+  // render frame, after movement has advanced the character.
+  renderer.weaponPoses.set("local", {
+    tier: 1,
+    angle: 0,
+    forward: { x: 1, y: 0 },
+    muzzleWorld: { x: 421, y: 456 },
+  });
+  renderer.flushLocalShotConfirmations();
+  const shot = renderer.localProjectiles.get(71);
+  assert.deepEqual({ x: shot.startX, y: shot.startY }, { x: 421, y: 456 });
+  assert.deepEqual({ vx: shot.vx, vy: shot.vy }, { vx: 500, vy: 0 });
+});
+
+test("a delayed confirmation launches from and along the newly rendered aim pose", () => {
+  const renderer = Object.create(DustyOrbitMultiplayerRenderer.prototype);
+  renderer.localPlayerId = "local";
+  renderer.pendingLocalShotConfirmations = [];
+  renderer.weaponPoses = new Map([["local", { muzzleWorld: { x: 411, y: 277 }, forward: { x: 0, y: -1 } }]]);
+  renderer.weaponRecoil = new Map();
+  renderer.effects = [];
+  renderer.localProjectiles = new Map();
+  renderer.confirmShot({
+    playerId: "local",
+    projectile: { id: 8, tier: 2, x: 395, y: 266, vx: 600, vy: 0, spawnedAt: 1000, expiresAt: 1750 },
+  }, true);
+  renderer.flushLocalShotConfirmations();
+  const shot = renderer.localProjectiles.get(8);
+  assert.deepEqual({ x: shot.startX, y: shot.startY }, { x: 411, y: 277 });
+  assert.deepEqual({ vx: shot.vx, vy: shot.vy }, { vx: 0, vy: -600 });
+});
+
+test("a confirmed local bullet uses the exact nozzle produced in its render frame", () => {
+  const renderer = Object.create(DustyOrbitMultiplayerRenderer.prototype);
+  renderer.localPlayerId = "local";
+  renderer.pendingLocalShotConfirmations = [];
+  renderer.localProjectiles = new Map();
+  renderer.weaponRecoil = new Map();
+  renderer.effects = [];
+  renderer.weaponPoses = new Map([["local", {
+    tier: 2,
+    angle: Math.PI / 2,
+    forward: { x: 0, y: 1 },
+    muzzleWorld: { x: 321, y: 456 },
+  }]]);
+  const now = Date.now();
+  renderer.confirmShot({
+    playerId: "local",
+    projectile: { id: 9, inputSeq: 41, tier: 2, x: 300, y: 400, vx: 0, vy: 600, spawnedAt: now, expiresAt: now + 750 },
+  }, true);
+  renderer.flushLocalShotConfirmations();
+  const shot = renderer.localProjectiles.get(9);
+  assert.deepEqual({ x: shot.startX, y: shot.startY }, { x: 321, y: 456 });
+  assert.deepEqual({ vx: shot.vx, vy: shot.vy }, { vx: 0, vy: 600 });
+});
+
+test("render flushes local confirmations only after drawing the current gun pose", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const source = await readFile(new URL("../../games/game-03/renderer.js", import.meta.url), "utf8");
+  const render = source.slice(source.indexOf("  render(snapshot"), source.indexOf("  drawTerrain()"));
+  assert.ok(render.indexOf("this.drawPlayer(") < render.indexOf("this.flushLocalShotConfirmations()"));
+  assert.ok(render.indexOf("this.flushLocalShotConfirmations()") < render.indexOf('this.drawEffects("muzzle")'));
+  assert.ok(render.indexOf('this.drawEffects("muzzle")') < render.indexOf("this.drawLocalProjectiles()"));
+  assert.ok(render.indexOf("this.drawLocalProjectiles()") < render.indexOf('this.drawEffects("foreground")'));
 });
 
 test("local mole burrow dirt uses the currently rendered movement lead instead of the stale pickup position", () => {

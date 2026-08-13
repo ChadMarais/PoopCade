@@ -1,8 +1,8 @@
 import { moveCircleWithSliding } from "./collision-geometry.js?v=20260813";
 import { CollisionEditor } from "./collision-editor.js?v=20260813-8";
-import { loadDustyOrbitAssets } from "./assets.js?v=20260813-9";
+import { loadDustyOrbitAssets } from "./assets.js?v=20260813-11";
 import { PRODUCTION_ARENA_WSS } from "./config.js?v=20260812";
-import { DustyOrbitMultiplayerRenderer } from "./renderer.js?v=20260813-16";
+import { DustyOrbitMultiplayerRenderer } from "./renderer.js?v=20260813-21";
 import { InputController } from "./input.js?v=20260813-3";
 import { claimSessionIdentity, resolvePoopcadePlayerIdentity } from "./identity.js?v=20260813-2";
 import { ArenaNetwork } from "./network.js?v=20260813";
@@ -168,6 +168,7 @@ network = new ArenaNetwork({
       joined = false;
       input.reset();
       pending = [];
+      renderer.clearLocalShotHistory();
       sendAccumulator = 0;
       inputStepTimes.length = 0;
       localSpeedBoostUntil = 0;
@@ -212,6 +213,7 @@ network = new ArenaNetwork({
       gameplay = { ...gameplay, ...(message.gameplay || {}) };
       seq = Number.isSafeInteger(message.player?.lastInputSeq) ? message.player.lastInputSeq : 0;
       pending = [];
+      renderer.clearLocalShotHistory();
       sendAccumulator = 0;
       inputStepTimes.length = 0;
       localSpeedBoostUntil = 0;
@@ -317,9 +319,10 @@ function reconcile(snapshot) {
 
 function sendInput(sample) {
   const message = { type: "input", seq: ++seq, moveX: finiteAxis(sample.moveX), moveY: finiteAxis(sample.moveY), aimX: finiteAxis(sample.aimX, 1), aimY: finiteAxis(sample.aimY), fire: Boolean(sample.fire), nuke: performance.now() < nukeQueuedUntil };
-  if (!network.sendInput(message)) return;
+  if (!network.sendInput(message)) return null;
   pending.push(message);
   if (pending.length > 90) pending.shift();
+  return message;
 }
 
 function updateHud(snapshot) {
@@ -330,12 +333,17 @@ function updateHud(snapshot) {
   const remoteSummary = remotes.length
     ? remotes.map((item) => `${item.name} @ ${item.x.toFixed(0)},${item.y.toFixed(0)} AIM ${Math.atan2(item.aimY, item.aimX).toFixed(2)} HP${item.hp} T${item.weaponTier} S${item.killScore}`).join(" · ")
     : "NONE";
-  const weaponDebug = renderer.getDebugState(localId).weapon;
+  const rendererDebug = renderer.getDebugState(localId);
+  const weaponDebug = rendererDebug.weapon;
+  const launchDebug = rendererDebug.lastLocalLaunch;
   const weaponDebugLines = weaponDebug ? [
     `WEAPON: T${weaponDebug.tier} ${weaponDebug.id.toUpperCase()} · ROT ${(weaponDebug.rotation * 180 / Math.PI).toFixed(1)}°`,
     `PIVOT: ${weaponDebug.pivot.x.toFixed(2)},${weaponDebug.pivot.y.toFixed(2)} · ATTACH ${weaponDebug.attachmentWorld.x.toFixed(1)},${weaponDebug.attachmentWorld.y.toFixed(1)}`,
     `MUZZLE: ${weaponDebug.muzzleWorld.x.toFixed(1)},${weaponDebug.muzzleWorld.y.toFixed(1)}`,
   ] : ["WEAPON: HIDDEN"];
+  if (launchDebug) weaponDebugLines.push(
+    `LAST LAUNCH: ${launchDebug.muzzleWorld.x.toFixed(1)},${launchDebug.muzzleWorld.y.toFixed(1)} · FIRST-FRAME ERROR: ${launchDebug.firstRenderError?.toFixed(3) ?? "PENDING"}`,
+  );
   debugHud.textContent = [
     `CONNECTION: ${connectionState.toUpperCase()}  ·  ARENA: ${ARENA_ID}`,
     `LOCAL ID: ${localId.slice(0, 8)}…  ·  NAME: ${playerName}`,
@@ -378,11 +386,14 @@ function frame(now) {
   const delta = Math.min(.05, Math.max(0, (now - previousFrame) / 1000));
   previousFrame = now;
   const snapshot = network.interpolatedSnapshot(Date.now(), localId);
+  let frameSample = null;
+  let sendFrameInput = false;
   if (connectionState === "online" && joined && !document.hidden && snapshot) {
     const player = latestSnapshot?.players?.find((item) => item.id === localId);
     if (!finitePoint(predicted) && finitePoint(player)) predicted = { x: player.x, y: player.y };
     input.setAimOrigin(renderer.getDebugState().playerScreen);
     const sample = input.sample(now);
+    frameSample = sample;
     latestAim = { x: sample.aimX, y: sample.aimY };
     // Preserve the fractional remainder across frames. Resetting it to zero
     // made 72–80 Hz displays emit only 24–27 movement steps per second, which
@@ -391,8 +402,7 @@ function frame(now) {
     sendAccumulator = timing.remainder;
     if (timing.consumed) {
       predicted = applyMovement(predicted, sample, INPUT_DT, player);
-      sendInput(sample);
-      inputStepTimes.push(now);
+      sendFrameInput = true;
     }
     while (inputStepTimes.length && now - inputStepTimes[0] > 1000) inputStepTimes.shift();
     // Keep committed prediction on the server's fixed 30 Hz interval. The
@@ -420,6 +430,14 @@ function frame(now) {
     visualPredicted = convergeVisualPosition(visualIntegrated, visualTarget, delta, turboActive(player) ? 6 : 8);
   }
   if (applicationState === "PLAYING") renderer.render(snapshot || latestSnapshot, localId, visualPredicted || predicted, delta, input.getVisualState());
+  // Render the current input before transmitting it so the visible gun never
+  // lags behind the aim sample that the server will process.
+  if (sendFrameInput && frameSample) {
+    const sent = sendInput(frameSample);
+    if (sent) {
+      inputStepTimes.push(now);
+    }
+  }
   fpsFrames++;
   if (now - fpsWindow >= 500) { fps = Math.round(fpsFrames * 1000 / (now - fpsWindow)); fpsFrames = 0; fpsWindow = now; updateHud(latestSnapshot); }
   requestAnimationFrame(frame);
@@ -458,6 +476,7 @@ leaveGame.addEventListener("click", () => {
   input.reset();
   input.enabled = false;
   pending = [];
+  renderer.clearLocalShotHistory();
   predicted = null;
   visualPredicted = null;
   latestSnapshot = null;

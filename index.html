@@ -112,7 +112,7 @@
     .games { padding: clamp(21px,4vw,35px) 0 clamp(28px,5vw,48px); }
     .section-head { margin-bottom: 10px; }
     .section-head h2 { margin: 0; font-size: clamp(1.35rem,3vw,1.85rem); font-weight: 1000; letter-spacing: -.05em; }
-    .game-list { display: grid; gap: 14px; }
+    .game-list { display: grid; grid-auto-rows: 1fr; gap: 14px; }
     .game-card { position: relative; height: auto; overflow: hidden; border: 1px solid rgba(255,255,255,.14); border-radius: 20px; background: linear-gradient(135deg,rgba(31,25,58,.93),rgba(14,13,25,.97) 58%,rgba(9,24,31,.91)); box-shadow: 0 24px 68px rgba(0,0,0,.32), inset 0 1px 0 rgba(255,255,255,.07); isolation: isolate; }
     .game-card::before { position: absolute; inset: 0; z-index: -2; content: ""; pointer-events: none; background: radial-gradient(circle at 90% 24%,rgba(82,239,255,.12),transparent 25%), radial-gradient(circle at 76% 100%,rgba(255,79,189,.09),transparent 31%); }
     .game-copy { position: relative; z-index: 2; width: min(100%,720px); padding: clamp(21px,4vw,38px); }
@@ -145,17 +145,15 @@
     .next-face::before { position:absolute;left:16px;right:16px;top:13px;height:8px;content:"";border-left:13px solid var(--cyan);border-right:13px solid var(--cyan);filter:drop-shadow(0 0 6px rgba(82,239,255,.7)); }
     .next-face::after { position:absolute;left:50%;bottom:10px;width:24px;height:8px;content:"";border-top:3px solid var(--pink);transform:translateX(-50%) rotate(6deg); }
 
-    .dusty-card { grid-column: 1 / -1; min-height: 390px; border-color: rgba(255,124,214,.38); background: linear-gradient(118deg,#151129 0%,#21113d 48%,#0b1725 100%); box-shadow: 0 28px 80px rgba(0,0,0,.42),0 0 54px rgba(217,45,255,.09),inset 0 1px 0 rgba(255,255,255,.12); }
+    .dusty-card { border-color: rgba(255,124,214,.38); background: linear-gradient(118deg,#151129 0%,#21113d 48%,#0b1725 100%); box-shadow: 0 28px 80px rgba(0,0,0,.42),0 0 54px rgba(217,45,255,.09),inset 0 1px 0 rgba(255,255,255,.12); }
     .dusty-card::before { z-index: -1; background: radial-gradient(circle at 82% 48%,rgba(255,43,220,.28),transparent 22%),radial-gradient(circle at 93% 13%,rgba(82,239,255,.18),transparent 25%),linear-gradient(90deg,transparent 54%,rgba(3,5,17,.12)); }
     .dusty-card::after { position: absolute; inset: 0; z-index: -1; content: ""; pointer-events: none; opacity: .24; background-image: radial-gradient(circle,rgba(255,255,255,.85) 0 1px,transparent 1.5px); background-size: 43px 43px; mask-image: linear-gradient(90deg,transparent 20%,#000); }
-    .dusty-card .game-copy { width: min(64%,670px); padding: clamp(27px,5vw,48px); }
     .dusty-card .game-label { color: #ffd36a; }
-    .dusty-card .game-title { margin-top: 16px; font-size: clamp(2.7rem,7vw,5.25rem); }
     .dusty-card .game-title i { color: var(--pink); text-shadow: 0 0 28px rgba(255,79,189,.45); }
     .dusty-card .game-description { max-width: 550px; color: #cbc5d8; }
     .dusty-card .button.primary { background: linear-gradient(105deg,var(--acid),#ecff9e); box-shadow: 0 14px 38px rgba(200,255,71,.18); }
     .dev-chip { display: inline-flex; align-items: center; padding: 5px 8px; border: 1px solid rgba(255,211,106,.4); border-radius: 999px; color: #ffe49d; background: rgba(255,211,106,.08); font: 900 .52rem/1 ui-monospace,monospace; letter-spacing: .1em; text-transform: uppercase; }
-    .dusty-visual { position: absolute; right: clamp(-34px,1vw,18px); bottom: -24px; z-index: 1; width: min(43%,440px); aspect-ratio: 1; pointer-events: none; }
+    .dusty-visual { position: absolute; right: -45px; bottom: -62px; z-index: 1; width: 245px; aspect-ratio: 1; pointer-events: none; opacity: .3; }
     .dusty-visual::before, .dusty-visual::after { position: absolute; inset: 10%; content: ""; border: 1px solid rgba(82,239,255,.35); border-radius: 50%; box-shadow: 0 0 34px rgba(82,239,255,.14),inset 0 0 34px rgba(255,79,189,.09); }
     .dusty-visual::after { inset: 22%; border-color: rgba(255,79,189,.5); border-style: dashed; animation: orbit 18s linear infinite reverse; }
     .dusty-character { position: absolute; inset: 3%; width: 94%; height: 94%; object-fit: contain; filter: drop-shadow(0 26px 20px rgba(0,0,0,.48)) drop-shadow(0 0 25px rgba(255,30,220,.32)); transform: rotate(5deg); animation: dusty-hover 4.4s ease-in-out infinite; }
@@ -200,9 +198,6 @@
       .game-list .game-title { font-size: clamp(2.2rem,4.2vw,3.25rem); }
       .game-list .game-description { min-height: 3.9em; }
       .game-list .game-watermark { right: -72px; opacity: .28; }
-      .game-list .dusty-card .game-copy { width: min(64%,670px); padding: clamp(32px,4.5vw,48px); }
-      .game-list .dusty-card .game-title { font-size: clamp(3.15rem,7vw,5.25rem); }
-      .game-list .dusty-card .game-description { min-height: 0; }
     }
 
     @media (max-width: 480px) {
@@ -227,10 +222,8 @@
       .game-watermark { right: -74px; bottom: -89px; width: 220px; height: 220px; opacity: .27; }
       .game-watermark::after { inset: 43px; border-width: 8px; }
       .art-puck { right: 43px; top: 49px; }
-      .dusty-card { min-height: 540px; }
-      .dusty-card .game-copy { width: 100%; padding-bottom: 235px; }
       .dusty-card .game-description { max-width: 100%; }
-      .dusty-visual { right: -30px; bottom: -35px; width: 310px; max-width: 92%; opacity: .9; }
+      .dusty-visual { right: -58px; bottom: -68px; width: 230px; }
       .dusty-character-name { right: 14%; bottom: 13%; }
       .poopline-box { display: block; }
       .poopline-box p { margin-top: 4px; text-align: left; }

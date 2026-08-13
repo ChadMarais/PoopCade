@@ -1,4 +1,4 @@
-import { weaponPose, weaponVisualForTier } from "./weapon-visuals.js?v=20260813-2";
+import { weaponPose, weaponVisualForTier } from "./weapon-visuals.js?v=20260813-5";
 import { fartCloudGrowth } from "./effect-timing.js?v=20260813";
 
 function clamp(value, min, max) { return Math.max(min, Math.min(max, value)); }
@@ -47,6 +47,8 @@ export class DustyOrbitMultiplayerRenderer {
     this.playerScreen = { x: 0, y: 0 };
     this.effects = [];
     this.localProjectiles = new Map();
+    this.pendingLocalShotConfirmations = [];
+    this.lastLocalLaunch = null;
     this.hitUntil = new Map();
     this.spawnAnimations = new Map();
     this.moleTransitions = new Map();
@@ -83,35 +85,79 @@ export class DustyOrbitMultiplayerRenderer {
     this.effects.push({ x: event.x, y: event.y, born: performance.now(), life: 280 });
   }
 
+  clearLocalShotHistory() {
+    this.localProjectiles.clear();
+    this.pendingLocalShotConfirmations.length = 0;
+    this.lastLocalLaunch = null;
+  }
+
   confirmShot(event, local = false) {
     const projectile = event?.projectile;
     if (!projectile || !Number.isSafeInteger(projectile.id) ||
         !Number.isFinite(projectile.vx) || !Number.isFinite(projectile.vy)) return;
     const speed = Math.hypot(projectile.vx, projectile.vy);
     if (speed < .001) return;
-    const directionX = projectile.vx / speed;
-    const directionY = projectile.vy / speed;
+    if (local) {
+      // A WebSocket callback can run between animation frames, when
+      // weaponPoses still describes the previous frame. Defer local launch
+      // until render() has calculated this frame's exact visible nozzle.
+      this.pendingLocalShotConfirmations.push(event);
+      return;
+    }
+    this.materializeShot(event, false, this.weaponPoses.get(event.playerId));
+  }
+
+  materializeShot(event, local, shotPose) {
+    const projectile = event.projectile;
+    const speed = Math.hypot(projectile.vx, projectile.vy);
+    const authoritativeDirection = { x: projectile.vx / speed, y: projectile.vy / speed };
+    // Local presentation follows the barrel that was calculated for this very
+    // render frame. The muzzle flash, projectile origin, and trajectory all
+    // consume the same pose; there is no second nozzle calculation to drift.
+    const directionX = local && shotPose?.forward ? shotPose.forward.x : authoritativeDirection.x;
+    const directionY = local && shotPose?.forward ? shotPose.forward.y : authoritativeDirection.y;
+    const life = clamp((projectile.expiresAt || 0) - (projectile.spawnedAt || 0), 100, 3000);
+    // Never fast-forward a newly confirmed local projectile. Backdating by
+    // network transit time made its first visible frame appear downrange
+    // instead of at the barrel. Its visual lifetime starts at the muzzle now.
     const born = performance.now();
     const visual = weaponVisualForTier(projectile.tier);
-    const pose = this.weaponPoses.get(event.playerId);
-    if (pose) {
+    if (shotPose) {
       this.weaponRecoil.set(event.playerId, { born, life: visual.recoilMs, distance: visual.recoilDistance });
     }
-    // Local movement is predicted ahead of the authoritative server position.
-    // Anchor the local presentation to the muzzle currently visible on screen
-    // and keep that parallel offset for the entire shot; never converge toward
-    // the player's centreline after leaving the barrel.
-    const visualOrigin = local && pose ? pose.muzzleWorld : projectile;
+    const visualOrigin = shotPose?.muzzleWorld ?? projectile;
     this.effects.push({
       type: "weapon-muzzle", tier: projectile.tier, x: visualOrigin.x, y: visualOrigin.y,
       angle: Math.atan2(directionY, directionX), size: visual.flashSize, born,
       life: projectile.tier === 6 ? 175 : projectile.tier === 1 ? 85 : 115,
     });
     if (!local) return;
-    const life = clamp((projectile.expiresAt || 0) - (projectile.spawnedAt || 0), 100, 3000);
     this.localProjectiles.set(projectile.id, {
-      ...projectile, startX: visualOrigin.x, startY: visualOrigin.y, born, life,
+      ...projectile,
+      vx: directionX * speed,
+      vy: directionY * speed,
+      startX: visualOrigin.x,
+      startY: visualOrigin.y,
+      previousX: visualOrigin.x,
+      previousY: visualOrigin.y,
+      born,
+      life,
+      firstFrame: true,
     });
+    this.lastLocalLaunch = {
+      projectileId: projectile.id,
+      muzzleWorld: { x: visualOrigin.x, y: visualOrigin.y },
+      direction: { x: directionX, y: directionY },
+      firstRenderError: null,
+    };
+  }
+
+  flushLocalShotConfirmations() {
+    if (!this.pendingLocalShotConfirmations.length) return;
+    const confirmations = this.pendingLocalShotConfirmations.splice(0);
+    const currentPose = this.weaponPoses.get(this.localPlayerId);
+    if (!currentPose) return;
+    for (const event of confirmations) this.materializeShot(event, true, currentPose);
   }
 
   playerHit(id) { this.hitUntil.set(id, performance.now() + 180); }
@@ -208,11 +254,18 @@ export class DustyOrbitMultiplayerRenderer {
     // Labels are a world-space readability layer so nearby players and rocks
     // cannot cover the name while deciding whether to collect a power-up.
     for (const pickup of snapshot?.pickups || []) this.drawPickupLabel(pickup);
+    // drawPlayer() above has just produced the exact visible gun pose for this
+    // frame. Only now may a local projectile acquire its start coordinate.
+    this.flushLocalShotConfirmations();
+    // Muzzle light belongs behind the projectile. Drawing it afterward hid the
+    // bullet's exact-at-nozzle first frame and made the next frame look like a
+    // detached launch.
+    this.drawEffects("muzzle");
     this.drawProjectiles(snapshot?.projectiles || []);
     this.drawLocalProjectiles();
     // Smoke must sit in front of combatants to function as visual cover.
     this.drawFartClouds(snapshot?.fartClouds || []);
-    this.drawEffects();
+    this.drawEffects("foreground");
     if (this.debug) {
       this.drawWeaponDebug();
       this.drawCollision(players);
@@ -561,6 +614,17 @@ export class DustyOrbitMultiplayerRenderer {
       ctx.shadowColor = plasma ? "#9c63ff" : (colors[(projectile.tier || 1) - 1] || "#74f6ff");
       ctx.shadowBlur = plasma ? 19 : 11;
       ctx.fillStyle = plasma ? "#f8efff" : ctx.shadowColor;
+      if (Number.isFinite(projectile.trailStartX) && Number.isFinite(projectile.trailStartY)) {
+        ctx.strokeStyle = ctx.shadowColor;
+        ctx.globalAlpha = .72;
+        ctx.lineCap = "round";
+        ctx.lineWidth = Math.max(1.5, (projectile.radius || 3.5) * 1.15);
+        ctx.beginPath();
+        ctx.moveTo(projectile.trailStartX - this.camera.x, projectile.trailStartY - this.camera.y);
+        ctx.lineTo(x, y);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+      }
       ctx.beginPath(); ctx.arc(x, y, projectile.radius || 3.5, 0, Math.PI * 2); ctx.fill();
       ctx.restore();
     }
@@ -570,7 +634,11 @@ export class DustyOrbitMultiplayerRenderer {
     const now = performance.now();
     const projectiles = [];
     for (const [id, projectile] of this.localProjectiles) {
-      const age = now - projectile.born;
+      // The confirmation is materialized immediately before this draw pass.
+      // Pin its first rendered sample to the nozzle exactly; it begins moving
+      // on the following animation frame.
+      if (projectile.firstFrame) projectile.born = now;
+      const age = projectile.firstFrame ? 0 : now - projectile.born;
       if (age >= projectile.life) {
         this.localProjectiles.delete(id);
         continue;
@@ -579,15 +647,28 @@ export class DustyOrbitMultiplayerRenderer {
         ...projectile,
         x: projectile.startX + projectile.vx * age / 1000,
         y: projectile.startY + projectile.vy * age / 1000,
+        trailStartX: projectile.previousX,
+        trailStartY: projectile.previousY,
       });
+      if (projectile.firstFrame && this.lastLocalLaunch?.projectileId === id) {
+        this.lastLocalLaunch.firstRenderError = Math.hypot(
+          projectiles.at(-1).x - projectile.startX,
+          projectiles.at(-1).y - projectile.startY,
+        );
+      }
+      projectile.previousX = projectiles.at(-1).x;
+      projectile.previousY = projectiles.at(-1).y;
+      projectile.firstFrame = false;
     }
     this.drawProjectiles(projectiles);
   }
 
-  drawEffects() {
+  drawEffects(pass = "foreground") {
     const now = performance.now();
     this.effects = this.effects.filter((effect) => now - effect.born < effect.life);
     for (const effect of this.effects) {
+      const muzzleEffect = effect.type === "weapon-muzzle" || effect.type === "muzzle";
+      if ((pass === "muzzle") !== muzzleEffect) continue;
       const amount = (now - effect.born) / effect.life;
       this.ctx.save();
       this.ctx.globalAlpha = 1 - amount;
@@ -1096,6 +1177,11 @@ export class DustyOrbitMultiplayerRenderer {
         pivot: { ...pose.visual.pivot },
         attachmentWorld: { ...pose.pivotWorld },
         muzzleWorld: { ...pose.muzzleWorld },
+      } : null,
+      lastLocalLaunch: this.lastLocalLaunch ? {
+        ...this.lastLocalLaunch,
+        muzzleWorld: { ...this.lastLocalLaunch.muzzleWorld },
+        direction: { ...this.lastLocalLaunch.direction },
       } : null,
     };
   }

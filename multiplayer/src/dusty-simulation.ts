@@ -38,14 +38,14 @@ export type DustyPlayer = {
   emergeBlockedUntil: number; alive: boolean; respawnAt: number; protectedUntil: number;
   lastInputAt: number; lastMessageAt: number; lastInputSeq: number; lastFireAt: number;
   lastFireInput: boolean; suppressFireUntilRelease: boolean; lastNukeInput: boolean;
-  burstRemaining: number; burstIndex: number; nextBurstAt: number; burstAimX: number; burstAimY: number;
+  burstRemaining: number; burstIndex: number; nextBurstAt: number;
   disconnectedAt: number; color: string; lastProcessedInputSeq: number;
   input: ClientInput; pendingInput: ClientInput | null;
 };
 
 export type DustyProjectile = {
   id: number; ownerId: string; tier: number; x: number; y: number; vx: number; vy: number;
-  radius: number; damage: number; spawnedAt: number; expiresAt: number;
+  radius: number; damage: number; spawnedAt: number; expiresAt: number; inputSeq?: number;
 };
 
 export type DustyPickup = {
@@ -68,11 +68,6 @@ function round(value: number, precision = 10): number { return Math.round(value 
 function normalized(x: number, y: number): { x: number; y: number; length: number } {
   const length = Math.hypot(x, y);
   return length > 0.0001 ? { x: x / length, y: y / length, length } : { x: 0, y: 0, length: 0 };
-}
-function rotated(x: number, y: number, degrees: number): Point {
-  if (!degrees) return { x, y };
-  const angle = degrees * Math.PI / 180;
-  return { x: x * Math.cos(angle) - y * Math.sin(angle), y: x * Math.sin(angle) + y * Math.cos(angle) };
 }
 export function moleBurrowOrigin(player: Pick<DustyPlayer, "x" | "y" | "vx" | "vy">, leadDistance = DUSTY_PLAYER_RADIUS + 10): Point {
   const movement = normalized(player.vx, player.vy);
@@ -149,7 +144,7 @@ export class DustyOrbitSimulation {
       protectedUntil: now + DUSTY_SPAWN_PROTECTION_MS, lastInputAt: now, lastMessageAt: now,
       lastInputSeq: 0, lastFireAt: Number.NEGATIVE_INFINITY, lastFireInput: false,
       suppressFireUntilRelease: false, lastNukeInput: false, burstRemaining: 0, burstIndex: 0,
-      nextBurstAt: 0, burstAimX: 1, burstAimY: 0, disconnectedAt: 0,
+      nextBurstAt: 0, disconnectedAt: 0,
       lastProcessedInputSeq: 0, color: COLORS[this.players.size % COLORS.length], input: { ...EMPTY_INPUT }, pendingInput: null,
     };
     this.players.set(id, player);
@@ -298,34 +293,42 @@ export class DustyOrbitSimulation {
 
   private processWeapon(player: DustyPlayer, now: number): void {
     const weapon = weaponForTier(player.weaponTier);
+    // Fire direction is sampled from the exact input being processed on this
+    // simulation tick. Never reuse the facing from an earlier round.
+    const liveAim = normalized(player.input.aimX, player.input.aimY);
+    const aimX = liveAim.length ? liveAim.x : player.aimX;
+    const aimY = liveAim.length ? liveAim.y : player.aimY;
     while (player.burstRemaining > 0 && now >= player.nextBurstAt && this.projectiles.length < DUSTY_GAMEPLAY.maxProjectiles) {
-      this.spawnProjectile(player, weapon, player.burstAimX, player.burstAimY, weapon.spreadDegrees[player.burstIndex] ?? 0, now);
+      this.spawnProjectile(player, weapon, aimX, aimY, now);
       player.burstRemaining--; player.burstIndex++; player.nextBurstAt += weapon.burstSpacingMs;
     }
     if (!player.input.fire || player.burstRemaining > 0 || now - player.lastFireAt < weapon.cooldownMs || this.projectiles.length >= DUSTY_GAMEPLAY.maxProjectiles) return;
     player.protectedUntil = 0; player.lastFireAt = now;
     if (weapon.tier === 3) {
-      player.burstAimX = player.aimX; player.burstAimY = player.aimY; player.burstIndex = 0;
+      player.burstIndex = 0;
       player.burstRemaining = weapon.count; player.nextBurstAt = now;
       this.processWeapon(player, now);
       return;
     }
     if (weapon.tier === 5) {
-      for (const spread of weapon.spreadDegrees) this.spawnProjectile(player, weapon, player.aimX, player.aimY, spread, now);
+      for (let index = 0; index < weapon.count; index += 1) this.spawnProjectile(player, weapon, aimX, aimY, now);
       return;
     }
-    const spread = weapon.spreadDegrees.length > 1 ? weapon.spreadDegrees[(this.projectileId + 1) % weapon.spreadDegrees.length] : 0;
-    this.spawnProjectile(player, weapon, player.aimX, player.aimY, spread, now);
+    this.spawnProjectile(player, weapon, aimX, aimY, now);
   }
 
-  private spawnProjectile(player: DustyPlayer, weapon: WeaponDefinition, aimX: number, aimY: number, spread: number, now: number): void {
+  private spawnProjectile(player: DustyPlayer, weapon: WeaponDefinition, aimX: number, aimY: number, now: number): void {
     if (this.projectiles.length >= DUSTY_GAMEPLAY.maxProjectiles) return;
-    const direction = rotated(aimX, aimY, spread);
-    const muzzle = weaponPose({ ...player, aimX, aimY }, weaponVisualForTier(weapon.tier), { weaponMount: characterSkinById(player.skinId)?.weaponMount }).muzzleWorld;
+    const liveAim = normalized(aimX, aimY);
+    if (!liveAim.length) return;
+    // No projectile may diverge from the barrel. Multi-projectile weapons can
+    // emit several rounds, but every one follows the exact live gun vector.
+    const direction = liveAim;
+    const muzzle = weaponPose({ ...player, aimX: liveAim.x, aimY: liveAim.y }, weaponVisualForTier(weapon.tier), { weaponMount: characterSkinById(player.skinId)?.weaponMount }).muzzleWorld;
     const projectileSpeed = weapon.speed * (player.speedUntil > now ? DUSTY_GAMEPLAY.speedMultiplier : 1);
     const x = muzzle.x, y = muzzle.y;
     const projectile: DustyProjectile = {
-      id: ++this.projectileId, ownerId: player.id, tier: weapon.tier, x, y,
+      id: ++this.projectileId, ownerId: player.id, tier: weapon.tier, x, y, inputSeq: player.input.seq,
       vx: direction.x * projectileSpeed, vy: direction.y * projectileSpeed, radius: weapon.radius,
       damage: weapon.damage, spawnedAt: now,
       // Turbo changes speed, not the gun's maximum range. Shorten lifetime by
@@ -626,7 +629,7 @@ export class DustyOrbitSimulation {
         }, { id: null as string | null, gap: Number.POSITIVE_INFINITY }).id : null,
       },
       players: visiblePlayers.map(serializePlayer),
-      projectiles: this.projectiles.map((projectile) => ({ id: projectile.id, ownerId: projectile.ownerId, tier: projectile.tier, x: round(projectile.x), y: round(projectile.y), vx: Math.round(projectile.vx), vy: Math.round(projectile.vy), radius: projectile.radius, spawnedAt: projectile.spawnedAt, expiresAt: projectile.expiresAt })),
+      projectiles: this.projectiles.map((projectile) => ({ id: projectile.id, ownerId: projectile.ownerId, tier: projectile.tier, x: round(projectile.x), y: round(projectile.y), vx: Math.round(projectile.vx), vy: Math.round(projectile.vy), radius: projectile.radius, spawnedAt: projectile.spawnedAt, expiresAt: projectile.expiresAt, inputSeq: projectile.inputSeq })),
       pickups: this.pickups.filter((pickup) => pickup.active).map(({ id, type, x, y, active }) => ({ id, type, x, y, active })),
       fartClouds: this.fartClouds.map((cloud) => ({ ...cloud })),
       nukes: this.nukes.map((nuke) => ({ ...nuke })),

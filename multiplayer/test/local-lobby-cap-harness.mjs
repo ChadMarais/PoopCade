@@ -47,6 +47,16 @@ try {
     await item.waitFor((message) => message.type === "welcome");
   }
 
+  const aim = { x: .28, y: -.96 };
+  const shotCursor = clients[0].messages.length;
+  clients[0].socket.send(JSON.stringify({ type: "input", seq: 1, moveX: 0, moveY: 0, aimX: aim.x, aimY: aim.y, fire: true, nuke: false }));
+  const shot = await clients[0].waitFor((message) => message.type === "shot" && message.playerId === clients[0].sessionId, 5000, shotCursor);
+  const shotSpeed = Math.hypot(shot.projectile.vx, shot.projectile.vy);
+  assert.ok(Math.abs(shot.projectile.vx / shotSpeed - aim.x) < .0001);
+  assert.ok(Math.abs(shot.projectile.vy / shotSpeed - aim.y) < .0001);
+  assert.equal(shot.projectile.inputSeq, 1);
+  clients[0].socket.send(JSON.stringify({ type: "input", seq: 2, moveX: 0, moveY: 0, aimX: aim.x, aimY: aim.y, fire: false, nuke: false }));
+
   const finalists = clients.slice(14);
   for (const item of finalists) item.socket.send(JSON.stringify({ type: "join", name: item.name, skinId: "moon-blob-01" }));
   const results = await Promise.all(finalists.map((item) => item.waitFor((message) => message.type === "welcome" || message.type === "join_rejected")));
@@ -61,7 +71,7 @@ try {
   rejected.socket.send(JSON.stringify({ type: "join", name: rejected.name, skinId: "unknown-but-valid-id" }));
   const replacement = await rejected.waitFor((message) => message.type === "welcome", 5000, replacementCursor);
   assert.equal(replacement.player.skinId, "moon-blob-01");
-  console.log("Lobby wire QA passed: 16 lobby spectators, 15-player cap, final-slot race, leave/rejoin, and skin fallback.");
+  console.log("Lobby wire QA passed: exact live aim, 16 lobby spectators, 15-player cap, final-slot race, leave/rejoin, and skin fallback.");
 } finally {
   for (const item of clients) {
     if (item.socket.readyState === WebSocket.OPEN) item.socket.send(JSON.stringify({ type: "leave" }));

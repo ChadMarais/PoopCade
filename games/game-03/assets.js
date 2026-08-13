@@ -2,7 +2,7 @@ import { ASSET_DEFINITION_URLS, ENVIRONMENT_INSTANCES, SATELLITE_CONNECTION, TER
 import { collisionBlocksMovement, depthSortY, transformNormalizedPolygon } from "./collision-geometry.js?v=20260813";
 import { DEFAULT_CHARACTER_SKIN_ID, characterSkinById } from "./character-skins.js?v=20260813";
 
-const ASSET_VERSION = "20260813-8";
+const ASSET_VERSION = "20260813-10";
 const versioned = (url) => `${url}?v=${ASSET_VERSION}`;
 const POWERUP_ART = Object.freeze({
   health: Object.freeze({ sprite: "health.png", sourceBounds: Object.freeze({ x: 229, y: 193, width: 797, height: 785 }) }),
@@ -15,6 +15,11 @@ const POWERUP_ART = Object.freeze({
 });
 const WEAPON_ART = Object.freeze({
   peaShooter: Object.freeze({ sprite: "weapon-pea-shooter.png", sourceBounds: Object.freeze({ x: 0, y: 0, width: 256, height: 199 }) }),
+  pistol: Object.freeze({ sprite: "weapon-pistol.png", sourceBounds: Object.freeze({ x: 166, y: 322, width: 972, height: 552 }) }),
+  burst: Object.freeze({ sprite: "weapon-burst.png", sourceBounds: Object.freeze({ x: 66, y: 325, width: 1127, height: 586 }) }),
+  smg: Object.freeze({ sprite: "weapon-smg.png", sourceBounds: Object.freeze({ x: 64, y: 302, width: 1138, height: 621 }) }),
+  shotgun: Object.freeze({ sprite: "weapon-shotgun.png", sourceBounds: Object.freeze({ x: 44, y: 281, width: 1184, height: 657 }) }),
+  plasmaCannon: Object.freeze({ sprite: "weapon-plasma-cannon.png", sourceBounds: Object.freeze({ x: 27, y: 260, width: 1204, height: 706 }) }),
 });
 
 async function loadJson(url) {
@@ -53,7 +58,7 @@ export async function loadDustyOrbitAssets(onProgress = () => {}) {
   const weaponRoot = "./assets/weapons/";
   const definitionById = new Map(environmentDefinitions.map((definition) => [definition.id, definition]));
   const definitionRoot = new Map(ASSET_DEFINITION_URLS.map((url, index) => [environmentDefinitions[index].id, url.slice(0, url.lastIndexOf("/") + 1)]));
-  const [terrain, environmentImages, defaultCharacter, health, spy, speed, mole, shield, teleport, fart, peaShooter] = await Promise.all([
+  const [terrain, environmentImages, defaultCharacter, health, spy, speed, mole, shield, teleport, fart, peaShooter, pistol, burst, smg, shotgun, plasmaCannon] = await Promise.all([
     loadImage(TERRAIN_URL),
     Promise.all(environmentDefinitions.map((definition) => loadImage(versioned(definitionRoot.get(definition.id) + definition.sprite)))),
     loadCharacterAsset(defaultSkin),
@@ -65,6 +70,11 @@ export async function loadDustyOrbitAssets(onProgress = () => {}) {
     loadImage(versioned(powerupRoot + POWERUP_ART.teleport.sprite)),
     loadImage(versioned(powerupRoot + POWERUP_ART.fart.sprite)),
     loadImage(versioned(weaponRoot + WEAPON_ART.peaShooter.sprite)),
+    loadImage(versioned(weaponRoot + WEAPON_ART.pistol.sprite)),
+    loadImage(versioned(weaponRoot + WEAPON_ART.burst.sprite)),
+    loadImage(versioned(weaponRoot + WEAPON_ART.smg.sprite)),
+    loadImage(versioned(weaponRoot + WEAPON_ART.shotgun.sprite)),
+    loadImage(versioned(weaponRoot + WEAPON_ART.plasmaCannon.sprite)),
   ]);
   onProgress("Building shared environment polygons…", 0.8);
   const imageByAssetId = new Map(environmentDefinitions.map((definition, index) => [definition.id, environmentImages[index]]));
@@ -118,6 +128,11 @@ export async function loadDustyOrbitAssets(onProgress = () => {}) {
     },
     weapons: {
       peaShooter: { image: peaShooter, sourceBounds: WEAPON_ART.peaShooter.sourceBounds },
+      pistol: { image: pistol, sourceBounds: WEAPON_ART.pistol.sourceBounds },
+      burst: { image: burst, sourceBounds: WEAPON_ART.burst.sourceBounds },
+      smg: { image: smg, sourceBounds: WEAPON_ART.smg.sourceBounds },
+      shotgun: { image: shotgun, sourceBounds: WEAPON_ART.shotgun.sourceBounds },
+      plasmaCannon: { image: plasmaCannon, sourceBounds: WEAPON_ART.plasmaCannon.sourceBounds },
     },
   };
 }

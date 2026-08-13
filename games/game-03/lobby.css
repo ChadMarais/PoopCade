@@ -21,7 +21,7 @@
 .preview-copy { position:relative; text-align:center; }
 .preview-copy h3 { margin:0; font-size:clamp(21px,3vw,30px); letter-spacing:.08em; }
 .preview-copy p { margin:8px 0 0; color:#cfc3da; font-size:13px; }
-.skin-rail { display:flex; gap:10px; overflow-x:auto; padding:16px 2px 3px; scroll-snap-type:x mandatory; scrollbar-color:#5addef transparent; }
+.skin-rail { display:flex; gap:10px; overflow-x:auto; padding:16px 2px 12px; scroll-snap-type:x mandatory; scrollbar-color:#5addef transparent; }
 .skin-card { flex:0 0 min(240px,75vw); display:grid; grid-template-columns:54px 1fr; gap:10px; align-items:center; padding:9px; border:1px solid rgba(255,255,255,.12); border-radius:14px; color:#fff; text-align:left; background:rgba(255,255,255,.045); cursor:pointer; scroll-snap-align:start; }
 .skin-card img { width:54px; height:54px; object-fit:contain; transform:scale(var(--card-scale,1)); }
 .skin-card strong,.skin-card small { display:block; }

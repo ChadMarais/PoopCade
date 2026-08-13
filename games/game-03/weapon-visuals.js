@@ -11,16 +11,17 @@ function freezeVisual(definition) {
 // every weapon tier and by the authoritative server muzzle calculation.
 export const SHOULDER_SIDE_OFFSET = 31;
 
-// Every tier uses the same right-side gravitic docking convention. Tiers 2-6
-// are intentionally procedural placeholders until their production art lands;
-// adding art only requires an asset key and a config change here.
+// Every tier uses the same right-side gravitic docking convention and a
+// production sprite whose muzzle anchor is shared with server simulation.
 export const WEAPON_VISUALS = Object.freeze({
-  1: freezeVisual({ tier: 1, id: "pea-shooter", kind: "sprite", asset: "peaShooter", drawSize: { width: 42, height: 33 }, pivot: { x: .40, y: .52 }, forwardOffset: 13.3, sideOffset: SHOULDER_SIDE_OFFSET, muzzle: { x: .94, y: .52 }, recoilDistance: 2.2, recoilMs: 135, flashSize: 3.6, accent: "#8ffcff", barrels: 1 }),
-  2: freezeVisual({ tier: 2, id: "pistol-module", kind: "procedural", drawSize: { width: 38, height: 22 }, pivot: { x: .32, y: .50 }, forwardOffset: 12.4, sideOffset: SHOULDER_SIDE_OFFSET, muzzle: { x: .94, y: .50 }, recoilDistance: 3, recoilMs: 145, flashSize: 4.2, accent: "#fff08a", barrels: 1 }),
-  3: freezeVisual({ tier: 3, id: "burst-module", kind: "procedural", drawSize: { width: 44, height: 25 }, pivot: { x: .30, y: .50 }, forwardOffset: 7.0, sideOffset: SHOULDER_SIDE_OFFSET, muzzle: { x: .96, y: .50 }, recoilDistance: 3.4, recoilMs: 150, flashSize: 4.8, accent: "#8ff8ff", barrels: 3 }),
-  4: freezeVisual({ tier: 4, id: "smg-module", kind: "procedural", drawSize: { width: 46, height: 24 }, pivot: { x: .30, y: .50 }, forwardOffset: 5.2, sideOffset: SHOULDER_SIDE_OFFSET, muzzle: { x: .97, y: .50 }, recoilDistance: 2.6, recoilMs: 105, flashSize: 4.5, accent: "#ff8edf", barrels: 2 }),
-  5: freezeVisual({ tier: 5, id: "scatter-module", kind: "procedural", drawSize: { width: 48, height: 30 }, pivot: { x: .31, y: .50 }, forwardOffset: 4.8, sideOffset: SHOULDER_SIDE_OFFSET, muzzle: { x: .96, y: .50 }, recoilDistance: 5, recoilMs: 180, flashSize: 7, accent: "#ffc66d", barrels: 3 }),
-  6: freezeVisual({ tier: 6, id: "plasma-module", kind: "procedural", drawSize: { width: 54, height: 30 }, pivot: { x: .30, y: .50 }, forwardOffset: 6.4, sideOffset: SHOULDER_SIDE_OFFSET, muzzle: { x: .96, y: .50 }, recoilDistance: 6.5, recoilMs: 190, flashSize: 9, accent: "#bf8cff", barrels: 1 }),
+  // Sprite muzzle anchors sit on the last visible midline pixel of each
+  // production crop, rather than an approximate point inset into the artwork.
+  1: freezeVisual({ tier: 1, id: "pea-shooter", kind: "sprite", asset: "peaShooter", drawSize: { width: 42, height: 33 }, pivot: { x: .40, y: .52 }, forwardOffset: 13.3, sideOffset: SHOULDER_SIDE_OFFSET, muzzle: { x: .985, y: .52 }, recoilDistance: 2.2, recoilMs: 135, flashSize: 3.6, accent: "#8ffcff", barrels: 1 }),
+  2: freezeVisual({ tier: 2, id: "pistol", kind: "sprite", asset: "pistol", drawSize: { width: 54, height: 31 }, pivot: { x: .31, y: .50 }, forwardOffset: 6.0, sideOffset: SHOULDER_SIDE_OFFSET, muzzle: { x: .997, y: .50 }, recoilDistance: 3, recoilMs: 145, flashSize: 4.2, accent: "#68f7ff", barrels: 1 }),
+  3: freezeVisual({ tier: 3, id: "burst", kind: "sprite", asset: "burst", drawSize: { width: 44, height: 22.88 }, pivot: { x: .30, y: .50 }, forwardOffset: 5.33, sideOffset: SHOULDER_SIDE_OFFSET, muzzle: { x: .997, y: .50 }, recoilDistance: 3.4, recoilMs: 150, flashSize: 4.8, accent: "#ff4fe8", barrels: 3 }),
+  4: freezeVisual({ tier: 4, id: "smg", kind: "sprite", asset: "smg", drawSize: { width: 46, height: 25.10 }, pivot: { x: .30, y: .50 }, forwardOffset: 3.94, sideOffset: SHOULDER_SIDE_OFFSET, muzzle: { x: .997, y: .50 }, recoilDistance: 2.6, recoilMs: 105, flashSize: 4.5, accent: "#9cff3f", barrels: 2 }),
+  5: freezeVisual({ tier: 5, id: "shotgun", kind: "sprite", asset: "shotgun", drawSize: { width: 48, height: 26.64 }, pivot: { x: .31, y: .50 }, forwardOffset: 3.02, sideOffset: SHOULDER_SIDE_OFFSET, muzzle: { x: .997, y: .50 }, recoilDistance: 5, recoilMs: 180, flashSize: 7, accent: "#5ff7ff", barrels: 2 }),
+  6: freezeVisual({ tier: 6, id: "plasma-cannon", kind: "sprite", asset: "plasmaCannon", drawSize: { width: 54, height: 31.66 }, pivot: { x: .30, y: .50 }, forwardOffset: 4.36, sideOffset: SHOULDER_SIDE_OFFSET, muzzle: { x: .997, y: .50 }, recoilDistance: 6.5, recoilMs: 190, flashSize: 9, accent: "#5beeff", barrels: 1 }),
 });
 
 export function weaponVisualForTier(tier) {
