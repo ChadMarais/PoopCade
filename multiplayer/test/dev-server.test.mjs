@@ -87,3 +87,11 @@ test("map placement serialization is bounded and only rewrites the selected inst
   assert.match(updated, /ROCK A.*x: 650, y: 450/);
   assert.match(updated, /ROCK B.*x: 1400, y: 500.*rotation: 25/);
 });
+
+test("outpost definitions and placements are writable in debug authoring mode", () => {
+  assert.equal(COLLISION_ASSET_PATHS["outpost-wall-straight-01"], "games/game-03/assets/dusty-orbit/outpost/outpost-wall-straight-01.json");
+  assert.deepEqual(
+    validateMapPlacement({ id: "OUTPOST SUPPLY CRATE 01", x: 1600, y: 1000, rotation: 12.25 }),
+    { id: "OUTPOST SUPPLY CRATE 01", x: 1600, y: 1000, rotation: 12.3 },
+  );
+});

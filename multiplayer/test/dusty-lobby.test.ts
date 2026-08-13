@@ -76,6 +76,25 @@ test("joinedAt starts on admission, survives reconnect/death/respawn, and resets
   assert.equal(rejoined.joinedAt, 9000);
 });
 
+test("inactivity removal emits the authoritative final score for persistence", () => {
+  const simulation = new DustyOrbitSimulation(() => .5);
+  const player = simulation.addPlayer(id(1), "Profile Pilot", 1000);
+  player.killScore = 4;
+  player.kills = 7;
+  player.deaths = 3;
+  simulation.markDisconnected(player.id, 2000);
+  simulation.step(undefined, 7000);
+
+  const stale = simulation.drainEvents().find((event) => event.type === "stale") as any;
+  assert.deepEqual(stale, {
+    type: "stale",
+    playerId: player.id,
+    endedAt: 7000,
+    player: { id: player.id, killScore: 4, kills: 7, deaths: 3, joinedAt: 1000 },
+  });
+  assert.equal(simulation.players.has(player.id), false);
+});
+
 test("lobby roster carries live non-negative scores, skin IDs, join times, and deterministic ranking", () => {
   const simulation = new DustyOrbitSimulation(() => .5);
   const first = simulation.addPlayer(id(1), "Profile Pilot", 1000, { skinId: "moon-blob-01" });

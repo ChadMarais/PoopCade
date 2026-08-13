@@ -248,7 +248,20 @@ export class DustyOrbitSimulation {
     this.maintainPickups(now);
     for (const player of [...this.players.values()]) {
       if ((player.disconnectedAt && now - player.disconnectedAt >= DUSTY_DISCONNECT_GRACE_MS) || now - player.lastMessageAt >= DUSTY_STALE_PLAYER_MS) {
-        this.events.push({ type: "stale", playerId: player.id }); this.removePlayer(player.id); continue;
+        this.events.push({
+          type: "stale",
+          playerId: player.id,
+          endedAt: now,
+          player: {
+            id: player.id,
+            killScore: player.killScore,
+            kills: player.kills,
+            deaths: player.deaths,
+            joinedAt: player.joinedAt,
+          },
+        });
+        this.removePlayer(player.id);
+        continue;
       }
       if (!player.alive) {
         player.connectedSatelliteId = null;

@@ -1,6 +1,10 @@
 import rockDefinition from "../../games/game-03/assets/dusty-orbit/rocks/rock-cluster-01.json" with { type: "json" };
 import satelliteDefinition from "../../games/game-03/assets/dusty-orbit/satellite/satellite-relay-01.json" with { type: "json" };
 import satelliteLeftDefinition from "../../games/game-03/assets/dusty-orbit/satellite/satellite-relay-01-left.json" with { type: "json" };
+import outpostCanisterDefinition from "../../games/game-03/assets/dusty-orbit/outpost/outpost-canister-01.json" with { type: "json" };
+import outpostSupplyCrateDefinition from "../../games/game-03/assets/dusty-orbit/outpost/outpost-supply-crate-01.json" with { type: "json" };
+import outpostWallCornerDefinition from "../../games/game-03/assets/dusty-orbit/outpost/outpost-wall-corner-01.json" with { type: "json" };
+import outpostWallStraightDefinition from "../../games/game-03/assets/dusty-orbit/outpost/outpost-wall-straight-01.json" with { type: "json" };
 import { ENVIRONMENT_INSTANCES, SATELLITE_CONNECTION, SATELLITE_INSTANCES, WORLD } from "../../games/game-03/map.js";
 import { collisionBlocksMovement, collisionBlocksProjectiles, transformNormalizedPolygon } from "../../games/game-03/collision-geometry.js";
 
@@ -26,6 +30,10 @@ const DEFINITIONS = Object.freeze({
   [rockDefinition.id]: rockDefinition,
   [satelliteDefinition.id]: satelliteDefinition,
   [satelliteLeftDefinition.id]: satelliteLeftDefinition,
+  [outpostCanisterDefinition.id]: outpostCanisterDefinition,
+  [outpostSupplyCrateDefinition.id]: outpostSupplyCrateDefinition,
+  [outpostWallCornerDefinition.id]: outpostWallCornerDefinition,
+  [outpostWallStraightDefinition.id]: outpostWallStraightDefinition,
 });
 
 export const DUSTY_ENVIRONMENT_COLLIDERS = Object.freeze(ENVIRONMENT_INSTANCES.map((instance) => {
@@ -74,6 +82,10 @@ export const DUSTY_CANONICAL_COLLISION = Object.freeze({
     Object.freeze({ definitionId: rockDefinition.id, normalizedPointCount: rockDefinition.collision.points.length, source: "games/game-03/assets/dusty-orbit/rocks/rock-cluster-01.json" }),
     Object.freeze({ definitionId: satelliteDefinition.id, normalizedPointCount: satelliteDefinition.collisionPolygon.length, source: "games/game-03/assets/dusty-orbit/satellite/satellite-relay-01.json" }),
     Object.freeze({ definitionId: satelliteLeftDefinition.id, normalizedPointCount: satelliteLeftDefinition.collisionPolygon.length, source: "games/game-03/assets/dusty-orbit/satellite/satellite-relay-01-left.json" }),
+    Object.freeze({ definitionId: outpostCanisterDefinition.id, normalizedPointCount: outpostCanisterDefinition.collisionPolygon.length, source: "games/game-03/assets/dusty-orbit/outpost/outpost-canister-01.json" }),
+    Object.freeze({ definitionId: outpostSupplyCrateDefinition.id, normalizedPointCount: outpostSupplyCrateDefinition.collisionPolygon.length, source: "games/game-03/assets/dusty-orbit/outpost/outpost-supply-crate-01.json" }),
+    Object.freeze({ definitionId: outpostWallCornerDefinition.id, normalizedPointCount: outpostWallCornerDefinition.collisionPolygon.length, source: "games/game-03/assets/dusty-orbit/outpost/outpost-wall-corner-01.json" }),
+    Object.freeze({ definitionId: outpostWallStraightDefinition.id, normalizedPointCount: outpostWallStraightDefinition.collisionPolygon.length, source: "games/game-03/assets/dusty-orbit/outpost/outpost-wall-straight-01.json" }),
   ]),
   instanceCount: DUSTY_ENVIRONMENT_COLLIDERS.length,
 });

@@ -8,11 +8,11 @@ function input(seq: number, moveX: number, moveY: number, aimX: number, aimY: nu
   return { type: "input" as const, seq, moveX, moveY, aimX, aimY, fire };
 }
 
-test("server imports canonical rock and satellite JSON for all eight scaled instances", () => {
+test("server imports canonical environment JSON for all twelve scaled instances", () => {
   assert.equal(DUSTY_CANONICAL_COLLISION.normalizedPointCount, 19);
-  assert.equal(DUSTY_CANONICAL_COLLISION.instanceCount, 8);
-  assert.deepEqual(DUSTY_CANONICAL_COLLISION.definitions.map((item) => item.normalizedPointCount), [19, 13, 13]);
-  assert.equal(DUSTY_POLYGONS.length, 8);
+  assert.equal(DUSTY_CANONICAL_COLLISION.instanceCount, 12);
+  assert.deepEqual(DUSTY_CANONICAL_COLLISION.definitions.map((item) => item.normalizedPointCount), [19, 13, 13, 12, 8, 18, 12]);
+  assert.equal(DUSTY_POLYGONS.length, 12);
   assert.equal(DUSTY_POLYGONS[0].length, 19);
   assert.equal(DUSTY_POLYGONS[0][0].x, 557.6);
   assert.equal(DUSTY_POLYGONS[0][0].y, 453.576);

@@ -1,8 +1,8 @@
-import { ASSET_DEFINITION_URLS, ENVIRONMENT_INSTANCES, SATELLITE_CONNECTION, TERRAIN_URL, WORLD } from "./map.js?v=20260813-4";
+import { ASSET_DEFINITION_URLS, ENVIRONMENT_INSTANCES, SATELLITE_CONNECTION, TERRAIN_URL, WORLD } from "./map.js?v=20260813-5";
 import { collisionBlocksMovement, depthSortY, transformNormalizedPolygon } from "./collision-geometry.js?v=20260813-2";
 import { DEFAULT_CHARACTER_SKIN_ID, characterSkinById } from "./character-skins.js?v=20260813";
 
-const ASSET_VERSION = "20260813-10";
+const ASSET_VERSION = "20260813-11";
 const versioned = (url) => `${url}?v=${ASSET_VERSION}`;
 const POWERUP_ART = Object.freeze({
   health: Object.freeze({ sprite: "health.png", sourceBounds: Object.freeze({ x: 229, y: 193, width: 797, height: 785 }) }),

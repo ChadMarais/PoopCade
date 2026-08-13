@@ -1,6 +1,6 @@
 import { moveCircleWithSliding } from "./collision-geometry.js?v=20260813-2";
 import { CollisionEditor } from "./collision-editor.js?v=20260813-9";
-import { loadDustyOrbitAssets } from "./assets.js?v=20260813-12";
+import { loadDustyOrbitAssets } from "./assets.js?v=20260813-13";
 import { PRODUCTION_ARENA_WSS } from "./config.js?v=20260812";
 import { DustyOrbitMultiplayerRenderer } from "./renderer.js?v=20260813-24";
 import { InputController } from "./input.js?v=20260813-3";

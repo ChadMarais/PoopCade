@@ -51,6 +51,8 @@ When testing service-worker changes, use the browser's Application/Storage devel
 
 Guest play remains the default. Players may optionally sign in with Google, choose a separate public gamer name, save ORBIT//SHIFT, NEXT., and DUSTY ORBIT runs, and sync personal bests across devices. DUSTY ORBIT submits each newly reached positive arena-score high from the server-reported player snapshot, so a later death penalty cannot erase a previously saved best.
 
+The DUSTY ORBIT Worker also submits a signed-in player's final authoritative arena score when the player deliberately leaves or is removed after the inactivity timeout. This closes sessions that otherwise have no game-over event; guest sessions remain analytics-only.
+
 The browser uses one Supabase client from `js/supabase-config.js`, with `@supabase/supabase-js` pinned to version `2.111.0`. The publishable browser key in that file is not a secret. Never add a secret key, service-role key, database password, OAuth client secret, or access token to frontend code or source control.
 
 The backend foundation is source-only and has not been deployed. Before accounts work in production:

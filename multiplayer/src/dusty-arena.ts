@@ -9,6 +9,7 @@ import {
   DUSTY_TICK_RATE,
 } from "./dusty-simulation.ts";
 import { DUSTY_GAMEPLAY, DUSTY_WEAPONS } from "./dusty-gameplay.ts";
+import { submitDustyOrbitFinalScore, type DustyFinalScorePlayer } from "./dusty-score.ts";
 import { validCharacterSkinId } from "../../games/game-03/character-skins.js";
 
 type Env = { SUPABASE_URL?: string; SUPABASE_PUBLISHABLE_KEY?: string };
@@ -24,12 +25,14 @@ type Session = {
   windowStartedAt: number;
   messageCount: number;
   invalidCount: number;
+  accessToken?: string;
 };
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export class DustyOrbitArena extends DurableObject<Env> {
   private readonly simulation = new DustyOrbitSimulation();
   private readonly sessions = new Map<WebSocket, Session>();
+  private readonly scoreTokens = new Map<string, string>();
   private timer: ReturnType<typeof setInterval> | null = null;
 
   constructor(ctx: DurableObjectState, env: Env) {
@@ -50,8 +53,10 @@ export class DustyOrbitArena extends DurableObject<Env> {
         windowStartedAt: now,
         messageCount: 0,
         invalidCount: 0,
+        ...(typeof attachment.accessToken === "string" ? { accessToken: attachment.accessToken } : {}),
       };
       this.sessions.set(socket, session);
+      if (session.accessToken) this.scoreTokens.set(session.playerId, session.accessToken);
       if (role !== "active") continue;
       try {
         const player = this.simulation.addPlayer(session.playerId, session.name, now, { skinId: session.skinId, joinedAt: session.joinedAt || now });
@@ -71,8 +76,10 @@ export class DustyOrbitArena extends DurableObject<Env> {
     const debug = (url.hostname === "127.0.0.1" || url.hostname === "localhost") && url.searchParams.get("debug") === "1";
     if (!UUID_PATTERN.test(playerId)) return new Response("A valid session UUID is required.", { status: 400 });
 
+    let resumedAccessToken = this.scoreTokens.get(playerId);
     for (const [existingSocket, existing] of this.sessions) {
       if (existing.playerId !== playerId) continue;
+      resumedAccessToken = existing.accessToken;
       this.sessions.delete(existingSocket);
       if (existing.role === "active") this.simulation.markDisconnected(existing.playerId, Date.now());
       try { existingSocket.close(4001, "Reconnected"); } catch {}
@@ -91,6 +98,7 @@ export class DustyOrbitArena extends DurableObject<Env> {
       windowStartedAt: Date.now(),
       messageCount: 0,
       invalidCount: 0,
+      ...(resumedAccessToken ? { accessToken: resumedAccessToken } : {}),
     };
     server.serializeAttachment(session);
     this.ctx.acceptWebSocket(server, [playerId]);
@@ -155,6 +163,9 @@ export class DustyOrbitArena extends DurableObject<Env> {
         session.skinId = player.skinId;
         session.joinedAt = player.joinedAt;
         session.role = "active";
+        session.accessToken = authenticatedName && message.accessToken ? message.accessToken : undefined;
+        if (session.accessToken) this.scoreTokens.set(session.playerId, session.accessToken);
+        else this.scoreTokens.delete(session.playerId);
         this.simulation.prepareConnection(session.playerId, Date.now());
         socket.serializeAttachment(session);
         this.startLoop();
@@ -169,10 +180,16 @@ export class DustyOrbitArena extends DurableObject<Env> {
     }
 
     if (message.type === "leave") {
-      if (session.role === "active") this.simulation.removePlayer(session.playerId);
+      const player = session.role === "active" ? this.simulation.players.get(session.playerId) : null;
+      if (player) {
+        this.persistFinalScore(this.scoreTokens.get(session.playerId) ?? session.accessToken, player, now);
+        this.simulation.removePlayer(session.playerId);
+      }
+      this.scoreTokens.delete(session.playerId);
       session.role = "lobby";
       session.joinedAt = 0;
       session.joinPending = false;
+      session.accessToken = undefined;
       socket.serializeAttachment(session);
       this.flushEvents();
       this.sendLobbyState(socket);
@@ -227,6 +244,23 @@ export class DustyOrbitArena extends DurableObject<Env> {
     }));
   }
 
+  private persistFinalScore(accessToken: string | undefined, player: DustyFinalScorePlayer, endedAt: number): void {
+    if (!accessToken) return;
+    const finalPlayer = {
+      id: player.id,
+      killScore: player.killScore,
+      kills: player.kills,
+      deaths: player.deaths,
+      joinedAt: player.joinedAt,
+    };
+    this.ctx.waitUntil(submitDustyOrbitFinalScore({
+      env: this.env,
+      accessToken,
+      player: finalPlayer,
+      endedAt,
+    }).catch(() => ({ submitted: false })));
+  }
+
   private disconnectSocket(socket: WebSocket): void {
     const session = this.sessions.get(socket);
     if (!session) return;
@@ -261,10 +295,15 @@ export class DustyOrbitArena extends DurableObject<Env> {
     for (const event of this.simulation.drainEvents()) {
       if (["player_joined", "player_left", "kill", "death"].includes(String(event.type))) rosterChanged = true;
       if (event.type === "stale" && typeof event.playerId === "string") {
+        if (event.player && typeof event.player === "object") {
+          this.persistFinalScore(this.scoreTokens.get(event.playerId), event.player as DustyFinalScorePlayer, Number(event.endedAt) || Date.now());
+        }
+        this.scoreTokens.delete(event.playerId);
         for (const [socket, session] of this.sessions) {
           if (session.playerId !== event.playerId || session.role !== "active") continue;
           session.role = "lobby";
           session.joinedAt = 0;
+          session.accessToken = undefined;
           socket.serializeAttachment(session);
           try { socket.close(4002, "Inactive"); } catch {}
         }

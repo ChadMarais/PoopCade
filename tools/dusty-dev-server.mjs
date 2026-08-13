@@ -10,12 +10,18 @@ const MAP_SOURCE_PATH = "games/game-03/map.js";
 const MAP_INSTANCE_IDS = new Set([
   "ROCK A", "ROCK B", "ROCK C", "ROCK D", "ROCK E", "ROCK F",
   "SATELLITE RELAY WEST", "SATELLITE RELAY EAST",
+  "OUTPOST CANISTER 01", "OUTPOST SUPPLY CRATE 01",
+  "OUTPOST WALL CORNER 01", "OUTPOST WALL STRAIGHT 01",
 ]);
 
 export const COLLISION_ASSET_PATHS = Object.freeze({
   "rock-cluster-01": "games/game-03/assets/dusty-orbit/rocks/rock-cluster-01.json",
   "satellite-relay-01": "games/game-03/assets/dusty-orbit/satellite/satellite-relay-01.json",
   "satellite-relay-01-left": "games/game-03/assets/dusty-orbit/satellite/satellite-relay-01-left.json",
+  "outpost-canister-01": "games/game-03/assets/dusty-orbit/outpost/outpost-canister-01.json",
+  "outpost-supply-crate-01": "games/game-03/assets/dusty-orbit/outpost/outpost-supply-crate-01.json",
+  "outpost-wall-corner-01": "games/game-03/assets/dusty-orbit/outpost/outpost-wall-corner-01.json",
+  "outpost-wall-straight-01": "games/game-03/assets/dusty-orbit/outpost/outpost-wall-straight-01.json",
 });
 
 const MIME_TYPES = Object.freeze({
