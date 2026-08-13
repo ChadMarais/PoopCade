@@ -1,17 +1,61 @@
+import { weaponPose, weaponVisualForTier } from "./weapon-visuals.js?v=20260813";
+
 function clamp(value, min, max) { return Math.max(min, Math.min(max, value)); }
+function mix(a, b, amount) { return a + (b - a) * amount; }
+function smoothstep(amount) { const t = clamp(amount, 0, 1); return t * t * (3 - 2 * t); }
+function seededUnit(seed) {
+  const value = Math.sin(seed * 12.9898 + 78.233) * 43758.5453;
+  return value - Math.floor(value);
+}
+
+const POWERUP_DISPLAY_NAMES = Object.freeze({
+  spy: "SPY VISION",
+  speed: "TURBO BOOST",
+  health: "HEALTH",
+  shield: "SHIELD",
+  teleport: "TELEPORT",
+  mole: "MOLE MODE",
+  fart: "FART CLOUD",
+});
+
+function radialParticles(seed, count, colors, speedMin, speedMax) {
+  return Array.from({ length: count }, (_, index) => {
+    const unit = seededUnit(seed * 31 + index * 7.17);
+    const angle = Math.PI * 2 * (index / count + seededUnit(seed + index) * .08);
+    const speed = mix(speedMin, speedMax, unit);
+    return {
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed - speed * .22,
+      size: mix(2.5, 7, seededUnit(seed * 3 + index * 11)),
+      color: colors[index % colors.length],
+      spin: mix(-5, 5, seededUnit(seed * 5 + index * 13)),
+    };
+  });
+}
 
 export class DustyOrbitMultiplayerRenderer {
   constructor(canvas, assets, debug = false) {
     this.canvas = canvas;
     this.ctx = canvas.getContext("2d", { alpha: false });
     this.assets = assets;
+    this.pickupLabelWidths = new Map();
     this.debug = debug;
     this.camera = { x: 0, y: 0 };
     this.viewport = { width: 1, height: 1, dpr: 1 };
     this.playerScreen = { x: 0, y: 0 };
     this.effects = [];
     this.localProjectiles = new Map();
+    this.projectileVisualOffsets = new Map();
     this.hitUntil = new Map();
+    this.spawnAnimations = new Map();
+    this.moleTransitions = new Map();
+    this.weaponRecoil = new Map();
+    this.weaponTierByPlayer = new Map();
+    this.weaponTierPulseUntil = new Map();
+    this.weaponPoses = new Map();
+    this.weaponHiddenByMole = new Set();
+    this.weaponHiddenUntil = new Map();
+    this.localPlayerId = null;
     this.minimapSurfaces = new Map();
     this.resize();
     addEventListener("resize", () => this.resize());
@@ -25,15 +69,18 @@ export class DustyOrbitMultiplayerRenderer {
     this.canvas.height = Math.round(height * dpr);
     this.canvas.style.width = `${width}px`;
     this.canvas.style.height = `${height}px`;
+    this.ctx.imageSmoothingEnabled = true;
+    this.ctx.imageSmoothingQuality = "high";
     this.viewport = { width, height, dpr };
   }
 
   impact(event) {
     if (Number.isSafeInteger(event.projectileId)) this.localProjectiles.delete(event.projectileId);
+    if (Number.isSafeInteger(event.projectileId)) this.projectileVisualOffsets.delete(event.projectileId);
     this.effects.push({ x: event.x, y: event.y, born: performance.now(), life: 280 });
   }
 
-  confirmLocalShot(event, playerPosition) {
+  confirmShot(event, local = false) {
     const projectile = event?.projectile;
     if (!projectile || !Number.isSafeInteger(projectile.id) ||
         !Number.isFinite(projectile.vx) || !Number.isFinite(projectile.vy)) return;
@@ -41,27 +88,82 @@ export class DustyOrbitMultiplayerRenderer {
     if (speed < .001) return;
     const directionX = projectile.vx / speed;
     const directionY = projectile.vy / speed;
-    const hasPredictedOrigin = Number.isFinite(playerPosition?.x) && Number.isFinite(playerPosition?.y);
-    const x = hasPredictedOrigin ? playerPosition.x + directionX * 36 : projectile.x;
-    const y = hasPredictedOrigin ? playerPosition.y + directionY * 36 : projectile.y;
     const born = performance.now();
+    const visual = weaponVisualForTier(projectile.tier);
+    const pose = this.weaponPoses.get(event.playerId);
+    if (pose) {
+      this.weaponRecoil.set(event.playerId, { born, life: visual.recoilMs, distance: visual.recoilDistance });
+      this.effects.push({
+        type: "weapon-muzzle", tier: projectile.tier, x: pose.muzzleWorld.x, y: pose.muzzleWorld.y,
+        angle: Math.atan2(directionY, directionX), size: visual.flashSize, born,
+        life: projectile.tier === 6 ? 175 : projectile.tier === 1 ? 85 : 115,
+      });
+      if (!local) {
+        this.projectileVisualOffsets.set(projectile.id, {
+          x: pose.muzzleWorld.x - projectile.x,
+          y: pose.muzzleWorld.y - projectile.y,
+          born,
+          life: 150,
+        });
+      }
+    }
+    if (!local) return;
+    const visualOffsetX = pose ? pose.muzzleWorld.x - projectile.x : 0;
+    const visualOffsetY = pose ? pose.muzzleWorld.y - projectile.y : 0;
     const life = clamp((projectile.expiresAt || 0) - (projectile.spawnedAt || 0), 100, 3000);
     this.localProjectiles.set(projectile.id, {
-      ...projectile, startX: x, startY: y, born, life,
+      ...projectile, startX: projectile.x, startY: projectile.y,
+      visualOffsetX, visualOffsetY, convergeMs: 90, born, life,
     });
-    this.effects.push({ type: "muzzle", x, y, born, life: 120 });
   }
 
   playerHit(id) { this.hitUntil.set(id, performance.now() + 180); }
   shieldHit(event) { this.effects.push({ type: "shield", x: event.x, y: event.y, born: performance.now(), life: 380 }); }
   teleport(event) { this.effects.push({ type: "teleport", x: event.x, y: event.y, born: performance.now(), life: 480 }); }
+  moleBurrowed(event) {
+    const born = performance.now();
+    this.weaponHiddenByMole.add(event.playerId);
+    this.weaponPoses.delete(event.playerId);
+    this.moleTransitions.set(event.playerId, { kind: "burrow", born, life: 760 });
+    this.effects.push({ type: "dirt", direction: "burrow", x: event.x, y: event.y, born, life: 820, particles: radialParticles(event.x + event.y, 18, ["#ddb46f", "#9c694d", "#6c3f43", "#f2d394"], 45, 135) });
+  }
+  moleEmerged(event) {
+    const born = performance.now();
+    this.weaponHiddenByMole.delete(event.playerId);
+    this.moleTransitions.set(event.playerId, { kind: "emerge", born, life: 760 });
+    this.effects.push({ type: "dirt", direction: "emerge", x: event.x, y: event.y, born, life: 900, particles: radialParticles(event.x * 2 + event.y, 22, ["#f0cd83", "#bd815a", "#774b45", "#ffe2a1"], 65, 175) });
+  }
+  death(event) {
+    const born = performance.now();
+    this.weaponHiddenByMole.delete(event.victimId);
+    this.weaponHiddenUntil.delete(event.victimId);
+    this.weaponPoses.delete(event.victimId);
+    const scale = event.cause === "nuke" ? 1.3 : 1;
+    this.effects.push({ type: "death", x: event.x, y: event.y, born, life: 900, scale, particles: radialParticles(event.x + event.y * 3, 26, ["#ffffff", "#79f5ff", "#d889ff", "#ff7b62", "#ffd76c"], 90 * scale, 270 * scale) });
+  }
+  respawn(event) {
+    const born = performance.now();
+    this.weaponHiddenByMole.delete(event.playerId);
+    this.weaponHiddenUntil.delete(event.playerId);
+    this.spawnAnimations.set(event.playerId, { born, life: 950 });
+    this.effects.push({ type: "respawn", x: event.x, y: event.y, born, life: 1100, particles: radialParticles(event.x * 5 + event.y, 20, ["#ffffff", "#8af8ff", "#a9ff70", "#c18cff"], 35, 105) });
+  }
   blocked() { this.effects.push({ type: "blocked", born: performance.now(), life: 700 }); }
+  fartCloud(event, localOwner = false) {
+    if (localOwner || !event?.ownerId) return;
+    const duration = Math.max(0, Number(event.expiresAt) - Date.now());
+    this.weaponHiddenUntil.set(event.ownerId, performance.now() + duration);
+    this.weaponPoses.delete(event.ownerId);
+    this.weaponRecoil.delete(event.ownerId);
+  }
   nukeWarning(event) { this.effects.push({ type: "nuke-warning", id: event.id, x: event.x, y: event.y, radius: event.radius, born: performance.now(), life: Math.max(100, event.detonateAt - event.startedAt) }); }
   nukeDetonated(event) { this.effects.push({ type: "nuke-blast", x: event.x, y: event.y, radius: event.radius, born: performance.now(), life: 650 }); }
 
   render(snapshot, localId, predicted, delta, inputVisual) {
     const { ctx } = this;
     const { width, height, dpr } = this.viewport;
+    this.localPlayerId = localId;
+    this.weaponPoses.clear();
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     const local = snapshot?.players?.find((player) => player.id === localId);
     const focus = predicted || local || { x: this.assets.world.width / 2, y: this.assets.world.height / 2 };
@@ -75,7 +177,6 @@ export class DustyOrbitMultiplayerRenderer {
     ctx.fillStyle = "#371447";
     ctx.fillRect(0, 0, width, height);
     this.drawTerrain();
-    this.drawFartClouds(snapshot?.fartClouds || []);
     this.drawNukes(snapshot?.nukes || []);
 
     const players = (snapshot?.players || []).map((player) => player.id === localId && predicted
@@ -91,10 +192,18 @@ export class DustyOrbitMultiplayerRenderer {
       else if (layer.type === "pickup") this.drawPickup(layer.value);
       else this.drawPlayer(layer.value, layer.value.id === localId);
     }
+    // Labels are a world-space readability layer so nearby players and rocks
+    // cannot cover the name while deciding whether to collect a power-up.
+    for (const pickup of snapshot?.pickups || []) this.drawPickupLabel(pickup);
     this.drawProjectiles(snapshot?.projectiles || []);
     this.drawLocalProjectiles();
+    // Smoke must sit in front of combatants to function as visual cover.
+    this.drawFartClouds(snapshot?.fartClouds || []);
     this.drawEffects();
-    if (this.debug) this.drawCollision(players);
+    if (this.debug) {
+      this.drawWeaponDebug();
+      this.drawCollision(players);
+    }
     this.drawMinimap(snapshot, players.find((player) => player.id === localId));
   }
 
@@ -127,17 +236,94 @@ export class DustyOrbitMultiplayerRenderer {
     const shadowSize = definition.shadowDrawSize;
     const shadowOffset = definition.shadowOffset;
     const ctx = this.ctx;
-    ctx.save();
-    ctx.globalAlpha = player.moleMode && local ? .38 : (player.protectedUntil > Date.now() ? 0.64 + Math.sin(now / 70) * 0.2 : 1);
-    if (player.moleMode && local) {
-      ctx.strokeStyle = "rgba(70,28,83,.9)"; ctx.lineWidth = 4;
-      ctx.beginPath(); ctx.ellipse(x, y + 8, 27 + Math.sin(now / 120) * 3, 10, 0, 0, Math.PI * 2); ctx.stroke();
+    const tier = Number.isFinite(player.weaponTier) ? player.weaponTier : 1;
+    const previousTier = this.weaponTierByPlayer.get(player.id);
+    if (previousTier === undefined) this.weaponTierByPlayer.set(player.id, tier);
+    else if (previousTier !== tier) {
+      this.weaponTierByPlayer.set(player.id, tier);
+      this.weaponTierPulseUntil.set(player.id, now + 320);
     }
+    let spawnAlpha = 1, spawnScale = 1, spawnLift = 0;
+    const spawn = this.spawnAnimations.get(player.id);
+    if (spawn) {
+      const amount = clamp((now - spawn.born) / spawn.life, 0, 1);
+      if (amount >= 1) this.spawnAnimations.delete(player.id);
+      else {
+        const eased = 1 - Math.pow(1 - amount, 3);
+        spawnAlpha = clamp(amount * 2.4, 0, 1);
+        spawnScale = .18 + eased * .82 + Math.sin(amount * Math.PI) * .1;
+        spawnLift = (1 - eased) * 24;
+      }
+    }
+    let moleAlpha = player.moleMode && local ? .38 : 1;
+    let moleOffset = player.moleMode && local ? 11 : 0;
+    const moleTransition = this.moleTransitions.get(player.id);
+    if (moleTransition) {
+      const amount = clamp((now - moleTransition.born) / moleTransition.life, 0, 1);
+      if (amount >= 1) this.moleTransitions.delete(player.id);
+      else if (moleTransition.kind === "burrow") {
+        const eased = smoothstep(amount);
+        moleAlpha = mix(1, .3, eased);
+        moleOffset = mix(0, 18, eased);
+      } else {
+        const eased = smoothstep(amount);
+        moleAlpha = mix(.35, 1, eased);
+        moleOffset = mix(17, 0, eased);
+      }
+    }
+    if (player.moleMode && local) {
+      ctx.save();
+      const ruffle = Math.sin(now / 115);
+      ctx.globalAlpha = .82;
+      ctx.fillStyle = "rgba(84,43,56,.72)";
+      ctx.beginPath(); ctx.ellipse(x, y + 10, 30 + ruffle * 3, 10 + ruffle * 1.5, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = "rgba(236,191,112,.88)"; ctx.lineWidth = 2.5;
+      ctx.beginPath(); ctx.ellipse(x, y + 9, 25 + ruffle * 4, 7.5, 0, 0, Math.PI * 2); ctx.stroke();
+      for (let index = 0; index < 5; index++) {
+        const angle = now / 420 + index * Math.PI * .4;
+        ctx.fillStyle = index % 2 ? "#bb7a56" : "#e2b56e";
+        ctx.beginPath(); ctx.arc(x + Math.cos(angle) * 25, y + 7 + Math.sin(angle) * 7, 2.2, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.restore();
+    }
+    const protectedAlpha = player.protectedUntil > Date.now() ? 0.64 + Math.sin(now / 70) * 0.2 : 1;
+    const unitAlpha = spawnAlpha * protectedAlpha;
+    let modulePose = null;
+    const hiddenUntil = this.weaponHiddenUntil.get(player.id) || 0;
+    if (hiddenUntil && hiddenUntil <= now) this.weaponHiddenUntil.delete(player.id);
+    const weaponHidden = player.moleMode || this.weaponHiddenByMole.has(player.id) || (!local && hiddenUntil > now);
+    if (!weaponHidden) {
+      const visual = weaponVisualForTier(tier);
+      const recoilState = this.weaponRecoil.get(player.id);
+      let recoil = 0;
+      if (recoilState) {
+        const amount = clamp((now - recoilState.born) / recoilState.life, 0, 1);
+        if (amount >= 1) this.weaponRecoil.delete(player.id);
+        else recoil = recoilState.distance * (1 - smoothstep(amount));
+      }
+      modulePose = {
+        ...weaponPose(player, visual, { scale: spawnScale, verticalOffset: bob + spawnLift, recoil }),
+        playerId: player.id,
+        tier,
+        alpha: unitAlpha,
+      };
+      this.weaponPoses.set(player.id, modulePose);
+    }
+
+    ctx.save();
+    ctx.globalAlpha = moleAlpha * unitAlpha;
     ctx.drawImage(shadow, shadowBounds.x, shadowBounds.y, shadowBounds.width, shadowBounds.height,
       x + shadowOffset.x - shadowSize.width * definition.shadowPivot.x,
       y + shadowOffset.y - shadowSize.height * definition.shadowPivot.y,
       shadowSize.width, shadowSize.height);
-    ctx.translate(x, y + bob);
+    ctx.restore();
+
+    if (modulePose && modulePose.depthOffset < 0) this.drawWeaponModule(modulePose, now);
+
+    ctx.save();
+    ctx.globalAlpha = moleAlpha * unitAlpha;
+    ctx.translate(x, y + bob + spawnLift + moleOffset);
+    ctx.scale(spawnScale, spawnScale);
     const angle = Math.atan2(player.aimY || 0, player.aimX || 1) - definition.sourceForwardAngleDegrees * Math.PI / 180;
     ctx.rotate(angle);
     const draw = definition.drawSize;
@@ -149,6 +335,8 @@ export class DustyOrbitMultiplayerRenderer {
       ctx.beginPath(); ctx.arc(0, 0, 30, 0, Math.PI * 2); ctx.fill();
     }
     ctx.restore();
+
+    if (modulePose && modulePose.depthOffset >= 0) this.drawWeaponModule(modulePose, now);
 
     if (player.shieldHits) {
       ctx.save(); ctx.strokeStyle = "rgba(120,241,255,.86)"; ctx.lineWidth = 2; ctx.shadowColor = "#72efff"; ctx.shadowBlur = 10;
@@ -165,6 +353,74 @@ export class DustyOrbitMultiplayerRenderer {
     ctx.fillText(label, x, y - 55);
     this.drawHealthBar(x, y - 48, player.hp, local ? "#a6ff65" : (player.color || "#ff6cca"));
     ctx.restore();
+  }
+
+  drawWeaponModule(pose, now) {
+    const { visual } = pose;
+    const x = pose.pivotWorld.x - this.camera.x;
+    const y = pose.pivotWorld.y - this.camera.y;
+    if (x < -80 || y < -80 || x > this.viewport.width + 80 || y > this.viewport.height + 80) return;
+    const pulseUntil = this.weaponTierPulseUntil.get(pose.playerId) || 0;
+    if (pulseUntil > now) {
+      const remaining = clamp((pulseUntil - now) / 320, 0, 1);
+      const expansion = 1 - remaining;
+      const ctx = this.ctx;
+      ctx.save();
+      ctx.globalAlpha = pose.alpha * remaining * .75;
+      ctx.strokeStyle = visual.accent;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(x, y, 10 + expansion * 18, 0, Math.PI * 2); ctx.stroke();
+      ctx.restore();
+    } else if (pulseUntil) this.weaponTierPulseUntil.delete(pose.playerId);
+
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.globalAlpha = pose.alpha;
+    ctx.translate(x, y);
+    ctx.rotate(pose.angle);
+    const art = visual.kind === "sprite" ? this.assets.weapons?.[visual.asset] : null;
+    if (art) {
+      const source = art.sourceBounds;
+      ctx.drawImage(
+        art.image, source.x, source.y, source.width, source.height,
+        -pose.drawWidth * visual.pivot.x, -pose.drawHeight * visual.pivot.y,
+        pose.drawWidth, pose.drawHeight,
+      );
+    } else this.drawProceduralWeapon(pose);
+    ctx.restore();
+  }
+
+  drawProceduralWeapon(pose) {
+    const { visual, drawWidth: width, drawHeight: height } = pose;
+    const ctx = this.ctx;
+    const left = -width * visual.pivot.x;
+    const top = -height * visual.pivot.y;
+    ctx.shadowColor = visual.accent;
+    ctx.shadowBlur = 6;
+    ctx.fillStyle = "#2a2033";
+    ctx.strokeStyle = visual.accent;
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.ellipse(left + width * .37, 0, width * .32, height * .47, 0, 0, Math.PI * 2);
+    ctx.fill(); ctx.stroke();
+    ctx.fillStyle = "#4b2a66";
+    ctx.fillRect(left + width * .34, top + height * .24, width * .54, height * .52);
+    ctx.strokeRect(left + width * .34, top + height * .24, width * .54, height * .52);
+    ctx.fillStyle = visual.accent;
+    ctx.fillRect(left + width * .86, top + height * .17, width * .1, height * .66);
+    ctx.shadowBlur = 0;
+    const barrelCount = Math.max(1, visual.barrels || 1);
+    for (let index = 0; index < barrelCount; index++) {
+      const offset = (index - (barrelCount - 1) / 2) * Math.min(4, height * .2);
+      ctx.strokeStyle = index % 2 ? "#ff9d48" : "#98fbff";
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.moveTo(left + width * .48, offset);
+      ctx.lineTo(left + width * .88, offset);
+      ctx.stroke();
+    }
+    ctx.fillStyle = "#dffeff";
+    ctx.beginPath(); ctx.arc(left + width * .28, 0, Math.max(2, height * .12), 0, Math.PI * 2); ctx.fill();
   }
 
   drawHealthBar(centerX, topY, hp, color) {
@@ -191,12 +447,55 @@ export class DustyOrbitMultiplayerRenderer {
 
   drawProjectiles(projectiles) {
     const ctx = this.ctx;
+    const now = performance.now();
     for (const projectile of projectiles) {
-      const x = projectile.x - this.camera.x;
-      const y = projectile.y - this.camera.y;
+      let x = projectile.x - this.camera.x;
+      let y = projectile.y - this.camera.y;
+      const visualOffset = this.projectileVisualOffsets.get(projectile.id);
+      if (visualOffset) {
+        const amount = clamp((now - visualOffset.born) / visualOffset.life, 0, 1);
+        if (amount >= 1) this.projectileVisualOffsets.delete(projectile.id);
+        else {
+          const remaining = 1 - smoothstep(amount);
+          x += visualOffset.x * remaining;
+          y += visualOffset.y * remaining;
+        }
+      }
       ctx.save();
       const plasma = projectile.tier === 6;
       const colors = ["#d8ff8a", "#fff0a4", "#98f8ff", "#ffb1f0", "#ffc977", "#c89cff"];
+      if (plasma) {
+        const speed = Math.max(.001, Math.hypot(projectile.vx || 0, projectile.vy || 0));
+        const angle = Math.atan2(projectile.vy || 0, projectile.vx || 1);
+        const pulse = .92 + Math.sin(performance.now() / 42 + projectile.id) * .08;
+        ctx.translate(x, y);
+        ctx.rotate(angle);
+        ctx.globalCompositeOperation = "screen";
+        ctx.lineCap = "round";
+        ctx.shadowColor = "#9a4dff";
+        ctx.shadowBlur = 28;
+        ctx.strokeStyle = "rgba(113,50,255,.48)";
+        ctx.lineWidth = 15 * pulse;
+        ctx.beginPath(); ctx.moveTo(-48, 0); ctx.lineTo(11, 0); ctx.stroke();
+        const beam = ctx.createLinearGradient(-50, 0, 13, 0);
+        beam.addColorStop(0, "rgba(62,26,170,0)");
+        beam.addColorStop(.24, "rgba(137,74,255,.76)");
+        beam.addColorStop(.76, "rgba(108,240,255,.98)");
+        beam.addColorStop(1, "#ffffff");
+        ctx.shadowBlur = 18;
+        ctx.strokeStyle = beam;
+        ctx.lineWidth = 7 * pulse;
+        ctx.beginPath(); ctx.moveTo(-52, 0); ctx.lineTo(12, 0); ctx.stroke();
+        ctx.shadowColor = "#dfffff";
+        ctx.shadowBlur = 10;
+        ctx.strokeStyle = "rgba(247,255,255,.96)";
+        ctx.lineWidth = 2.3;
+        ctx.beginPath(); ctx.moveTo(-32, 0); ctx.lineTo(14, 0); ctx.stroke();
+        ctx.fillStyle = "#ffffff";
+        ctx.beginPath(); ctx.arc(13, 0, 4.5 * pulse, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+        continue;
+      }
       ctx.shadowColor = plasma ? "#9c63ff" : (colors[(projectile.tier || 1) - 1] || "#74f6ff");
       ctx.shadowBlur = plasma ? 19 : 11;
       ctx.fillStyle = plasma ? "#f8efff" : ctx.shadowColor;
@@ -216,8 +515,8 @@ export class DustyOrbitMultiplayerRenderer {
       }
       projectiles.push({
         ...projectile,
-        x: projectile.startX + projectile.vx * age / 1000,
-        y: projectile.startY + projectile.vy * age / 1000,
+        x: projectile.startX + projectile.vx * age / 1000 + projectile.visualOffsetX * (1 - smoothstep(clamp(age / projectile.convergeMs, 0, 1))),
+        y: projectile.startY + projectile.vy * age / 1000 + projectile.visualOffsetY * (1 - smoothstep(clamp(age / projectile.convergeMs, 0, 1))),
       });
     }
     this.drawProjectiles(projectiles);
@@ -230,13 +529,32 @@ export class DustyOrbitMultiplayerRenderer {
       const amount = (now - effect.born) / effect.life;
       this.ctx.save();
       this.ctx.globalAlpha = 1 - amount;
-      if (effect.type === "muzzle") {
-        this.ctx.fillStyle = "#eaffff";
-        this.ctx.shadowColor = "#6ff7ff";
-        this.ctx.shadowBlur = 16;
+      if (effect.type === "weapon-muzzle" || effect.type === "muzzle") {
+        const plasma = effect.tier === 6;
+        const visual = weaponVisualForTier(effect.tier);
+        const x = effect.x - this.camera.x, y = effect.y - this.camera.y;
+        const size = Math.max(2, effect.size || visual.flashSize);
+        this.ctx.translate(x, y);
+        this.ctx.rotate(effect.angle || 0);
+        this.ctx.globalCompositeOperation = "screen";
+        this.ctx.fillStyle = plasma ? "#f7efff" : "#eaffff";
+        this.ctx.shadowColor = visual.accent;
+        this.ctx.shadowBlur = plasma ? 26 : 8;
         this.ctx.beginPath();
-        this.ctx.arc(effect.x - this.camera.x, effect.y - this.camera.y, 7 - amount * 3, 0, Math.PI * 2);
+        this.ctx.arc(0, 0, size * (1 - amount * .45), 0, Math.PI * 2);
         this.ctx.fill();
+        this.ctx.fillStyle = visual.accent;
+        this.ctx.beginPath();
+        this.ctx.moveTo(size * .25, -size * .58);
+        this.ctx.lineTo(size * (plasma ? 3.2 : 1.85), 0);
+        this.ctx.lineTo(size * .25, size * .58);
+        this.ctx.closePath();
+        this.ctx.fill();
+        if (plasma) {
+          this.ctx.strokeStyle = `rgba(116,225,255,${1 - amount})`;
+          this.ctx.lineWidth = 2.5;
+          this.ctx.beginPath(); this.ctx.arc(0, 0, size + amount * 20, 0, Math.PI * 2); this.ctx.stroke();
+        }
         this.ctx.restore();
         continue;
       }
@@ -250,6 +568,18 @@ export class DustyOrbitMultiplayerRenderer {
         this.ctx.lineWidth = 3; this.ctx.beginPath();
         this.ctx.arc(effect.x - this.camera.x, effect.y - this.camera.y, 12 + amount * 35, 0, Math.PI * 2); this.ctx.stroke(); this.ctx.restore(); continue;
       }
+      if (effect.type === "dirt") {
+        this.drawDirtEffect(effect, amount, now);
+        this.ctx.restore(); continue;
+      }
+      if (effect.type === "death") {
+        this.drawDeathEffect(effect, amount, now);
+        this.ctx.restore(); continue;
+      }
+      if (effect.type === "respawn") {
+        this.drawRespawnEffect(effect, amount, now);
+        this.ctx.restore(); continue;
+      }
       if (effect.type === "nuke-warning" || effect.type === "nuke-blast") {
         const expansion = effect.type === "nuke-warning" ? amount : Math.min(1, amount * 2.2);
         this.ctx.strokeStyle = effect.type === "nuke-warning" ? "#ffdd62" : "#fff3c2";
@@ -261,6 +591,142 @@ export class DustyOrbitMultiplayerRenderer {
       this.ctx.lineWidth = 2;
       this.ctx.beginPath(); this.ctx.arc(effect.x - this.camera.x, effect.y - this.camera.y, 4 + amount * 16, 0, Math.PI * 2); this.ctx.stroke();
       this.ctx.restore();
+    }
+  }
+
+  drawDirtEffect(effect, amount, now) {
+    const ctx = this.ctx;
+    const x = effect.x - this.camera.x, y = effect.y - this.camera.y + 9;
+    const age = (now - effect.born) / 1000;
+    const fade = Math.pow(1 - amount, .72);
+    const outward = effect.direction === "emerge" ? 1.2 : 1;
+    ctx.globalAlpha = fade;
+    ctx.fillStyle = `rgba(83,43,48,${.72 * fade})`;
+    ctx.beginPath(); ctx.ellipse(x, y, 25 + amount * 31, 8 + amount * 10, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = effect.direction === "emerge" ? "#f1ca7f" : "#c58c5e";
+    ctx.lineWidth = 4 - amount * 2.3;
+    ctx.shadowColor = "#6d3940"; ctx.shadowBlur = 8;
+    ctx.beginPath(); ctx.ellipse(x, y, 17 + amount * 46, 5 + amount * 17, 0, 0, Math.PI * 2); ctx.stroke();
+    ctx.shadowBlur = 0;
+    for (let index = 0; index < 7; index++) {
+      const phase = index * .91 + effect.x * .01;
+      const puffAmount = clamp(amount * 1.5 - index * .035, 0, 1);
+      const distance = (14 + index * 5) * puffAmount;
+      ctx.globalAlpha = fade * .55;
+      ctx.fillStyle = index % 2 ? "#b87855" : "#e0ad6e";
+      ctx.beginPath();
+      ctx.ellipse(x + Math.cos(phase) * distance, y - 4 - Math.sin(phase) * distance * .24 - puffAmount * 14, 7 + puffAmount * 7, 4 + puffAmount * 4, phase, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    for (const particle of effect.particles || []) {
+      const px = x + particle.vx * age * outward;
+      const py = y + particle.vy * age * outward + 125 * age * age;
+      ctx.save();
+      ctx.globalAlpha = fade;
+      ctx.translate(px, py); ctx.rotate(particle.spin * age);
+      ctx.fillStyle = particle.color;
+      ctx.fillRect(-particle.size / 2, -particle.size / 3, particle.size, particle.size * .66);
+      ctx.restore();
+    }
+  }
+
+  drawDeathEffect(effect, amount, now) {
+    const ctx = this.ctx;
+    const x = effect.x - this.camera.x, y = effect.y - this.camera.y;
+    const age = (now - effect.born) / 1000;
+    const fade = Math.pow(1 - amount, .62);
+    const scale = effect.scale || 1;
+    ctx.globalCompositeOperation = "screen";
+    ctx.globalAlpha = fade;
+    const core = ctx.createRadialGradient(x, y, 0, x, y, (18 + amount * 46) * scale);
+    core.addColorStop(0, "rgba(255,255,255,.98)");
+    core.addColorStop(.22, "rgba(126,247,255,.92)");
+    core.addColorStop(.56, "rgba(218,88,255,.62)");
+    core.addColorStop(1, "rgba(255,92,68,0)");
+    ctx.fillStyle = core;
+    ctx.beginPath(); ctx.arc(x, y, (18 + amount * 46) * scale, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = `rgba(255,240,166,${fade})`;
+    ctx.shadowColor = "#ff7eef"; ctx.shadowBlur = 24;
+    ctx.lineWidth = (6 - amount * 4) * scale;
+    ctx.beginPath(); ctx.arc(x, y, (8 + amount * 74) * scale, 0, Math.PI * 2); ctx.stroke();
+    ctx.strokeStyle = `rgba(103,237,255,${fade * .75})`;
+    ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.arc(x, y, (22 + amount * 102) * scale, 0, Math.PI * 2); ctx.stroke();
+    for (const particle of effect.particles || []) {
+      const px = x + particle.vx * age;
+      const py = y + particle.vy * age + 75 * age * age;
+      ctx.save();
+      ctx.globalAlpha = fade;
+      ctx.translate(px, py); ctx.rotate(particle.spin * age);
+      ctx.fillStyle = particle.color;
+      ctx.shadowColor = particle.color; ctx.shadowBlur = 12;
+      ctx.beginPath();
+      ctx.moveTo(particle.size * 1.8, 0);
+      ctx.lineTo(-particle.size, particle.size * .55);
+      ctx.lineTo(-particle.size * .6, -particle.size * .55);
+      ctx.closePath(); ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  drawRespawnEffect(effect, amount, now) {
+    const ctx = this.ctx;
+    const x = effect.x - this.camera.x, y = effect.y - this.camera.y;
+    const age = (now - effect.born) / 1000;
+    const fade = Math.pow(1 - amount, .75);
+    const arrive = smoothstep(clamp(amount * 1.8, 0, 1));
+    ctx.globalCompositeOperation = "screen";
+    const column = ctx.createLinearGradient(x, y - 150, x, y + 34);
+    column.addColorStop(0, "rgba(116,239,255,0)");
+    column.addColorStop(.5, `rgba(130,246,255,${.18 * fade})`);
+    column.addColorStop(1, "rgba(185,255,132,0)");
+    ctx.fillStyle = column;
+    ctx.fillRect(x - 30 * fade, y - 150, 60 * fade, 184);
+    ctx.shadowColor = "#8efbff"; ctx.shadowBlur = 20;
+    for (let ring = 0; ring < 3; ring++) {
+      const phase = clamp(amount * 1.35 - ring * .1, 0, 1);
+      ctx.globalAlpha = (1 - phase) * .9;
+      ctx.strokeStyle = ring === 1 ? "#b9ff79" : "#91f5ff";
+      ctx.lineWidth = 3 - ring * .5;
+      ctx.beginPath();
+      ctx.ellipse(x, y + 13 - arrive * 10, 14 + phase * (52 + ring * 8), 4 + phase * 15, 0, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    for (const particle of effect.particles || []) {
+      const px = x + particle.vx * age * .55;
+      const py = y + 12 + particle.vy * age - 85 * age;
+      ctx.globalAlpha = fade;
+      ctx.fillStyle = particle.color;
+      ctx.shadowColor = particle.color; ctx.shadowBlur = 10;
+      ctx.beginPath(); ctx.arc(px, py, particle.size * .55, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.globalAlpha = fade;
+    ctx.fillStyle = "rgba(244,255,255,.92)";
+    ctx.beginPath(); ctx.arc(x, y, 5 + (1 - amount) * 17, 0, Math.PI * 2); ctx.fill();
+  }
+
+  drawWeaponDebug() {
+    const ctx = this.ctx;
+    for (const pose of this.weaponPoses.values()) {
+      const pivotX = pose.pivotWorld.x - this.camera.x;
+      const pivotY = pose.pivotWorld.y - this.camera.y;
+      const muzzleX = pose.muzzleWorld.x - this.camera.x;
+      const muzzleY = pose.muzzleWorld.y - this.camera.y;
+      ctx.save();
+      ctx.strokeStyle = "rgba(113,247,255,.9)";
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(pivotX, pivotY); ctx.lineTo(muzzleX, muzzleY); ctx.stroke();
+      ctx.fillStyle = "#63f4ff";
+      ctx.beginPath(); ctx.arc(pivotX, pivotY, 2.8, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "#ffe96d";
+      ctx.beginPath(); ctx.arc(muzzleX, muzzleY, 2.5, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "rgba(8,2,16,.88)";
+      ctx.fillRect(pivotX - 2, pivotY + 5, 76, 12);
+      ctx.fillStyle = "#dffeff";
+      ctx.font = "800 8px ui-monospace,monospace";
+      ctx.textAlign = "left";
+      ctx.fillText(`T${pose.tier} ${pose.visual.id}`, pivotX + 2, pivotY + 14);
+      ctx.restore();
     }
   }
 
@@ -345,14 +811,92 @@ export class DustyOrbitMultiplayerRenderer {
     ctx.restore();
   }
 
+  drawPickupLabel(pickup) {
+    const now = performance.now();
+    const phase = now / 1000 * Math.PI * 1.8 + pickup.id * 1.73;
+    const x = pickup.x - this.camera.x;
+    const y = pickup.y - this.camera.y;
+    if (x < -90 || x > this.viewport.width + 90 || y < -70 || y > this.viewport.height + 70) return;
+    const bob = Math.sin(phase) * 3.4;
+    const lift = 7 - bob;
+    const label = POWERUP_DISPLAY_NAMES[pickup.type] || String(pickup.type || "POWER-UP").toUpperCase();
+    const color = ({ spy: "#8cecff", speed: "#ffeb67", health: "#8cff82", shield: "#81adff", teleport: "#e788ff", mole: "#e5b477", fart: "#adff70" })[pickup.type] || "#fff";
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.font = "1000 9px ui-monospace,monospace";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    let width = this.pickupLabelWidths.get(label);
+    if (!width) {
+      width = Math.ceil(ctx.measureText(label).width) + 12;
+      this.pickupLabelWidths.set(label, width);
+    }
+    const labelX = clamp(x, width / 2 + 4, this.viewport.width - width / 2 - 4);
+    const boxX = Math.round(labelX - width / 2);
+    const boxY = Math.round(clamp(y - lift - 40, 4, this.viewport.height - 19));
+    ctx.fillStyle = "rgba(12,4,22,.9)";
+    ctx.shadowColor = "rgba(3,0,8,.86)";
+    ctx.shadowBlur = 6;
+    ctx.fillRect(boxX, boxY, width, 15);
+    ctx.shadowBlur = 8;
+    ctx.shadowColor = color;
+    ctx.strokeStyle = color;
+    ctx.globalAlpha = .82;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(boxX + .5, boxY + .5, width - 1, 14);
+    ctx.globalAlpha = 1;
+    ctx.shadowBlur = 4;
+    ctx.fillStyle = "#fff";
+    ctx.fillText(label, labelX, boxY + 7.8);
+    ctx.restore();
+  }
+
   drawFartClouds(clouds) {
     const ctx = this.ctx;
+    const now = Date.now();
     for (const cloud of clouds) {
       const x = cloud.x - this.camera.x, y = cloud.y - this.camera.y;
-      ctx.save(); ctx.globalAlpha = .2 + Math.sin(performance.now() / 240 + cloud.id) * .035;
-      const gradient = ctx.createRadialGradient(x, y, cloud.radius * .12, x, y, cloud.radius);
-      gradient.addColorStop(0, "rgba(221,255,87,.85)"); gradient.addColorStop(.62, "rgba(116,174,44,.55)"); gradient.addColorStop(1, "rgba(71,113,35,0)");
-      ctx.fillStyle = gradient; ctx.beginPath(); ctx.arc(x, y, cloud.radius, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+      if (x + cloud.radius < -20 || x - cloud.radius > this.viewport.width + 20 || y + cloud.radius < -20 || y - cloud.radius > this.viewport.height + 20) continue;
+      const age = Math.max(0, now - cloud.createdAt);
+      const remaining = Math.max(0, cloud.expiresAt - now);
+      const visibility = Math.min(1, age / 260, remaining / 650);
+      const pulse = 1 + Math.sin(performance.now() / 310 + cloud.id) * .025;
+      const radius = cloud.radius * pulse;
+      ctx.save();
+      ctx.globalAlpha = visibility;
+      const base = ctx.createRadialGradient(x, y, radius * .05, x, y, radius);
+      base.addColorStop(0, "rgba(189,219,50,.94)");
+      base.addColorStop(.36, "rgba(126,160,38,.9)");
+      base.addColorStop(.7, "rgba(75,104,36,.72)");
+      base.addColorStop(1, "rgba(45,68,34,0)");
+      ctx.fillStyle = base;
+      ctx.beginPath(); ctx.arc(x, y, radius, 0, Math.PI * 2); ctx.fill();
+
+      // Slow, overlapping lobes create a dense smoke-grenade silhouette. The
+      // deterministic phase keeps every client visually consistent.
+      for (let index = 0; index < 10; index++) {
+        const seed = cloud.id * 17 + index * 5.31;
+        const angle = index * Math.PI * .2 + seededUnit(seed) * .7 + performance.now() / (5200 + index * 130);
+        const orbit = radius * mix(.12, .5, seededUnit(seed + 3));
+        const puffRadius = radius * mix(.22, .39, seededUnit(seed + 7)) * (1 + Math.sin(performance.now() / 420 + index) * .045);
+        const px = x + Math.cos(angle) * orbit;
+        const py = y + Math.sin(angle) * orbit * .58 - Math.sin(performance.now() / 900 + index) * 7;
+        const puff = ctx.createRadialGradient(px, py, 0, px, py, puffRadius);
+        puff.addColorStop(0, index % 3 === 0 ? "rgba(215,236,61,.7)" : "rgba(111,145,39,.72)");
+        puff.addColorStop(.56, index % 2 ? "rgba(77,107,36,.62)" : "rgba(126,151,40,.58)");
+        puff.addColorStop(1, "rgba(42,61,31,0)");
+        ctx.fillStyle = puff;
+        ctx.beginPath(); ctx.arc(px, py, puffRadius, 0, Math.PI * 2); ctx.fill();
+      }
+
+      ctx.globalAlpha = visibility * .26;
+      ctx.strokeStyle = "#dfff57";
+      ctx.lineWidth = Math.max(2, radius * .009);
+      ctx.setLineDash([radius * .055, radius * .035]);
+      ctx.lineDashOffset = -performance.now() / 24;
+      ctx.beginPath(); ctx.arc(x, y, radius * .61, 0, Math.PI * 2); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.restore();
     }
   }
 
@@ -462,5 +1006,20 @@ export class DustyOrbitMultiplayerRenderer {
     return surface;
   }
 
-  getDebugState() { return { camera: { ...this.camera }, playerScreen: { ...this.playerScreen }, viewport: { ...this.viewport } }; }
+  getDebugState(playerId = this.localPlayerId) {
+    const pose = this.weaponPoses.get(playerId);
+    return {
+      camera: { ...this.camera },
+      playerScreen: { ...this.playerScreen },
+      viewport: { ...this.viewport },
+      weapon: pose ? {
+        tier: pose.tier,
+        id: pose.visual.id,
+        rotation: pose.angle,
+        pivot: { ...pose.visual.pivot },
+        attachmentWorld: { ...pose.pivotWorld },
+        muzzleWorld: { ...pose.muzzleWorld },
+      } : null,
+    };
+  }
 }

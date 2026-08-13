@@ -3,6 +3,7 @@ const FIRE_DEADZONE = 0.28;
 const ACCELERATION_TAU = 0.03;
 const DECELERATION_TAU = 0.022;
 const MOUSE_FIRE_BUFFER_MS = 800;
+const TOUCH_FIRE_AIM_GRACE_MS = 90;
 const TOUCH_DRAG_RADIUS = 52;
 
 const GAME_KEYS = new Set([
@@ -81,6 +82,8 @@ export class InputController {
     this.mousePointerId = null;
     this.mouseFireQueuedUntil = 0;
     this.touchFireQueuedUntil = 0;
+    this.touchFireAimReady = false;
+    this.touchFireAimGraceUntil = 0;
     this.mouseMovedAt = 0;
     this.moveTouch = { x: 0, y: 0 };
     this.aimTouch = { x: 1, y: 0, firing: false };
@@ -124,6 +127,13 @@ export class InputController {
     this.canvas.addEventListener("pointerdown", (event) => {
       if (!this.enabled || event.pointerType === "touch" || event.button !== 0) return;
       event.preventDefault();
+      // Pointer movement is not guaranteed to fire after focus/visibility
+      // changes. Resolve the click position before the first fire sample so a
+      // click behind the blob can never inherit its previous facing.
+      const rect = this.canvas.getBoundingClientRect();
+      this.mouseCanvasX = event.clientX - rect.left;
+      this.mouseCanvasY = event.clientY - rect.top;
+      this.updateMouseAim();
       this.mousePointerId = event.pointerId;
       try { this.canvas.setPointerCapture(event.pointerId); } catch {}
       this.mouseFiring = true;
@@ -237,6 +247,7 @@ export class InputController {
       const value = virtualDragVector(fireOrigin.x, fireOrigin.y, event.clientX, event.clientY, 46, .22);
       if (!value.length) return;
       this.touchAimManual = true;
+      this.touchFireAimReady = true;
       this.aimTouch = { x: value.x, y: value.y, firing: true };
       fireButton.style.setProperty("--aim-x", `${value.x * 13}px`);
       fireButton.style.setProperty("--aim-y", `${value.y * 13}px`);
@@ -247,9 +258,12 @@ export class InputController {
       this.touchModeUntil = performance.now() + 900;
       try { fireButton.releasePointerCapture(event.pointerId); } catch {}
       this.aimTouch = { ...this.aimTouch, firing: false };
+      // A quick centre tap means "fire facing". A drag sets this sooner and
+      // therefore authorizes its direction as the first shot.
+      this.touchFireAimReady = true;
       this.touchAimManual = false;
       const movement = normalizedVector(this.moveTouch.x, this.moveTouch.y);
-      if (movement.length) this.aimTouch = { ...this.aimTouch, x: movement.x, y: movement.y };
+      if (movement.length && this.touchFireQueuedUntil <= performance.now()) this.aimTouch = { ...this.aimTouch, x: movement.x, y: movement.y };
       fireButton.classList.remove("active");
       fireButton.style.removeProperty("--aim-x");
       fireButton.style.removeProperty("--aim-y");
@@ -260,6 +274,8 @@ export class InputController {
       event.stopPropagation();
       this.firePointerId = event.pointerId;
       this.touchModeUntil = performance.now() + 1500;
+      this.touchFireAimReady = false;
+      this.touchFireAimGraceUntil = performance.now() + TOUCH_FIRE_AIM_GRACE_MS;
       const rect = fireButton.getBoundingClientRect();
       fireOrigin = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
       // Resolve a directional tap before the first fire input is sampled. A
@@ -315,7 +331,8 @@ export class InputController {
     } else if (touchUsed) {
       aimX = this.aimTouch.x;
       aimY = this.aimTouch.y;
-      fire = Boolean(this.aimTouch.firing) || now < this.touchFireQueuedUntil;
+      const wantsFire = Boolean(this.aimTouch.firing) || now < this.touchFireQueuedUntil;
+      fire = wantsFire && (this.touchFireAimReady || now >= this.touchFireAimGraceUntil);
       mode = "touch";
     }
 
@@ -348,6 +365,12 @@ export class InputController {
   acknowledgeFire() {
     this.mouseFireQueuedUntil = 0;
     this.touchFireQueuedUntil = 0;
+    this.touchFireAimReady = false;
+    this.touchFireAimGraceUntil = 0;
+    if (this.firePointerId === null) {
+      const movement = normalizedVector(this.moveTouch.x, this.moveTouch.y);
+      if (movement.length) this.aimTouch = { ...this.aimTouch, x: movement.x, y: movement.y };
+    }
   }
 
   hasIntent() {
@@ -361,6 +384,8 @@ export class InputController {
     this.mousePointerId = null;
     this.mouseFireQueuedUntil = 0;
     this.touchFireQueuedUntil = 0;
+    this.touchFireAimReady = false;
+    this.touchFireAimGraceUntil = 0;
     this.moveTouch = { x: 0, y: 0 };
     this.aimTouch = { ...this.aimTouch, firing: false };
     this.touchAimManual = false;

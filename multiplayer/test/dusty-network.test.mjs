@@ -42,3 +42,39 @@ test("local projectiles are excluded from snapshots while remote projectiles ret
   assert.equal(local, undefined);
   assert.equal(remote.x, 100);
 });
+
+test("server clock offset is applied before choosing the interpolation window", () => {
+  const network = networkWithSnapshots([
+    { type: "snapshot", t: 1000, players: [{ id: "remote", x: 0, y: 0, vx: 100, vy: 0, aimX: 1, aimY: 0, alive: true }], projectiles: [] },
+    { type: "snapshot", t: 1100, players: [{ id: "remote", x: 10, y: 0, vx: 100, vy: 0, aimX: 1, aimY: 0, alive: true }], projectiles: [] },
+  ]);
+  network.clockOffsetMs = 5000;
+  const snapshot = network.interpolatedSnapshot(6150, "local");
+  assert.ok(Math.abs(snapshot.players[0].x - 5) < .001);
+});
+
+test("remote movement extrapolates briefly instead of freezing between delayed snapshots", () => {
+  const network = networkWithSnapshots([
+    { type: "snapshot", t: 1000, players: [{ id: "remote", x: 100, y: 50, vx: 165, vy: 0, aimX: 1, aimY: 0, alive: true }], projectiles: [] },
+  ]);
+  const player = network.interpolatedSnapshot(1150, "local").players[0];
+  assert.ok(Math.abs(player.x - 108.25) < .001);
+});
+
+test("teleports and respawns snap rather than interpolating across the map", () => {
+  const network = networkWithSnapshots([
+    { type: "snapshot", t: 1000, players: [{ id: "remote", x: 100, y: 50, vx: 0, vy: 0, aimX: 1, aimY: 0, alive: false }], projectiles: [] },
+    { type: "snapshot", t: 1100, players: [{ id: "remote", x: 900, y: 700, vx: 0, vy: 0, aimX: -1, aimY: 0, alive: true }], projectiles: [] },
+  ]);
+  const player = network.interpolatedSnapshot(1150, "local").players[0];
+  assert.equal(player.x, 900); assert.equal(player.y, 700); assert.equal(player.alive, true);
+});
+
+test("aim interpolation takes the shortest arc without collapsing at 180 degrees", () => {
+  const network = networkWithSnapshots([
+    { type: "snapshot", t: 1000, players: [{ id: "remote", x: 100, y: 50, vx: 0, vy: 0, aimX: -.985, aimY: .174, alive: true }], projectiles: [] },
+    { type: "snapshot", t: 1100, players: [{ id: "remote", x: 100, y: 50, vx: 0, vy: 0, aimX: -.985, aimY: -.174, alive: true }], projectiles: [] },
+  ]);
+  const aim = network.interpolatedSnapshot(1150, "local").players[0];
+  assert.ok(aim.aimX < -.999); assert.ok(Math.abs(aim.aimY) < .01);
+});

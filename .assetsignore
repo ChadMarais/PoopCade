@@ -2,10 +2,12 @@
 .wrangler/
 node_modules/
 android/
+assets/store/
 supabase/
 multiplayer/
 .gitignore
 README.md
+AGENTS.md
 wrangler.jsonc
 .assetsignore
 games/game-03/assets/dusty-orbit/terrain/dusty-orbit-ground-base.png

@@ -166,3 +166,67 @@ test("a directional fire tap uses its new aim on the very first sample", () => {
   assert.ok(firstShot.aimY > .85);
   assert.equal(firstShot.fire, true);
 });
+
+test("mouse pointer-down resolves its own position before the first shot", () => {
+  class FakeElement {
+    constructor(width = 800, height = 500) {
+      this.listeners = new Map(); this.clientWidth = width; this.clientHeight = height;
+      this.style = { setProperty() {}, removeProperty() {} }; this.classList = { add() {}, remove() {} };
+    }
+    addEventListener(type, callback) { this.listeners.set(type, [...(this.listeners.get(type) || []), callback]); }
+    dispatch(type, event) { for (const callback of this.listeners.get(type) || []) callback({ preventDefault() {}, pointerType: "mouse", button: 0, ...event }); }
+    querySelector() { return null; } setPointerCapture() {} releasePointerCapture() {}
+    getBoundingClientRect() { return { left: 0, top: 0, width: this.clientWidth, height: this.clientHeight }; }
+  }
+  const fakeWindow = new FakeElement(); globalThis.window = fakeWindow; globalThis.matchMedia = () => ({ matches: false });
+  const canvas = new FakeElement(); const controller = new InputController(canvas, null, null); controller.enabled = true;
+  controller.setAimOrigin({ x: 400, y: 250 });
+  controller.mouseX = 1; controller.mouseY = 0;
+  canvas.dispatch("pointerdown", { pointerId: 4, clientX: 100, clientY: 250 });
+  const firstShot = controller.sample(performance.now() + 1);
+  assert.ok(firstShot.aimX < -.99); close(firstShot.aimY, 0); assert.equal(firstShot.fire, true);
+});
+
+test("centre press waits briefly for a drag so the first mobile shot uses the dragged direction", () => {
+  class FakeElement {
+    constructor(width = 80, height = 80) {
+      this.listeners = new Map(); this.clientWidth = width; this.clientHeight = height;
+      this.style = { setProperty() {}, removeProperty() {} }; this.classList = { add() {}, remove() {} };
+    }
+    addEventListener(type, callback) { this.listeners.set(type, [...(this.listeners.get(type) || []), callback]); }
+    dispatch(type, event) { for (const callback of this.listeners.get(type) || []) callback({ preventDefault() {}, stopPropagation() {}, pointerType: "touch", button: 0, ...event }); }
+    querySelector() { return null; } setPointerCapture() {} releasePointerCapture() {}
+    getBoundingClientRect() { return { left: 0, top: 0, width: this.clientWidth, height: this.clientHeight }; }
+  }
+  const fakeWindow = new FakeElement(800, 500); globalThis.window = fakeWindow; globalThis.matchMedia = () => ({ matches: true });
+  const canvas = new FakeElement(800, 500), fireButton = new FakeElement();
+  const controller = new InputController(canvas, null, null, { movementSurface: canvas, fireButton }); controller.enabled = true;
+  controller.aimTouch = { x: 1, y: 0, firing: false };
+  fireButton.dispatch("pointerdown", { pointerId: 7, clientX: 40, clientY: 40 });
+  assert.equal(controller.sample(performance.now() + 10).fire, false, "old facing is gated during aim acquisition");
+  fireButton.dispatch("pointermove", { pointerId: 7, clientX: 0, clientY: 40 });
+  const firstShot = controller.sample(performance.now() + 20);
+  assert.ok(firstShot.aimX < -.85); close(firstShot.aimY, 0); assert.equal(firstShot.fire, true);
+});
+
+test("a quick drag-release preserves its shot direction until acknowledgement", () => {
+  class FakeElement {
+    constructor(width = 80, height = 80) {
+      this.listeners = new Map(); this.clientWidth = width; this.clientHeight = height;
+      this.style = { setProperty() {}, removeProperty() {} }; this.classList = { add() {}, remove() {} };
+    }
+    addEventListener(type, callback) { this.listeners.set(type, [...(this.listeners.get(type) || []), callback]); }
+    dispatch(type, event) { for (const callback of this.listeners.get(type) || []) callback({ preventDefault() {}, stopPropagation() {}, pointerType: "touch", button: 0, ...event }); }
+    querySelector() { return null; } setPointerCapture() {} releasePointerCapture() {}
+    getBoundingClientRect() { return { left: 0, top: 0, width: this.clientWidth, height: this.clientHeight }; }
+  }
+  const fakeWindow = new FakeElement(800, 500); globalThis.window = fakeWindow; globalThis.matchMedia = () => ({ matches: true });
+  const canvas = new FakeElement(800, 500), fireButton = new FakeElement();
+  const controller = new InputController(canvas, null, null, { movementSurface: canvas, fireButton }); controller.enabled = true;
+  controller.moveTouch = { x: 1, y: 0 }; controller.aimTouch = { x: 1, y: 0, firing: false };
+  fireButton.dispatch("pointerdown", { pointerId: 8, clientX: 40, clientY: 40 });
+  fireButton.dispatch("pointermove", { pointerId: 8, clientX: 0, clientY: 40 });
+  fireButton.dispatch("pointerup", { pointerId: 8, clientX: 0, clientY: 40 });
+  const queued = controller.sample(performance.now() + 20);
+  assert.ok(queued.aimX < -.85); assert.equal(queued.fire, true);
+});

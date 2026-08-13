@@ -22,7 +22,7 @@ export const DUSTY_WEAPONS: readonly WeaponDefinition[] = Object.freeze([
   Object.freeze({ tier: 3, name: "BURST", cooldownMs: 800, speed: 650, lifetimeMs: 800, damage: 1, radius: 3.2, count: 3, spreadDegrees: [-2, 0, 2], burstSpacingMs: 90, muzzleDistance: 36 }),
   Object.freeze({ tier: 4, name: "SMG", cooldownMs: 220, speed: 700, lifetimeMs: 900, damage: 1, radius: 3, count: 1, spreadDegrees: [-3, 3], burstSpacingMs: 0, muzzleDistance: 36 }),
   Object.freeze({ tier: 5, name: "SHOTGUN", cooldownMs: 850, speed: 700, lifetimeMs: 550, damage: 1, radius: 3, count: 5, spreadDegrees: [-16, -8, 0, 8, 16], burstSpacingMs: 0, muzzleDistance: 36 }),
-  Object.freeze({ tier: 6, name: "PLASMA CANNON", cooldownMs: 650, speed: 820, lifetimeMs: 1100, damage: 2, radius: 6, count: 1, spreadDegrees: [0], burstSpacingMs: 0, muzzleDistance: 39 }),
+  Object.freeze({ tier: 6, name: "PLASMA CANNON", cooldownMs: 450, speed: 1200, lifetimeMs: 1000, damage: 2, radius: 6, count: 1, spreadDegrees: [0], burstSpacingMs: 0, muzzleDistance: 42 }),
 ]);
 
 export const POWERUP_TYPES: readonly PowerupType[] = Object.freeze(["spy", "speed", "health", "shield", "teleport", "mole", "fart"]);
@@ -36,11 +36,13 @@ export const DUSTY_GAMEPLAY = Object.freeze({
   moleMaxDurationMs: 10_000,
   moleForcedEmergenceGraceMs: 2_000,
   fartCloudDurationMs: 5_000,
-  fartCloudRadius: 180,
+  fartCloudRadius: 360,
   pickupActiveCount: 6,
   pickupRespawnMs: 8_000,
   pickupRadius: 18,
-  pickupMinimumSpacing: 72,
+  // Three quarters of the 1280px reference gameplay viewport. This is a world
+  // distance so every client sees the same authoritative pickup distribution.
+  pickupMinimumSpacing: 960,
   pickupPlayerClearance: 80,
   teleportPlayerClearance: 120,
   nukeRequirement: 10,

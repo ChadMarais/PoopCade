@@ -1,14 +1,16 @@
 import { moveCircleWithSliding } from "./collision-geometry.js?v=20260812";
-import { loadDustyOrbitAssets } from "./assets.js?v=20260812-2";
+import { loadDustyOrbitAssets } from "./assets.js?v=20260813-5";
 import { PRODUCTION_ARENA_WSS } from "./config.js?v=20260812";
-import { DustyOrbitMultiplayerRenderer } from "./renderer.js?v=20260812-4";
-import { InputController } from "./input.js?v=20260812-2";
-import { ArenaNetwork } from "./network.js?v=20260812";
+import { DustyOrbitMultiplayerRenderer } from "./renderer.js?v=20260813-8";
+import { InputController } from "./input.js?v=20260813";
+import { claimSessionIdentity } from "./identity.js?v=20260813";
+import { ArenaNetwork } from "./network.js?v=20260813";
+import { consumeFixedStep, convergeVisualPosition } from "./timing.js?v=20260813-2";
 
 const INPUT_RATE = 30;
 const INPUT_DT = 1 / INPUT_RATE;
 const PLAYER_RADIUS = 17;
-const PLAYER_SPEED = 165;
+const FALLBACK_PLAYER_SPEED = 165;
 const ARENA_ID = "dusty-orbit-001";
 const parameters = new URLSearchParams(location.search);
 let debugCollision = parameters.get("debug") === "1";
@@ -16,7 +18,6 @@ document.documentElement.classList.toggle("mobile-preview", parameters.get("mobi
 
 function finitePoint(value) { return Boolean(value) && Number.isFinite(value.x) && Number.isFinite(value.y); }
 function finiteAxis(value, fallback = 0) { return Number.isFinite(value) ? Math.max(-1, Math.min(1, value)) : fallback; }
-function sessionValue(key, create) { let value = sessionStorage.getItem(key); if (!value) { value = create(); sessionStorage.setItem(key, value); } return value; }
 function localFrontendHost(hostname) {
   return hostname === "localhost" || hostname === "127.0.0.1" ||
     /^192\.168\.|^10\.|^172\.(1[6-9]|2\d|3[01])\./.test(hostname);
@@ -45,8 +46,8 @@ function endpoint() {
   return /^wss:\/\/[^/]+$/i.test(productionBase) ? `${productionBase}/arena/${ARENA_ID}/ws` : "";
 }
 
-const sessionId = sessionValue("dusty_orbit_mp_session", () => crypto.randomUUID());
-const guestName = sessionValue("dusty_orbit_mp_name", () => `Guest-${String(crypto.getRandomValues(new Uint16Array(1))[0] % 10000).padStart(4, "0")}`);
+const identity = await claimSessionIdentity();
+const { sessionId, guestName } = identity;
 const canvas = document.querySelector("#world");
 const loading = document.querySelector("#loading");
 const loadingBar = document.querySelector("#loadingBar");
@@ -77,6 +78,7 @@ const input = new InputController(canvas, null, null, {
 });
 
 let connectionState = "connecting";
+let joined = false;
 let localId = sessionId;
 let latestSnapshot = null;
 let predicted = null;
@@ -89,14 +91,16 @@ let previousFrame = performance.now();
 let fps = 0;
 let fpsFrames = 0;
 let fpsWindow = performance.now();
+const inputStepTimes = [];
 let serverRates = { tick: 30, snapshot: 15, interpolationMs: 100 };
 let weaponDefinitions = [{ tier: 1, name: "PEA SHOOTER" }];
-let gameplay = { speedMultiplier: 2, nukeRequirement: 10 };
+let gameplay = { baseMovementSpeed: FALLBACK_PLAYER_SPEED, speedMultiplier: 2, nukeRequirement: 10 };
 let latestAim = { x: 1, y: 0 };
 let reconciliationError = 0;
 let maximumReconciliationError = 0;
 const eventLines = [];
 let nukeQueuedUntil = 0;
+let localSpeedBoostUntil = 0;
 
 function addEvent(text) { eventLines.unshift(text); eventLines.splice(6); events.textContent = eventLines.join("\n"); }
 
@@ -106,7 +110,17 @@ const network = new ArenaNetwork({
     connectionState = state;
     connection.textContent = state === "online" ? "● ONLINE" : `${state.toUpperCase()}${detail ? ` · ${detail}` : ""}`;
     connection.classList.toggle("online", state === "online");
-    input.enabled = state === "online" && !document.hidden;
+    if (state !== "online") {
+      joined = false;
+      input.reset();
+      pending = [];
+      sendAccumulator = 0;
+      inputStepTimes.length = 0;
+      localSpeedBoostUntil = 0;
+    }
+    // A TCP/WebSocket open is not yet an arena join. Waiting for welcome
+    // prevents pre-handshake input from racing the server's restored sequence.
+    input.enabled = state === "online" && joined && !document.hidden;
     if (!loading.classList.contains("done")) {
       if (state === "online") loadingText.textContent = "CONNECTED · JOINING DUSTY ORBIT…";
       else if (state === "connecting") loadingText.textContent = "CONNECTING TO LOCAL MULTIPLAYER…";
@@ -119,17 +133,25 @@ const network = new ArenaNetwork({
       serverRates = message.rates || serverRates;
       weaponDefinitions = Array.isArray(message.weapons) && message.weapons.length ? message.weapons : weaponDefinitions;
       gameplay = { ...gameplay, ...(message.gameplay || {}) };
-      if (Number.isSafeInteger(message.player?.lastInputSeq)) seq = Math.max(seq, message.player.lastInputSeq);
-      if (finitePoint(message.player)) predicted = { x: message.player.x, y: message.player.y };
+      seq = Number.isSafeInteger(message.player?.lastInputSeq) ? message.player.lastInputSeq : 0;
+      pending = [];
+      sendAccumulator = 0;
+      inputStepTimes.length = 0;
+      localSpeedBoostUntil = 0;
+      input.reset();
+      if (finitePoint(message.player)) resetPredictionTo(message.player);
+      joined = true;
+      input.enabled = !document.hidden;
       addEvent(`JOINED ${message.arenaId} AS ${guestName}`);
       loading.classList.add("done");
       canvas.focus({ preventScroll: true });
       return;
     }
     if (message.type === "snapshot") { latestSnapshot = message; reconcile(message); return; }
-    if (message.type === "shot" && message.playerId === localId) {
-      input.acknowledgeFire();
-      renderer.confirmLocalShot(message, visualPredicted || predicted);
+    if (message.type === "shot") {
+      const localShot = message.playerId === localId;
+      if (localShot) input.acknowledgeFire();
+      renderer.confirmShot(message, localShot);
     }
     if (message.type === "impact") renderer.impact(message);
     if (message.type === "shield_hit") { renderer.shieldHit(message); addEvent(message.playerId === localId ? "SHIELD ABSORBED A HIT" : "SHIELD HIT"); }
@@ -137,14 +159,26 @@ const network = new ArenaNetwork({
       renderer.teleport(message);
       if (message.playerId === localId && finitePoint(message)) resetPredictionTo(message);
     }
+    if (message.type === "mole_burrowed") renderer.moleBurrowed(message);
+    if (message.type === "mole_emerged") renderer.moleEmerged(message);
+    if (message.type === "fart_cloud") renderer.fartCloud(message, message.ownerId === localId);
     if (message.type === "mole_blocked" && message.playerId === localId) { renderer.blocked(); addEvent("EMERGENCE BLOCKED · MOVE OFF THE ROCK"); }
-    if (message.type === "powerup_collected" && message.playerId === localId) addEvent(`PICKED UP ${String(message.powerup).toUpperCase()}`);
+    if (message.type === "powerup_collected" && message.playerId === localId) {
+      if (message.powerup === "speed") localSpeedBoostUntil = performance.now() + Math.max(0, Number(gameplay.speedDurationMs) || 0);
+      addEvent(`PICKED UP ${String(message.powerup).toUpperCase()}`);
+    }
     if (message.type === "nuke_warning") { renderer.nukeWarning(message); if (message.ownerId === localId) nukeQueuedUntil = 0; addEvent("NUKE INCOMING"); }
     if (message.type === "nuke_detonated") renderer.nukeDetonated(message);
     if (message.type === "player_hit") { renderer.playerHit(message.playerId); addEvent(`${message.playerId === localId ? "YOU" : "PLAYER"} HIT · ${message.hp} HP`); }
     if (message.type === "kill") addEvent(`${message.killerName} ELIMINATED ${message.victimName}`);
-    if (message.type === "death" && message.victimId === localId) addEvent("YOU ARE DOWN · RESPAWNING IN 2s");
-    if (message.type === "respawn" && message.playerId === localId) { resetPredictionTo(message); addEvent("RESPAWNED · 2s PROTECTION"); }
+    if (message.type === "death") {
+      renderer.death(message);
+      if (message.victimId === localId) { localSpeedBoostUntil = 0; addEvent("YOU ARE DOWN · RESPAWNING IN 2s"); }
+    }
+    if (message.type === "respawn") {
+      renderer.respawn(message);
+      if (message.playerId === localId) { resetPredictionTo(message); addEvent("RESPAWNED · 2s PROTECTION"); }
+    }
     if (message.type === "player_joined") addEvent(`${message.player.name} JOINED`);
     if (message.type === "player_left") addEvent(`${message.player.name} LEFT`);
   },
@@ -153,13 +187,16 @@ const network = new ArenaNetwork({
 function applyMovement(position, sample, duration, player) {
   if (!finitePoint(position) || !player?.alive) return position;
   const elapsed = Number.isFinite(duration) ? Math.max(0, Math.min(.1, duration)) : 0;
-  const speed = PLAYER_SPEED * (player.speedRemaining > 0 ? gameplay.speedMultiplier : 1);
+  const baseSpeed = Number.isFinite(gameplay.baseMovementSpeed) ? gameplay.baseMovementSpeed : FALLBACK_PLAYER_SPEED;
+  const speed = baseSpeed * (turboActive(player) ? gameplay.speedMultiplier : 1);
   const next = moveCircleWithSliding(position, { x: finiteAxis(sample?.moveX) * speed * elapsed, y: finiteAxis(sample?.moveY) * speed * elapsed }, PLAYER_RADIUS, player.moleMode ? [] : assets.polygons);
   return {
     x: Math.max(PLAYER_RADIUS, Math.min(assets.world.width - PLAYER_RADIUS, next.x)),
     y: Math.max(PLAYER_RADIUS, Math.min(assets.world.height - PLAYER_RADIUS, next.y)),
   };
 }
+
+function turboActive(player) { return player?.speedRemaining > 0 || performance.now() < localSpeedBoostUntil; }
 
 function resetPredictionTo(position) {
   predicted = { x: position.x, y: position.y };
@@ -209,13 +246,20 @@ function updateHud(snapshot) {
   const remoteSummary = remotes.length
     ? remotes.map((item) => `${item.name} @ ${item.x.toFixed(0)},${item.y.toFixed(0)} AIM ${Math.atan2(item.aimY, item.aimX).toFixed(2)} HP${item.hp} T${item.weaponTier} S${item.killScore}`).join(" · ")
     : "NONE";
+  const weaponDebug = renderer.getDebugState(localId).weapon;
+  const weaponDebugLines = weaponDebug ? [
+    `WEAPON: T${weaponDebug.tier} ${weaponDebug.id.toUpperCase()} · ROT ${(weaponDebug.rotation * 180 / Math.PI).toFixed(1)}°`,
+    `PIVOT: ${weaponDebug.pivot.x.toFixed(2)},${weaponDebug.pivot.y.toFixed(2)} · ATTACH ${weaponDebug.attachmentWorld.x.toFixed(1)},${weaponDebug.attachmentWorld.y.toFixed(1)}`,
+    `MUZZLE: ${weaponDebug.muzzleWorld.x.toFixed(1)},${weaponDebug.muzzleWorld.y.toFixed(1)}`,
+  ] : ["WEAPON: HIDDEN"];
   debugHud.textContent = [
     `CONNECTION: ${connectionState.toUpperCase()}  ·  ARENA: ${ARENA_ID}`,
     `LOCAL ID: ${localId.slice(0, 8)}…  ·  NAME: ${guestName}`,
     `PLAYERS: ${snapshot?.players?.length ?? 0}  ·  PING: ${network.rtt.toFixed(1)}ms`,
-    `RATES: INPUT ${INPUT_RATE}/s · SNAP ${network.snapshotRate}/s · SERVER ${serverRates.tick}/${serverRates.snapshot}`,
+    `RATES: INPUT ${Math.min(INPUT_RATE, inputStepTimes.length)}/s · SNAP ${network.snapshotRate}/s · SERVER ${serverRates.tick}/${serverRates.snapshot}`,
     `TICK: ${snapshot?.tick ?? "—"}  ·  POS: ${player ? `${player.x.toFixed(1)}, ${player.y.toFixed(1)}` : "—"}`,
     `AIM: ${latestAim.x.toFixed(2)}, ${latestAim.y.toFixed(2)}  ·  HP: ${player?.hp ?? "—"}/3  ·  KILLS: ${player?.kills ?? 0}`,
+    ...weaponDebugLines,
     `MOUSE: ${inputVisual.mouseCanvasX.toFixed(0)}, ${inputVisual.mouseCanvasY.toFixed(0)}  ·  MODE: ${inputVisual.mode.toUpperCase()}`,
     `REMOTE: ${remoteSummary}`,
     `PROJECTILES: ${snapshot?.projectiles?.length ?? 0}  ·  INPUT SEQ/ACK: ${seq}/${snapshot?.you?.ack ?? 0}`,
@@ -245,32 +289,46 @@ function frame(now) {
   const delta = Math.min(.05, Math.max(0, (now - previousFrame) / 1000));
   previousFrame = now;
   const snapshot = network.interpolatedSnapshot(Date.now(), localId);
-  if (connectionState === "online" && !document.hidden && snapshot) {
+  if (connectionState === "online" && joined && !document.hidden && snapshot) {
     const player = latestSnapshot?.players?.find((item) => item.id === localId);
     if (!finitePoint(predicted) && finitePoint(player)) predicted = { x: player.x, y: player.y };
     input.setAimOrigin(renderer.getDebugState().playerScreen);
     const sample = input.sample(now);
     latestAim = { x: sample.aimX, y: sample.aimY };
-    sendAccumulator += delta;
-    while (sendAccumulator >= INPUT_DT) {
+    // Preserve the fractional remainder across frames. Resetting it to zero
+    // made 72–80 Hz displays emit only 24–27 movement steps per second, which
+    // was especially visible as pulsing motion during turbo boost.
+    const timing = consumeFixedStep(sendAccumulator, delta, INPUT_DT);
+    sendAccumulator = timing.remainder;
+    if (timing.consumed) {
       predicted = applyMovement(predicted, sample, INPUT_DT, player);
       sendInput(sample);
-      sendAccumulator -= INPUT_DT;
+      inputStepTimes.push(now);
     }
+    while (inputStepTimes.length && now - inputStepTimes[0] > 1000) inputStepTimes.shift();
     // Keep committed prediction on the server's fixed 30 Hz interval. The
     // fractional remainder is visual-only so collision and replay stay stable.
     const projected = applyMovement(predicted, sample, sendAccumulator, player);
-    const offsetDecay = Math.exp(-delta * 14);
+    // Turbo magnifies small reconciliation deltas. Ease those corrections
+    // over a slightly longer window so speed remains fast without micro-snaps.
+    const correctionRate = turboActive(player) ? 7 : 10;
+    const offsetDecay = Math.exp(-delta * correctionRate);
     predictionOffset.x *= offsetDecay;
     predictionOffset.y *= offsetDecay;
     if (Math.hypot(predictionOffset.x, predictionOffset.y) < .01) {
       predictionOffset.x = 0;
       predictionOffset.y = 0;
     }
-    visualPredicted = {
+    const visualTarget = {
       x: Math.max(PLAYER_RADIUS, Math.min(assets.world.width - PLAYER_RADIUS, projected.x + predictionOffset.x)),
       y: Math.max(PLAYER_RADIUS, Math.min(assets.world.height - PLAYER_RADIUS, projected.y + predictionOffset.y)),
     };
+    // Render from a frame-by-frame integration of immediate input. The fixed
+    // 30 Hz prediction remains authoritative for networking and replay, while
+    // this continuous path prevents a newly pressed strafe key from appearing
+    // to have moved the player for the entire preceding simulation slice.
+    const visualIntegrated = applyMovement(visualPredicted || visualTarget, sample, delta, player);
+    visualPredicted = convergeVisualPosition(visualIntegrated, visualTarget, delta, turboActive(player) ? 6 : 8);
   }
   renderer.render(snapshot || latestSnapshot, localId, visualPredicted || predicted, delta, input.getVisualState());
   fpsFrames++;
@@ -302,9 +360,9 @@ mobileNukeButton.addEventListener("pointerdown", (event) => {
   event.preventDefault(); event.stopPropagation();
   if (!mobileNukeButton.disabled) nukeQueuedUntil = performance.now() + 800;
 });
-document.addEventListener("visibilitychange", () => { input.reset(); input.enabled = connectionState === "online" && !document.hidden; network.setActive(!document.hidden); if (!document.hidden) previousFrame = performance.now(); });
-addEventListener("beforeunload", () => network.close());
+document.addEventListener("visibilitychange", () => { input.reset(); input.enabled = connectionState === "online" && joined && !document.hidden; network.setActive(!document.hidden); if (!document.hidden) previousFrame = performance.now(); });
+addEventListener("beforeunload", () => { identity.release(); network.close(); });
 
-window.__DUSTY_ORBIT_MULTIPLAYER__ = { network, renderer, input, getState: () => ({ connectionState, localId, guestName, latestSnapshot, predicted, visualPredicted, predictionOffset: { ...predictionOffset }, pending: [...pending], seq, reconciliationError, maximumReconciliationError, input: input.getVisualState() }) };
+window.__DUSTY_ORBIT_MULTIPLAYER__ = { network, renderer, input, getState: () => ({ connectionState, joined, localId, guestName, latestSnapshot, predicted, visualPredicted, predictionOffset: { ...predictionOffset }, pending: [...pending], seq, reconciliationError, maximumReconciliationError, input: input.getVisualState() }) };
 network.connect(true);
 requestAnimationFrame(frame);

@@ -41,6 +41,22 @@ test("input acknowledgement advances only when the newest pending intent is simu
   assert.equal((simulation.snapshot(player.id, 1034).you as { ack: number }).ack, 2);
 });
 
+test("a reconnect neutralizes stale movement and fire without resetting its input sequence", () => {
+  const simulation = new DustyOrbitSimulation();
+  const player = simulation.addPlayer("10000000-0000-4000-8000-000000000007", "Guest-0007", 1000);
+  player.protectedUntil = 0;
+  simulation.applyInput(player.id, input(1, 1, 0, 1, 0, true), 1000);
+  simulation.step(DUSTY_FIXED_DT, 1000);
+  assert.equal(player.lastInputSeq, 1);
+  assert.ok(player.vx > 0);
+  simulation.prepareConnection(player.id, 1010);
+  assert.equal(player.lastInputSeq, 1);
+  assert.equal(player.lastProcessedInputSeq, 1);
+  assert.equal(player.input.fire, false);
+  assert.equal(player.input.moveX, 0);
+  assert.equal(player.vx, 0);
+});
+
 test("server swept projectile collision stops Pea Shooter shots at canonical rocks", () => {
   const simulation = new DustyOrbitSimulation();
   const player = simulation.addPlayer("10000000-0000-4000-8000-000000000002", "Guest-0002", 1000);
@@ -92,7 +108,10 @@ test("three authoritative hits kill, preserve the killer counter, and respawn af
   }
   assert.equal(victim.alive, false);
   assert.equal(victim.hp, 0);
+  assert.equal(victim.killScore, 0);
   assert.equal(attacker.kills, 1);
+  const deathEvent = simulation.drainEvents().find((event) => event.type === "death") as { x?: number; y?: number } | undefined;
+  assert.deepEqual({ x: deathEvent?.x, y: deathEvent?.y }, { x: 1650, y: 900 });
   assert.ok(victim.respawnAt >= 3200 + DUSTY_RESPAWN_MS);
   const respawnAt = victim.respawnAt;
   simulation.step(DUSTY_FIXED_DT, respawnAt);
@@ -100,4 +119,6 @@ test("three authoritative hits kill, preserve the killer counter, and respawn af
   assert.equal(victim.hp, 3);
   assert.equal(victim.protectedUntil, respawnAt + DUSTY_SPAWN_PROTECTION_MS);
   assert.equal(attacker.kills, 1);
+  const respawnEvent = simulation.drainEvents().find((event) => event.type === "respawn") as { playerId?: string; x?: number; y?: number } | undefined;
+  assert.deepEqual({ playerId: respawnEvent?.playerId, x: respawnEvent?.x, y: respawnEvent?.y }, { playerId: victim.id, x: victim.x, y: victim.y });
 });

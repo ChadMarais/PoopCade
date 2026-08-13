@@ -46,13 +46,15 @@ export class DustyOrbitArena extends DurableObject<Env> {
       try { existingSocket.close(4001, "Reconnected"); } catch {}
     }
 
+    const now = Date.now();
     let player;
-    try { player = this.simulation.addPlayer(playerId, name, Date.now()); }
+    try { player = this.simulation.addPlayer(playerId, name, now); }
     catch { return new Response("Arena full.", { status: 503 }); }
+    this.simulation.prepareConnection(playerId, now);
 
     const pair = new WebSocketPair();
     const [client, server] = Object.values(pair) as [WebSocket, WebSocket];
-    const session: Session = { playerId, name, debug, windowStartedAt: Date.now(), messageCount: 0, invalidCount: 0 };
+    const session: Session = { playerId, name, debug, windowStartedAt: now, messageCount: 0, invalidCount: 0 };
     server.serializeAttachment(session);
     this.ctx.acceptWebSocket(server, [playerId]);
     this.sessions.set(server, session);
@@ -73,7 +75,7 @@ export class DustyOrbitArena extends DurableObject<Env> {
   }
 
   webSocketMessage(socket: WebSocket, raw: string | ArrayBuffer): void {
-    const session = this.sessions.get(socket) ?? this.restoreSession(socket);
+    const session = this.sessions.get(socket);
     if (!session) { socket.close(1008, "Unknown session"); return; }
     const now = Date.now();
     if (now - session.windowStartedAt >= 1000) { session.windowStartedAt = now; session.messageCount = 0; }
@@ -99,20 +101,11 @@ export class DustyOrbitArena extends DurableObject<Env> {
   webSocketClose(socket: WebSocket): void { this.disconnectSocket(socket); }
   webSocketError(socket: WebSocket): void { this.disconnectSocket(socket); }
 
-  private restoreSession(socket: WebSocket): Session | null {
-    const attachment = socket.deserializeAttachment() as Partial<Session> | null;
-    if (!attachment?.playerId || !UUID_PATTERN.test(attachment.playerId)) return null;
-    const session: Session = { playerId: attachment.playerId, name: safeGuestName(attachment.name), debug: attachment.debug === true, windowStartedAt: Date.now(), messageCount: 0, invalidCount: 0 };
-    this.sessions.set(socket, session);
-    this.simulation.addPlayer(session.playerId, session.name, Date.now());
-    this.startLoop();
-    return session;
-  }
-
   private disconnectSocket(socket: WebSocket): void {
     const session = this.sessions.get(socket);
     if (!session) return;
     this.sessions.delete(socket);
+    for (const current of this.sessions.values()) if (current.playerId === session.playerId) return;
     this.simulation.markDisconnected(session.playerId, Date.now());
   }
 

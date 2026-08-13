@@ -159,6 +159,23 @@ export class DustyOrbitSimulation {
 
   noteMessage(id: string, now: number): void { const player = this.players.get(id); if (player) player.lastMessageAt = now; }
 
+  prepareConnection(id: string, now: number): void {
+    const player = this.players.get(id);
+    if (!player) return;
+    player.pendingInput = null;
+    player.input = { ...EMPTY_INPUT, seq: player.lastInputSeq, aimX: player.aimX, aimY: player.aimY };
+    player.lastProcessedInputSeq = player.lastInputSeq;
+    player.lastInputAt = now;
+    player.lastMessageAt = now;
+    player.lastFireInput = false;
+    player.lastNukeInput = false;
+    player.suppressFireUntilRelease = false;
+    player.burstRemaining = 0;
+    player.vx = 0;
+    player.vy = 0;
+    player.disconnectedAt = 0;
+  }
+
   debugGrantPowerup(id: string, type: PowerupType, now: number): boolean {
     const player = this.players.get(id);
     if (!player?.alive || player.moleMode) return false;
@@ -322,7 +339,9 @@ export class DustyOrbitSimulation {
   private killPlayer(victim: DustyPlayer, killerId: string, now: number, cause: "projectile" | "nuke"): void {
     if (!victim.alive) return;
     const killer = this.players.get(killerId);
-    victim.alive = false; victim.hp = 0; victim.vx = victim.vy = 0; victim.deaths++; victim.killScore--;
+    const deathX = victim.x, deathY = victim.y;
+    victim.alive = false; victim.hp = 0; victim.vx = victim.vy = 0; victim.deaths++;
+    victim.killScore = Math.max(0, victim.killScore - 1);
     victim.weaponTier = Math.max(DUSTY_GAMEPLAY.minWeaponTier, victim.weaponTier - 1);
     victim.spyUntil = 0; victim.speedUntil = 0; victim.shieldHits = 0; victim.moleMode = false;
     victim.moleUntil = 0; victim.moleForceAt = 0; victim.burstRemaining = 0; victim.suppressFireUntilRelease = false;
@@ -331,7 +350,7 @@ export class DustyOrbitSimulation {
     victim.respawnAt = now + DUSTY_RESPAWN_MS; victim.protectedUntil = 0;
     if (killer && killer.id !== victim.id) this.creditKill(killer);
     this.events.push({ type: "kill", cause, killerId, killerName: killer?.name ?? "DUSTY ORBIT", victimId: victim.id, victimName: victim.name, kills: killer?.kills ?? 0 });
-    this.events.push({ type: "death", cause, victimId: victim.id, victimName: victim.name, killerId, killerName: killer?.name ?? "DUSTY ORBIT", respawnAt: victim.respawnAt });
+    this.events.push({ type: "death", cause, victimId: victim.id, victimName: victim.name, killerId, killerName: killer?.name ?? "DUSTY ORBIT", x: deathX, y: deathY, respawnAt: victim.respawnAt });
   }
 
   private creditKill(killer: DustyPlayer): void {
@@ -386,7 +405,11 @@ export class DustyOrbitSimulation {
         player.x = destination.x; player.y = destination.y; player.vx = player.vy = 0;
         this.events.push({ type: "teleport", playerId: player.id, x: player.x, y: player.y }); return true;
       }
-      case "mole": player.moleMode = true; player.moleUntil = now + DUSTY_GAMEPLAY.moleMaxDurationMs; player.moleForceAt = 0; player.burstRemaining = 0; player.lastFireInput = player.input.fire; return true;
+      case "mole":
+        player.moleMode = true; player.moleUntil = now + DUSTY_GAMEPLAY.moleMaxDurationMs; player.moleForceAt = 0;
+        player.burstRemaining = 0; player.lastFireInput = player.input.fire;
+        this.events.push({ type: "mole_burrowed", playerId: player.id, x: player.x, y: player.y, at: now });
+        return true;
       case "fart": {
         const cloud: DustyFartCloud = { id: ++this.cloudId, ownerId: player.id, x: player.x, y: player.y, radius: DUSTY_GAMEPLAY.fartCloudRadius, createdAt: now, expiresAt: now + DUSTY_GAMEPLAY.fartCloudDurationMs };
         this.fartClouds.push(cloud); this.events.push({ type: "fart_cloud", ...cloud }); return true;
@@ -405,6 +428,9 @@ export class DustyOrbitSimulation {
     for (const pickup of this.pickups) {
       if (pickup.active || now < pickup.respawnAt) continue;
       const point = this.choosePickupPoint(pickup.id);
+      // The spacing guarantee is hard: if the arena is temporarily too full
+      // to find a legal point, leave this pickup dormant and retry next tick.
+      if (!point) continue;
       pickup.type = POWERUP_TYPES[Math.floor(this.random() * POWERUP_TYPES.length) % POWERUP_TYPES.length];
       pickup.x = point.x; pickup.y = point.y; pickup.active = true; pickup.respawnAt = 0;
     }
@@ -424,15 +450,24 @@ export class DustyOrbitSimulation {
     return DUSTY_POLYGONS.every((polygon) => !pointInPolygon(point, polygon) && distanceToPolygon(point, polygon) >= DUSTY_PLAYER_RADIUS);
   }
 
-  private choosePickupPoint(ignorePickupId: number): Point {
+  private choosePickupPoint(ignorePickupId: number): Point | null {
     const start = Math.floor(this.random() * this.validWorldPoints.length);
+    let best: Point | null = null;
+    let bestPickupDistance = Number.NEGATIVE_INFINITY;
     for (let offset = 0; offset < this.validWorldPoints.length; offset++) {
       const point = this.validWorldPoints[(start + offset) % this.validWorldPoints.length];
-      const clearPickups = this.pickups.every((pickup) => !pickup.active || pickup.id === ignorePickupId || Math.hypot(point.x - pickup.x, point.y - pickup.y) >= DUSTY_GAMEPLAY.pickupMinimumSpacing);
       const clearPlayers = [...this.players.values()].every((player) => !player.alive || Math.hypot(point.x - player.x, point.y - player.y) >= DUSTY_GAMEPLAY.pickupPlayerClearance);
-      if (clearPickups && clearPlayers) return point;
+      if (!clearPlayers) continue;
+      let nearestPickup = Number.POSITIVE_INFINITY;
+      for (const pickup of this.pickups) if (pickup.active && pickup.id !== ignorePickupId) {
+        nearestPickup = Math.min(nearestPickup, Math.hypot(point.x - pickup.x, point.y - pickup.y));
+      }
+      if (nearestPickup >= DUSTY_GAMEPLAY.pickupMinimumSpacing && nearestPickup > bestPickupDistance) {
+        best = point;
+        bestPickupDistance = nearestPickup;
+      }
     }
-    return this.validWorldPoints[start] ?? DUSTY_SPAWNS[0];
+    return best;
   }
 
   private chooseTeleport(playerId: string): Point {
@@ -493,7 +528,7 @@ export class DustyOrbitSimulation {
     const serializePlayer = (player: DustyPlayer) => ({
       id: player.id, name: player.name, x: round(player.x), y: round(player.y), vx: Math.round(player.vx), vy: Math.round(player.vy),
       aimX: round(player.aimX, 1000), aimY: round(player.aimY, 1000), hp: player.hp, kills: player.kills,
-      deaths: player.deaths, killScore: player.killScore, weaponTier: player.weaponTier, nukeProgress: player.nukeProgress,
+      deaths: player.deaths, killScore: Math.max(0, player.killScore), weaponTier: player.weaponTier, nukeProgress: player.nukeProgress,
       nukeReady: player.nukeReady, shieldHits: player.shieldHits, spyRemaining: Math.max(0, player.spyUntil - now),
       speedRemaining: Math.max(0, player.speedUntil - now), moleMode: player.moleMode,
       moleRemaining: player.moleMode ? Math.max(0, player.moleUntil - now) : 0,

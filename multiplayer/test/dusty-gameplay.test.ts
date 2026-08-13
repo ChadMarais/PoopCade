@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { pointInPolygon } from "../../games/game-03/collision-geometry.js";
-import { DUSTY_GAMEPLAY, DUSTY_WEAPONS, type PowerupType } from "../src/dusty-gameplay.ts";
+import { DUSTY_GAMEPLAY, DUSTY_WEAPONS, POWERUP_TYPES, type PowerupType } from "../src/dusty-gameplay.ts";
 import { DUSTY_PLAYER_RADIUS, DUSTY_POLYGONS } from "../src/dusty-map.ts";
 import { DustyOrbitSimulation, DUSTY_FIXED_DT, type DustyPlayer, type DustyProjectile } from "../src/dusty-simulation.ts";
 
@@ -43,10 +43,10 @@ test("central weapon table defines the six requested tiers and range progression
     { tier: 3, name: "BURST", cooldownMs: 800, speed: 650, lifetimeMs: 800, damage: 1, radius: 3.2, count: 3 },
     { tier: 4, name: "SMG", cooldownMs: 220, speed: 700, lifetimeMs: 900, damage: 1, radius: 3, count: 1 },
     { tier: 5, name: "SHOTGUN", cooldownMs: 850, speed: 700, lifetimeMs: 550, damage: 1, radius: 3, count: 5 },
-    { tier: 6, name: "PLASMA CANNON", cooldownMs: 650, speed: 820, lifetimeMs: 1100, damage: 2, radius: 6, count: 1 },
+    { tier: 6, name: "PLASMA CANNON", cooldownMs: 450, speed: 1200, lifetimeMs: 1000, damage: 2, radius: 6, count: 1 },
   ]);
   assert.equal(DUSTY_WEAPONS[0].speed * DUSTY_WEAPONS[0].lifetimeMs / 1000, 250);
-  assert.equal(DUSTY_WEAPONS[5].speed * DUSTY_WEAPONS[5].lifetimeMs / 1000, 902);
+  assert.equal(DUSTY_WEAPONS[5].speed * DUSTY_WEAPONS[5].lifetimeMs / 1000, 1200);
 });
 
 test("server schedules Burst rounds, enforces SMG cooldown, and creates the Shotgun fan", () => {
@@ -78,18 +78,24 @@ test("Plasma is server-authored at tier 6 with two damage", () => {
   simulation.applyInput(A, intent(1, { fire: true }), 1000); simulation.step(DUSTY_FIXED_DT, 1000);
   const shot = eventsOf(simulation, "shot")[0] as { projectile: DustyProjectile };
   assert.equal(shot.projectile.tier, 6); assert.equal(shot.projectile.damage, 2); assert.equal(shot.projectile.radius, 6);
+  assert.equal(Math.hypot(shot.projectile.vx, shot.projectile.vy), 1200);
 });
 
-test("kills upgrade, deaths downgrade one tier, and score can go negative", () => {
+test("kills upgrade, deaths downgrade one tier, and score never drops below zero", () => {
   const simulation = fresh(); const killer = add(simulation, A, "Guest-1001"); const victim = add(simulation, B, "Guest-1002");
   (simulation as any).killPlayer(victim, killer.id, 1000, "projectile");
   assert.equal(killer.kills, 1); assert.equal(killer.killScore, 1); assert.equal(killer.weaponTier, 2);
-  assert.equal(victim.deaths, 1); assert.equal(victim.killScore, -1); assert.equal(victim.weaponTier, 1);
-  victim.alive = true; victim.hp = 3; victim.weaponTier = 5;
+  assert.equal(victim.deaths, 1); assert.equal(victim.killScore, 0); assert.equal(victim.weaponTier, 1);
+  const death = eventsOf(simulation, "death")[0] as { x: number; y: number };
+  assert.deepEqual({ x: death.x, y: death.y }, { x: 600, y: 300 });
+  victim.alive = true; victim.hp = 3; victim.weaponTier = 5; victim.killScore = 2;
   (simulation as any).killPlayer(victim, killer.id, 1100, "projectile");
-  assert.equal(victim.weaponTier, 4); assert.equal(victim.killScore, -2);
+  assert.equal(victim.weaponTier, 4); assert.equal(victim.killScore, 1);
   killer.weaponTier = 6; victim.alive = true; victim.hp = 3;
-  (simulation as any).killPlayer(victim, killer.id, 1200, "projectile"); assert.equal(killer.weaponTier, 6);
+  (simulation as any).killPlayer(victim, killer.id, 1200, "projectile");
+  assert.equal(victim.killScore, 0); assert.equal(killer.weaponTier, 6);
+  victim.alive = true; victim.hp = 3;
+  (simulation as any).killPlayer(victim, killer.id, 1300, "projectile"); assert.equal(victim.killScore, 0);
 });
 
 test("health does not consume at full HP and shield absorbs exactly one projectile", () => {
@@ -125,7 +131,10 @@ test("mole tunnels through rocks, blocks damage/pickups/fire, filters snapshots,
   const polygon = DUSTY_POLYGONS[0];
   const inside = polygon.find((point) => pointInPolygon({ x: point.x + 2, y: point.y + 2 }, polygon));
   assert.ok(inside);
-  collect(simulation, mole, "mole", 1000); mole.x = inside!.x + 2; mole.y = inside!.y + 2;
+  collect(simulation, mole, "mole", 1000);
+  const burrow = eventsOf(simulation, "mole_burrowed")[0] as { playerId: string; x: number; y: number };
+  assert.deepEqual({ playerId: burrow.playerId, x: burrow.x, y: burrow.y }, { playerId: mole.id, x: 300, y: 300 });
+  mole.x = inside!.x + 2; mole.y = inside!.y + 2;
   const pickup = simulation.pickups[0]; pickup.type = "health"; pickup.x = mole.x; pickup.y = mole.y; pickup.active = true;
   simulation.applyInput(A, intent(2, { moveX: 1, fire: true }), 1100); simulation.step(DUSTY_FIXED_DT, 1100);
   assert.equal(mole.moleMode, true); assert.equal(pickup.active, true); assert.equal(simulation.projectiles.length, 0);
@@ -138,6 +147,8 @@ test("mole tunnels through rocks, blocks damage/pickups/fire, filters snapshots,
   simulation.applyInput(A, intent(3, { fire: false }), 1200); simulation.step(DUSTY_FIXED_DT, 1200);
   simulation.applyInput(A, intent(4, { fire: true }), 1234); simulation.step(DUSTY_FIXED_DT, 1234);
   assert.equal(mole.moleMode, false); assert.equal(simulation.projectiles.length, 0);
+  const emerged = eventsOf(simulation, "mole_emerged")[0] as { playerId: string; x: number; y: number };
+  assert.deepEqual({ playerId: emerged.playerId, x: emerged.x, y: emerged.y }, { playerId: mole.id, x: 300, y: 300 });
   simulation.applyInput(A, intent(5, { fire: false }), 1268); simulation.step(DUSTY_FIXED_DT, 1268);
   simulation.applyInput(A, intent(6, { fire: true }), 1302); simulation.step(DUSTY_FIXED_DT, 1302);
   assert.equal(simulation.projectiles.length, 1);
@@ -155,6 +166,7 @@ test("mole timeout emerges on valid ground and force-resolves invalid camping", 
 test("fart clouds coexist, conceal without invulnerability, and expire after five seconds", () => {
   const simulation = fresh(); const player = add(simulation, A, "Guest-1001"); const viewer = add(simulation, B, "Guest-1002");
   collect(simulation, player, "fart", 1000); collect(simulation, viewer, "fart", 1100); assert.equal(simulation.fartClouds.length, 2);
+  assert.equal(simulation.fartClouds[0].radius, 360);
   player.x = simulation.fartClouds[0].x; player.y = simulation.fartClouds[0].y;
   let snapshot = simulation.snapshot(viewer.id, 1200) as any; assert.equal(snapshot.players.some((item: any) => item.id === player.id), false);
   player.weaponTier = 1; simulation.applyInput(A, intent(3, { fire: true }), 1200); simulation.step(DUSTY_FIXED_DT, 1200); assert.ok(simulation.projectiles.some((item) => item.ownerId === player.id));
@@ -210,10 +222,34 @@ test("threat leader ranking is deterministic and its marker obeys stealth", () =
   snapshot = simulation.snapshot(viewer.id, 1200) as any; assert.equal(snapshot.minimapPlayers.some((player: any) => player.id === first.id), false);
 });
 
-test("pickup population is six and inactive pickups wait eight seconds", () => {
-  const simulation = new DustyOrbitSimulation(() => .2); assert.equal(simulation.pickups.filter((pickup) => pickup.active).length, 6);
+test("pickup population is six, includes fart artwork type, and inactive pickups wait eight seconds", () => {
+  const simulation = new DustyOrbitSimulation(() => .2); const active = simulation.pickups.filter((pickup) => pickup.active); assert.equal(active.length, 6);
+  for (let first = 0; first < active.length; first++) for (let second = first + 1; second < active.length; second++) {
+    const distance = Math.hypot(active[first].x - active[second].x, active[first].y - active[second].y);
+    assert.ok(distance >= DUSTY_GAMEPLAY.pickupMinimumSpacing, `pickups ${active[first].id}/${active[second].id} were only ${distance.toFixed(1)} apart`);
+  }
+  assert.ok(POWERUP_TYPES.includes("fart"));
   const pickup = simulation.pickups[0]; pickup.active = false; pickup.respawnAt = 9000;
   simulation.step(DUSTY_FIXED_DT, 8999); assert.equal(pickup.active, false);
   simulation.step(DUSTY_FIXED_DT, 9000); assert.equal(pickup.active, true);
   assert.equal(DUSTY_GAMEPLAY.pickupRespawnMs, 8000);
+  assert.equal(DUSTY_GAMEPLAY.pickupMinimumSpacing, 960);
+});
+
+test("pickup respawns never bypass the three-quarter-screen spacing rule", () => {
+  let value = 0;
+  const simulation = new DustyOrbitSimulation(() => (value = (value + .371) % 1));
+  for (let cycle = 0; cycle < 50; cycle++) {
+    const pickup = simulation.pickups[cycle % simulation.pickups.length];
+    pickup.active = false;
+    pickup.respawnAt = 1000 + cycle;
+    simulation.step(DUSTY_FIXED_DT, 1000 + cycle);
+    const active = simulation.pickups.filter((item) => item.active);
+    for (let first = 0; first < active.length; first++) for (let second = first + 1; second < active.length; second++) {
+      assert.ok(
+        Math.hypot(active[first].x - active[second].x, active[first].y - active[second].y) >= DUSTY_GAMEPLAY.pickupMinimumSpacing,
+        `cycle ${cycle} placed pickups ${active[first].id}/${active[second].id} too close`,
+      );
+    }
+  }
 });
