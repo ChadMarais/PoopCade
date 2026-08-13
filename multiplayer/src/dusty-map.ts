@@ -15,6 +15,11 @@ export const DUSTY_MAP = Object.freeze({
 });
 
 export const DUSTY_PLAYER_RADIUS = 17;
+// Movement keeps the compact physics radius so characters can navigate the
+// arena cleanly. Combat uses the opaque body footprint shown by the 84-94px
+// production sprites, preventing a round from visibly crossing a player while
+// missing a much smaller invisible circle.
+export const DUSTY_PLAYER_HIT_RADIUS = 34;
 export const DUSTY_PLAYER_SPEED = 165;
 
 const DEFINITIONS = Object.freeze({

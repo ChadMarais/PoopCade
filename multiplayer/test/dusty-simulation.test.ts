@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { distanceToPolygon, pointInPolygon } from "../../games/game-03/collision-geometry.js";
-import { DUSTY_CANONICAL_COLLISION, DUSTY_POLYGONS, DUSTY_SATELLITES } from "../src/dusty-map.ts";
+import { DUSTY_CANONICAL_COLLISION, DUSTY_PLAYER_HIT_RADIUS, DUSTY_POLYGONS, DUSTY_SATELLITES } from "../src/dusty-map.ts";
 import { DustyOrbitSimulation, DUSTY_FIXED_DT, DUSTY_MAX_HIT_REWIND_MS, DUSTY_RESPAWN_MS, DUSTY_SPAWN_PROTECTION_MS } from "../src/dusty-simulation.ts";
 
 function input(seq: number, moveX: number, moveY: number, aimX: number, aimY: number, fire = false) {
@@ -133,6 +133,80 @@ test("bounded rewind hits the authoritative position that an online shooter actu
   simulation.step(DUSTY_FIXED_DT, 1168);
   assert.equal(victim.hp, 3, "the same segment misses the victim's newer hidden server position without rewind");
   assert.equal(DUSTY_MAX_HIT_REWIND_MS, 250);
+});
+
+test("combat hit radius covers the opaque player body instead of the smaller movement circle", () => {
+  const simulation = new DustyOrbitSimulation();
+  for (const pickup of simulation.pickups) { pickup.active = false; pickup.respawnAt = 9999; }
+  const attacker = simulation.addPlayer("10000000-0000-4000-8000-000000000010", "Guest-0010", 1000);
+  const victim = simulation.addPlayer("10000000-0000-4000-8000-000000000011", "Guest-0011", 1000);
+  attacker.protectedUntil = 0; victim.protectedUntil = 0;
+  attacker.x = 100; attacker.y = 100; victim.x = 120; victim.y = 133;
+  simulation.step(DUSTY_FIXED_DT, 1000);
+  simulation.projectiles.push({
+    id: 601, ownerId: attacker.id, tier: 1, x: 100, y: 100, vx: 1200, vy: 0,
+    radius: 3, damage: 1, spawnedAt: 1000, expiresAt: 9999,
+  });
+  simulation.step(DUSTY_FIXED_DT, 1034);
+  assert.equal(DUSTY_PLAYER_HIT_RADIUS, 34);
+  assert.equal(victim.hp, 2, "a round crossing opaque character art must count as a hit");
+});
+
+test("projectiles sweep against a moving player's whole tick path", () => {
+  const simulation = new DustyOrbitSimulation();
+  for (const pickup of simulation.pickups) { pickup.active = false; pickup.respawnAt = 9999; }
+  const attacker = simulation.addPlayer("10000000-0000-4000-8000-000000000012", "Guest-0012", 1000);
+  const victim = simulation.addPlayer("10000000-0000-4000-8000-000000000013", "Guest-0013", 1000);
+  attacker.protectedUntil = 0; victim.protectedUntil = 0;
+  attacker.x = 100; attacker.y = 100; victim.x = 130; victim.y = 131; victim.speedUntil = 5000;
+  simulation.step(DUSTY_FIXED_DT, 1000);
+  simulation.applyInput(victim.id, input(1, 0, 1, 1, 0), 1034);
+  simulation.projectiles.push({
+    id: 602, ownerId: attacker.id, tier: 6, x: 100, y: 100, vx: 1200, vy: 0,
+    radius: 6, damage: 2, spawnedAt: 1000, expiresAt: 9999,
+  });
+  simulation.step(DUSTY_FIXED_DT, 1034);
+  assert.equal(victim.y, 142);
+  assert.ok(Math.abs(victim.y - 100) > DUSTY_PLAYER_HIT_RADIUS + 6, "the target's final position alone is a miss");
+  assert.equal(victim.hp, 1, "crossing trajectories must hit even when the target's final position misses the projectile segment");
+  assert.ok(simulation.drainEvents().some((event) => event.type === "impact" && event.target === "player"));
+});
+
+test("a projectile beginning inside a player damages immediately instead of emerging through them", () => {
+  const simulation = new DustyOrbitSimulation();
+  for (const pickup of simulation.pickups) { pickup.active = false; pickup.respawnAt = 9999; }
+  const attacker = simulation.addPlayer("10000000-0000-4000-8000-000000000014", "Guest-0014", 1000);
+  const victim = simulation.addPlayer("10000000-0000-4000-8000-000000000015", "Guest-0015", 1000);
+  attacker.protectedUntil = 0; victim.protectedUntil = 0;
+  attacker.x = 100; attacker.y = 100; victim.x = 120; victim.y = 100;
+  simulation.step(DUSTY_FIXED_DT, 1000);
+  simulation.projectiles.push({
+    id: 603, ownerId: attacker.id, tier: 1, x: 120, y: 100, vx: 1, vy: 0,
+    radius: 3, damage: 1, spawnedAt: 1000, expiresAt: 9999,
+  });
+  simulation.step(DUSTY_FIXED_DT, 1034);
+  assert.equal(victim.hp, 2);
+  assert.equal(simulation.projectiles.some((projectile) => projectile.id === 603), false);
+});
+
+test("spawn protection absorbs projectiles without losing HP", () => {
+  const simulation = new DustyOrbitSimulation();
+  for (const pickup of simulation.pickups) { pickup.active = false; pickup.respawnAt = 9999; }
+  const attacker = simulation.addPlayer("10000000-0000-4000-8000-000000000016", "Guest-0016", 1000);
+  const victim = simulation.addPlayer("10000000-0000-4000-8000-000000000017", "Guest-0017", 1000);
+  attacker.protectedUntil = 0; victim.protectedUntil = 5000;
+  attacker.x = 100; attacker.y = 100; victim.x = 130; victim.y = 100;
+  simulation.step(DUSTY_FIXED_DT, 1000);
+  simulation.projectiles.push({
+    id: 604, ownerId: attacker.id, tier: 1, x: 100, y: 100, vx: 1200, vy: 0,
+    radius: 3, damage: 1, spawnedAt: 1000, expiresAt: 9999,
+  });
+  simulation.step(DUSTY_FIXED_DT, 1034);
+  const events = simulation.drainEvents();
+  assert.equal(victim.hp, 3, "spawn protection must still prevent damage");
+  assert.equal(simulation.projectiles.some((projectile) => projectile.id === 604), false, "the protected body must stop the round");
+  assert.ok(events.some((event) => event.type === "impact" && event.target === "player"));
+  assert.equal(events.some((event) => event.type === "player_hit" && event.playerId === victim.id), false);
 });
 
 test("three authoritative hits kill, preserve the killer counter, and respawn after two seconds", () => {

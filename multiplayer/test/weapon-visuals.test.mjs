@@ -214,7 +214,7 @@ test("movement during confirmation delay still launches from the currently visib
   assert.deepEqual({ vx: shot.vx, vy: shot.vy }, { vx: 500, vy: 0 });
 });
 
-test("a delayed confirmation launches from and along the newly rendered aim pose", () => {
+test("a delayed confirmation keeps the authoritative trajectory after the rendered aim changes", () => {
   const renderer = Object.create(DustyOrbitMultiplayerRenderer.prototype);
   renderer.localPlayerId = "local";
   renderer.pendingLocalShotConfirmations = [];
@@ -229,7 +229,7 @@ test("a delayed confirmation launches from and along the newly rendered aim pose
   renderer.flushLocalShotConfirmations();
   const shot = renderer.localProjectiles.get(8);
   assert.deepEqual({ x: shot.startX, y: shot.startY }, { x: 411, y: 277 });
-  assert.deepEqual({ vx: shot.vx, vy: shot.vy }, { vx: 0, vy: -600 });
+  assert.deepEqual({ vx: shot.vx, vy: shot.vy }, { vx: 600, vy: 0 });
 });
 
 test("a confirmed local bullet uses the exact nozzle produced in its render frame", () => {

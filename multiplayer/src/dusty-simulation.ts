@@ -3,6 +3,7 @@ import { weaponPose, weaponVisualForTier } from "../../games/game-03/weapon-visu
 import { FART_CLOUD_GROW_MS, fartCloudGrowth } from "../../games/game-03/effect-timing.js";
 import {
   DUSTY_MAP,
+  DUSTY_PLAYER_HIT_RADIUS,
   DUSTY_PLAYER_RADIUS,
   DUSTY_POLYGONS,
   DUSTY_PROJECTILE_POLYGONS,
@@ -81,8 +82,13 @@ export function moleBurrowOrigin(player: Pick<DustyPlayer, "x" | "y" | "vx" | "v
 function segmentCircle(start: Point, end: Point, center: Point, radius: number): number | null {
   const dx = end.x - start.x, dy = end.y - start.y, fx = start.x - center.x, fy = start.y - center.y;
   const a = dx * dx + dy * dy;
+  const c = fx * fx + fy * fy - radius * radius;
+  // A projectile already overlapping the target at the start of a tick is an
+  // immediate hit. Waiting for the exit root let slow/short-lived rounds live
+  // inside a player and could make them emerge from the far side.
+  if (c <= 0) return 0;
   if (a < 0.00001) return null;
-  const b = 2 * (fx * dx + fy * dy), c = fx * fx + fy * fy - radius * radius;
+  const b = 2 * (fx * dx + fy * dy);
   const discriminant = b * b - 4 * a * c;
   // Treat a numerically-near-zero discriminant as a real tangent hit. This
   // matters for the shoulder-offset muzzle line, which can graze a target at
@@ -91,6 +97,18 @@ function segmentCircle(start: Point, end: Point, center: Point, radius: number):
   const root = Math.sqrt(Math.max(0, discriminant)), first = (-b - root) / (2 * a), second = (-b + root) / (2 * a);
   if (first >= 0 && first <= 1) return first;
   return second >= 0 && second <= 1 ? second : null;
+}
+function movingCircleTime(projectileStart: Point, projectileEnd: Point, targetStart: Point, targetEnd: Point, radius: number): number | null {
+  // Transform into the target's frame of reference. The target becomes a
+  // stationary circle while the projectile follows the relative segment, so
+  // crossing paths are detected even when neither end-of-tick position
+  // overlaps the other object.
+  return segmentCircle(
+    { x: projectileStart.x - targetStart.x, y: projectileStart.y - targetStart.y },
+    { x: projectileEnd.x - targetEnd.x, y: projectileEnd.y - targetEnd.y },
+    { x: 0, y: 0 },
+    radius,
+  );
 }
 function sweptPolygonTime(start: Point, end: Point, radius: number, polygon: Point[]): number | null {
   if (!sweptCircleIntersectsPolygon(start, end, radius, polygon)) return null;
@@ -398,9 +416,14 @@ export class DustyOrbitSimulation {
         if (t !== null && (!hit || t < hit.t)) hit = { t, kind: "rock" };
       }
       for (const player of this.players.values()) {
-        if (!player.alive || player.moleMode || player.id === projectile.ownerId || player.protectedUntil > now) continue;
-        const collisionCenter = this.positionAt(player, now - (projectile.rewindMs || 0));
-        const t = segmentCircle(start, end, collisionCenter, DUSTY_PLAYER_RADIUS + projectile.radius);
+        // Spawn protection prevents damage, not physical contact. Protected
+        // players still absorb the round so it cannot visibly pass through
+        // their body; damagePlayer() preserves the immunity below.
+        if (!player.alive || player.moleMode || player.id === projectile.ownerId) continue;
+        const rewindMs = projectile.rewindMs || 0;
+        const targetEnd = this.positionAt(player, now - rewindMs);
+        const targetStart = this.positionAt(player, now - rewindMs - dt * 1000);
+        const t = movingCircleTime(start, end, targetStart, targetEnd, DUSTY_PLAYER_HIT_RADIUS + projectile.radius);
         if (t !== null && (!hit || t < hit.t)) hit = { t, kind: "player", id: player.id };
       }
       if (!hit) { projectile.x = end.x; projectile.y = end.y; continue; }

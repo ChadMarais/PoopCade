@@ -123,15 +123,15 @@ export class DustyOrbitMultiplayerRenderer {
     const projectile = event.projectile;
     const speed = Math.hypot(projectile.vx, projectile.vy);
     const authoritativeDirection = { x: projectile.vx / speed, y: projectile.vy / speed };
-    // Local presentation follows the barrel that was calculated for this very
-    // render frame. The muzzle flash, projectile origin, and trajectory all
-    // consume the same pose; there is no second nozzle calculation to drift.
-    // Ordinary local rounds follow the exact currently rendered barrel pose.
-    // Shotgun pellets are deliberately server-authored at different angles,
-    // so preserve each pellet's authoritative spread direction.
-    const useRenderedBarrel = local && shotPose?.forward && projectile.tier !== 5;
-    const directionX = useRenderedBarrel ? shotPose.forward.x : authoritativeDirection.x;
-    const directionY = useRenderedBarrel ? shotPose.forward.y : authoritativeDirection.y;
+    // Local presentation begins at the barrel calculated for this render
+    // frame, keeping its first sample and muzzle flash on the visible nozzle.
+    // Confirmation can arrive after the player has already changed aim. The
+    // muzzle may use the newest visible pose, but the trajectory must remain
+    // the server-authored direction for the input sequence that actually
+    // fired. Redirecting it to the newer barrel made local bullets visibly
+    // cross targets along paths the server never simulated.
+    const directionX = authoritativeDirection.x;
+    const directionY = authoritativeDirection.y;
     const life = clamp((projectile.expiresAt || 0) - (projectile.spawnedAt || 0), 100, 3000);
     // Never fast-forward a newly confirmed local projectile. Backdating by
     // network transit time made its first visible frame appear downrange
