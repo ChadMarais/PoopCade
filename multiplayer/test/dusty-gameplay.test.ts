@@ -11,7 +11,7 @@ const A = "20000000-0000-4000-8000-000000000001";
 const B = "20000000-0000-4000-8000-000000000002";
 const C = "20000000-0000-4000-8000-000000000003";
 const D = "20000000-0000-4000-8000-000000000004";
-function intent(seq: number, options: Partial<{ moveX: number; moveY: number; aimX: number; aimY: number; fire: boolean; nuke: boolean }> = {}) {
+function intent(seq: number, options: Partial<{ moveX: number; moveY: number; aimX: number; aimY: number; fire: boolean; nuke: boolean; viewAt: number }> = {}) {
   return { type: "input" as const, seq, moveX: 0, moveY: 0, aimX: 1, aimY: 0, fire: false, nuke: false, ...options };
 }
 function fresh(random = () => .1234) {
@@ -49,14 +49,14 @@ test("central weapon table defines the six requested tiers and range progression
     { tier: 2, name: "PISTOL", cooldownMs: 700, speed: 600, lifetimeMs: 750, damage: 1, radius: 3.2, count: 1 },
     { tier: 3, name: "BURST", cooldownMs: 800, speed: 650, lifetimeMs: 800, damage: 1, radius: 3.2, count: 3 },
     { tier: 4, name: "SMG", cooldownMs: 220, speed: 700, lifetimeMs: 900, damage: 1, radius: 3, count: 1 },
-    { tier: 5, name: "SHOTGUN", cooldownMs: 850, speed: 700, lifetimeMs: 550, damage: 1, radius: 3, count: 5 },
+    { tier: 5, name: "SHOTGUN", cooldownMs: 850, speed: 700, lifetimeMs: 550, damage: 1, radius: 3, count: 3 },
     { tier: 6, name: "PLASMA CANNON", cooldownMs: 450, speed: 1200, lifetimeMs: 1000, damage: 2, radius: 6, count: 1 },
   ]);
   assert.equal(DUSTY_WEAPONS[0].speed * DUSTY_WEAPONS[0].lifetimeMs / 1000, 250);
   assert.equal(DUSTY_WEAPONS[5].speed * DUSTY_WEAPONS[5].lifetimeMs / 1000, 1200);
 });
 
-test("server schedules Burst rounds, enforces SMG cooldown, and emits five collinear Shotgun rounds", () => {
+test("server schedules Burst rounds, enforces SMG cooldown, and emits three splayed Shotgun pellets", () => {
   const simulation = fresh();
   const player = add(simulation, A, "Guest-1001");
   player.weaponTier = 3;
@@ -76,8 +76,17 @@ test("server schedules Burst rounds, enforces SMG cooldown, and emits five colli
   simulation.projectiles.length = 0; player.weaponTier = 5; player.lastFireAt = -Infinity;
   simulation.applyInput(A, intent(7, { fire: true }), 1600); simulation.step(DUSTY_FIXED_DT, 1600);
   const shots = eventsOf(simulation, "shot") as Array<{ projectile: DustyProjectile }>;
-  assert.equal(shots.length, 5);
-  assert.equal(new Set(shots.map((shot) => Math.round(Math.atan2(shot.projectile.vy, shot.projectile.vx) * 1e9))).size, 1);
+  assert.equal(shots.length, 3);
+  assert.deepEqual(shots.map((shot) => Math.round(Math.atan2(shot.projectile.vy, shot.projectile.vx) * 180 / Math.PI)), [-8, 0, 8]);
+});
+
+test("projectile rewind is derived from client view time and capped by the server", () => {
+  const simulation = fresh();
+  const player = add(simulation, A, "Guest-1001");
+  simulation.applyInput(A, intent(1, { fire: true, viewAt: 1 }), 1000);
+  simulation.step(DUSTY_FIXED_DT, 1000);
+  const shot = eventsOf(simulation, "shot")[0] as { projectile: DustyProjectile };
+  assert.equal(shot.projectile.rewindMs, 250);
 });
 
 test("every ordinary bullet uses the exact live aim vector at its firing tick", () => {
@@ -126,13 +135,16 @@ test("every tier spawns every round at its exact muzzle and along its barrel", (
     simulation.step(DUSTY_FIXED_DT, 1000);
     const shots = eventsOf(simulation, "shot") as Array<{ projectile: DustyProjectile }>;
     const expectedMuzzle = weaponPose({ ...player, aimX: aim.x, aimY: aim.y }, weaponVisualForTier(tier)).muzzleWorld;
-    assert.equal(shots.length, tier === 5 ? 5 : 1, `tier ${tier} round count`);
-    for (const { projectile: shot } of shots) {
+    assert.equal(shots.length, tier === 5 ? 3 : 1, `tier ${tier} round count`);
+    for (const [shotIndex, { projectile: shot }] of shots.entries()) {
       const speed = Math.hypot(shot.vx, shot.vy);
       assert.ok(Math.abs(shot.x - expectedMuzzle.x) < 1e-9, `tier ${tier} muzzle X`);
       assert.ok(Math.abs(shot.y - expectedMuzzle.y) < 1e-9, `tier ${tier} muzzle Y`);
-      assert.ok(Math.abs(shot.vx / speed - aim.x) < 1e-12, `tier ${tier} barrel X`);
-      assert.ok(Math.abs(shot.vy / speed - aim.y) < 1e-12, `tier ${tier} barrel Y`);
+      const spread = tier === 5 ? DUSTY_WEAPONS[4].spreadDegrees[shotIndex] * Math.PI / 180 : 0;
+      const expectedX = aim.x * Math.cos(spread) - aim.y * Math.sin(spread);
+      const expectedY = aim.x * Math.sin(spread) + aim.y * Math.cos(spread);
+      assert.ok(Math.abs(shot.vx / speed - expectedX) < 1e-12, `tier ${tier} barrel X`);
+      assert.ok(Math.abs(shot.vy / speed - expectedY) < 1e-12, `tier ${tier} barrel Y`);
       assert.equal(shot.inputSeq, 1);
     }
   }

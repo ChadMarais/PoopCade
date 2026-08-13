@@ -2,7 +2,7 @@ import { moveCircleWithSliding } from "./collision-geometry.js?v=20260813";
 import { CollisionEditor } from "./collision-editor.js?v=20260813-8";
 import { loadDustyOrbitAssets } from "./assets.js?v=20260813-11";
 import { PRODUCTION_ARENA_WSS } from "./config.js?v=20260812";
-import { DustyOrbitMultiplayerRenderer } from "./renderer.js?v=20260813-21";
+import { DustyOrbitMultiplayerRenderer } from "./renderer.js?v=20260813-22";
 import { InputController } from "./input.js?v=20260813-3";
 import { claimSessionIdentity, resolvePoopcadePlayerIdentity } from "./identity.js?v=20260813-2";
 import { ArenaNetwork } from "./network.js?v=20260813";
@@ -318,7 +318,9 @@ function reconcile(snapshot) {
 }
 
 function sendInput(sample) {
-  const message = { type: "input", seq: ++seq, moveX: finiteAxis(sample.moveX), moveY: finiteAxis(sample.moveY), aimX: finiteAxis(sample.aimX, 1), aimY: finiteAxis(sample.aimY), fire: Boolean(sample.fire), nuke: performance.now() < nukeQueuedUntil };
+  const interpolationMs = Number.isFinite(serverRates.interpolationMs) ? serverRates.interpolationMs : 100;
+  const viewAt = Math.max(0, Math.round(Date.now() - network.clockOffsetMs - interpolationMs));
+  const message = { type: "input", seq: ++seq, moveX: finiteAxis(sample.moveX), moveY: finiteAxis(sample.moveY), aimX: finiteAxis(sample.aimX, 1), aimY: finiteAxis(sample.aimY), fire: Boolean(sample.fire), nuke: performance.now() < nukeQueuedUntil, viewAt };
   if (!network.sendInput(message)) return null;
   pending.push(message);
   if (pending.length > 90) pending.shift();
@@ -336,6 +338,7 @@ function updateHud(snapshot) {
   const rendererDebug = renderer.getDebugState(localId);
   const weaponDebug = rendererDebug.weapon;
   const launchDebug = rendererDebug.lastLocalLaunch;
+  const nukeDebug = rendererDebug.nuke;
   const weaponDebugLines = weaponDebug ? [
     `WEAPON: T${weaponDebug.tier} ${weaponDebug.id.toUpperCase()} · ROT ${(weaponDebug.rotation * 180 / Math.PI).toFixed(1)}°`,
     `PIVOT: ${weaponDebug.pivot.x.toFixed(2)},${weaponDebug.pivot.y.toFixed(2)} · ATTACH ${weaponDebug.attachmentWorld.x.toFixed(1)},${weaponDebug.attachmentWorld.y.toFixed(1)}`,
@@ -344,6 +347,11 @@ function updateHud(snapshot) {
   if (launchDebug) weaponDebugLines.push(
     `LAST LAUNCH: ${launchDebug.muzzleWorld.x.toFixed(1)},${launchDebug.muzzleWorld.y.toFixed(1)} · FIRST-FRAME ERROR: ${launchDebug.firstRenderError?.toFixed(3) ?? "PENDING"}`,
   );
+  const nukeDebugLines = nukeDebug ? [
+    `NUKE STATE: ${nukeDebug.state}`,
+    `NUKE X,Y: ${nukeDebug.x.toFixed(1)}, ${nukeDebug.y.toFixed(1)} / RADIUS: ${nukeDebug.radius.toFixed(1)}`,
+    `NUKE EFFECT: ${nukeDebug.elapsed.toFixed(0)}ms / PARTICLES: ${nukeDebug.particles}`,
+  ] : ["NUKE STATE: IDLE"];
   debugHud.textContent = [
     `CONNECTION: ${connectionState.toUpperCase()}  ·  ARENA: ${ARENA_ID}`,
     `LOCAL ID: ${localId.slice(0, 8)}…  ·  NAME: ${playerName}`,
@@ -356,6 +364,7 @@ function updateHud(snapshot) {
     `RADAR SOURCE: ${snapshot?.you?.radarSource || "NONE"}`,
     `AIM: ${latestAim.x.toFixed(2)}, ${latestAim.y.toFixed(2)}  ·  HP: ${player?.hp ?? "—"}/3  ·  KILLS: ${player?.kills ?? 0}`,
     ...weaponDebugLines,
+    ...nukeDebugLines,
     `MOUSE: ${inputVisual.mouseCanvasX.toFixed(0)}, ${inputVisual.mouseCanvasY.toFixed(0)}  ·  MODE: ${inputVisual.mode.toUpperCase()}`,
     `REMOTE: ${remoteSummary}`,
     `PROJECTILES: ${snapshot?.projectiles?.length ?? 0}  ·  INPUT SEQ/ACK: ${seq}/${snapshot?.you?.ack ?? 0}`,

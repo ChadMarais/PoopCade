@@ -25,6 +25,7 @@ export const DUSTY_STALE_INPUT_MS = 300;
 export const DUSTY_STALE_PLAYER_MS = 15000;
 export const DUSTY_DISCONNECT_GRACE_MS = 5000;
 export const DUSTY_MAX_PLAYERS = 15;
+export const DUSTY_MAX_HIT_REWIND_MS = 250;
 
 // Backwards-compatible exports for the arena welcome packet and older tests.
 export const DUSTY_WEAPON = DUSTY_WEAPONS[0];
@@ -45,8 +46,10 @@ export type DustyPlayer = {
 
 export type DustyProjectile = {
   id: number; ownerId: string; tier: number; x: number; y: number; vx: number; vy: number;
-  radius: number; damage: number; spawnedAt: number; expiresAt: number; inputSeq?: number;
+  radius: number; damage: number; spawnedAt: number; expiresAt: number; inputSeq?: number; rewindMs?: number;
 };
+
+type DustyPositionSample = { at: number; x: number; y: number };
 
 export type DustyPickup = {
   id: number; type: PowerupType; x: number; y: number; active: boolean; respawnAt: number;
@@ -113,6 +116,7 @@ export class DustyOrbitSimulation {
   private nukeId = 0;
   private spawnCursor = 0;
   private joinCursor = 0;
+  private readonly positionHistory = new Map<string, DustyPositionSample[]>();
   private readonly random: () => number;
   private readonly validWorldPoints: Point[];
   threatLeaderId: string | null = null;
@@ -148,6 +152,7 @@ export class DustyOrbitSimulation {
       lastProcessedInputSeq: 0, color: COLORS[this.players.size % COLORS.length], input: { ...EMPTY_INPUT }, pendingInput: null,
     };
     this.players.set(id, player);
+    this.resetPositionHistory(player, now);
     this.updateThreatLeader();
     this.events.push({ type: "player_joined", player: { id, name, skinId: player.skinId, joinedAt: player.joinedAt } });
     return player;
@@ -165,6 +170,7 @@ export class DustyOrbitSimulation {
     const player = this.players.get(id);
     if (!player) return;
     this.players.delete(id);
+    this.positionHistory.delete(id);
     for (let index = this.projectiles.length - 1; index >= 0; index--) if (this.projectiles[index].ownerId === id) this.projectiles.splice(index, 1);
     for (let index = this.nukes.length - 1; index >= 0; index--) if (this.nukes[index].ownerId === id) this.nukes.splice(index, 1);
     this.updateThreatLeader();
@@ -247,11 +253,45 @@ export class DustyOrbitSimulation {
       this.collectPickups(player, now);
       this.processActions(player, now);
       this.updateSatelliteConnection(player);
+      this.recordPosition(player, now);
     }
     this.updateNukes(now);
     this.updateProjectiles(dt, now);
     for (let index = this.fartClouds.length - 1; index >= 0; index--) if (now >= this.fartClouds[index].expiresAt) this.fartClouds.splice(index, 1);
     this.updateThreatLeader();
+  }
+
+  private resetPositionHistory(player: DustyPlayer, now: number): void {
+    this.positionHistory.set(player.id, [{ at: now, x: player.x, y: player.y }]);
+  }
+
+  private recordPosition(player: DustyPlayer, now: number): void {
+    const samples = this.positionHistory.get(player.id);
+    const last = samples?.at(-1);
+    // Never rewind through a teleport, respawn, or other discontinuity.
+    if (!samples || !last || now < last.at || Math.hypot(player.x - last.x, player.y - last.y) > 120) {
+      this.resetPositionHistory(player, now);
+      return;
+    }
+    const sample = { at: now, x: player.x, y: player.y };
+    if (last.at === now) samples[samples.length - 1] = sample;
+    else samples.push(sample);
+    const oldestRequiredAt = now - DUSTY_MAX_HIT_REWIND_MS - 100;
+    while (samples.length > 2 && samples[1].at < oldestRequiredAt) samples.shift();
+  }
+
+  private positionAt(player: DustyPlayer, at: number): Point {
+    const samples = this.positionHistory.get(player.id);
+    if (!samples?.length) return player;
+    if (at <= samples[0].at) return samples[0];
+    for (let index = 1; index < samples.length; index++) {
+      const after = samples[index];
+      if (at > after.at) continue;
+      const before = samples[index - 1];
+      const amount = clamp((at - before.at) / Math.max(1, after.at - before.at), 0, 1);
+      return { x: before.x + (after.x - before.x) * amount, y: before.y + (after.y - before.y) * amount };
+    }
+    return samples.at(-1) ?? player;
   }
 
   private consumePendingInput(player: DustyPlayer, now: number): void {
@@ -311,19 +351,22 @@ export class DustyOrbitSimulation {
       return;
     }
     if (weapon.tier === 5) {
-      for (let index = 0; index < weapon.count; index += 1) this.spawnProjectile(player, weapon, aimX, aimY, now);
+      for (const spreadDegrees of weapon.spreadDegrees) this.spawnProjectile(player, weapon, aimX, aimY, now, spreadDegrees);
       return;
     }
     this.spawnProjectile(player, weapon, aimX, aimY, now);
   }
 
-  private spawnProjectile(player: DustyPlayer, weapon: WeaponDefinition, aimX: number, aimY: number, now: number): void {
+  private spawnProjectile(player: DustyPlayer, weapon: WeaponDefinition, aimX: number, aimY: number, now: number, spreadDegrees = 0): void {
     if (this.projectiles.length >= DUSTY_GAMEPLAY.maxProjectiles) return;
     const liveAim = normalized(aimX, aimY);
     if (!liveAim.length) return;
-    // No projectile may diverge from the barrel. Multi-projectile weapons can
-    // emit several rounds, but every one follows the exact live gun vector.
-    const direction = liveAim;
+    const spreadRadians = spreadDegrees * Math.PI / 180;
+    const spreadCos = Math.cos(spreadRadians), spreadSin = Math.sin(spreadRadians);
+    const direction = {
+      x: liveAim.x * spreadCos - liveAim.y * spreadSin,
+      y: liveAim.x * spreadSin + liveAim.y * spreadCos,
+    };
     const muzzle = weaponPose({ ...player, aimX: liveAim.x, aimY: liveAim.y }, weaponVisualForTier(weapon.tier), { weaponMount: characterSkinById(player.skinId)?.weaponMount }).muzzleWorld;
     const projectileSpeed = weapon.speed * (player.speedUntil > now ? DUSTY_GAMEPLAY.speedMultiplier : 1);
     const x = muzzle.x, y = muzzle.y;
@@ -331,6 +374,9 @@ export class DustyOrbitSimulation {
       id: ++this.projectileId, ownerId: player.id, tier: weapon.tier, x, y, inputSeq: player.input.seq,
       vx: direction.x * projectileSpeed, vy: direction.y * projectileSpeed, radius: weapon.radius,
       damage: weapon.damage, spawnedAt: now,
+      rewindMs: Number.isFinite(player.input.viewAt)
+        ? clamp(now - Number(player.input.viewAt), 0, DUSTY_MAX_HIT_REWIND_MS)
+        : 0,
       // Turbo changes speed, not the gun's maximum range. Shorten lifetime by
       // the same multiplier so speed * lifetime remains weapon-authored.
       expiresAt: now + weapon.lifetimeMs * weapon.speed / projectileSpeed,
@@ -353,7 +399,8 @@ export class DustyOrbitSimulation {
       }
       for (const player of this.players.values()) {
         if (!player.alive || player.moleMode || player.id === projectile.ownerId || player.protectedUntil > now) continue;
-        const t = segmentCircle(start, end, player, DUSTY_PLAYER_RADIUS + projectile.radius);
+        const collisionCenter = this.positionAt(player, now - (projectile.rewindMs || 0));
+        const t = segmentCircle(start, end, collisionCenter, DUSTY_PLAYER_RADIUS + projectile.radius);
         if (t !== null && (!hit || t < hit.t)) hit = { t, kind: "player", id: player.id };
       }
       if (!hit) { projectile.x = end.x; projectile.y = end.y; continue; }
@@ -444,11 +491,13 @@ export class DustyOrbitSimulation {
       case "teleport": {
         const destination = this.chooseTeleport(player.id);
         player.x = destination.x; player.y = destination.y; player.vx = player.vy = 0;
+        this.resetPositionHistory(player, now);
         this.events.push({ type: "teleport", playerId: player.id, x: player.x, y: player.y }); return true;
       }
       case "mole":
         player.moleMode = true; player.moleUntil = now + DUSTY_GAMEPLAY.moleMaxDurationMs; player.moleForceAt = 0;
         player.burstRemaining = 0; player.lastFireInput = player.input.fire;
+        this.resetPositionHistory(player, now);
         this.events.push({ type: "mole_burrowed", playerId: player.id, ...moleBurrowOrigin(player), vx: player.vx, vy: player.vy, at: now });
         return true;
       case "fart": {
@@ -461,6 +510,7 @@ export class DustyOrbitSimulation {
   private emerge(player: DustyPlayer, now: number, reason: string): void {
     player.moleMode = false; player.moleUntil = 0; player.moleForceAt = 0;
     if (player.input.fire) player.suppressFireUntilRelease = true;
+    this.resetPositionHistory(player, now);
     this.events.push({ type: "mole_emerged", playerId: player.id, x: player.x, y: player.y, reason, at: now });
   }
 
@@ -548,6 +598,7 @@ export class DustyOrbitSimulation {
   private respawnPlayer(player: DustyPlayer, now: number): void {
     const spawn = this.chooseRespawn(player.id);
     Object.assign(player, { x: spawn.x, y: spawn.y, vx: 0, vy: 0, hp: DUSTY_GAMEPLAY.maxHp, alive: true, respawnAt: 0, protectedUntil: now + DUSTY_SPAWN_PROTECTION_MS, lastFireAt: Number.NEGATIVE_INFINITY, lastFireInput: false, lastNukeInput: false, connectedSatelliteId: null });
+    this.resetPositionHistory(player, now);
     this.events.push({ type: "respawn", playerId: player.id, x: player.x, y: player.y, protectedUntil: player.protectedUntil });
   }
 

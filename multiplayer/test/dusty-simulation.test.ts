@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { distanceToPolygon, pointInPolygon } from "../../games/game-03/collision-geometry.js";
 import { DUSTY_CANONICAL_COLLISION, DUSTY_POLYGONS, DUSTY_SATELLITES } from "../src/dusty-map.ts";
-import { DustyOrbitSimulation, DUSTY_FIXED_DT, DUSTY_RESPAWN_MS, DUSTY_SPAWN_PROTECTION_MS } from "../src/dusty-simulation.ts";
+import { DustyOrbitSimulation, DUSTY_FIXED_DT, DUSTY_MAX_HIT_REWIND_MS, DUSTY_RESPAWN_MS, DUSTY_SPAWN_PROTECTION_MS } from "../src/dusty-simulation.ts";
 
 function input(seq: number, moveX: number, moveY: number, aimX: number, aimY: number, fire = false) {
   return { type: "input" as const, seq, moveX, moveY, aimX, aimY, fire };
@@ -103,6 +103,36 @@ test("a projectile grazing outside a polygon continues and can never hit its own
   assert.equal(simulation.projectiles.length, 1);
   assert.ok(simulation.projectiles[0].x > 1100);
   assert.equal(simulation.drainEvents().some((event) => event.type === "impact" && event.target === "rock"), false);
+});
+
+test("bounded rewind hits the authoritative position that an online shooter actually saw", () => {
+  const simulation = new DustyOrbitSimulation();
+  for (const pickup of simulation.pickups) { pickup.active = false; pickup.respawnAt = 9999; }
+  const attacker = simulation.addPlayer("10000000-0000-4000-8000-000000000008", "Guest-0008", 1000);
+  const victim = simulation.addPlayer("10000000-0000-4000-8000-000000000009", "Guest-0009", 1000);
+  attacker.protectedUntil = 0; victim.protectedUntil = 0;
+  attacker.x = 1450; attacker.y = 900;
+  victim.x = 1650; victim.y = 931;
+  simulation.step(DUSTY_FIXED_DT, 1000);
+  victim.y = 986;
+  simulation.step(DUSTY_FIXED_DT, 1100);
+
+  simulation.projectiles.push({
+    id: 501, ownerId: attacker.id, tier: 1, x: 1630, y: 931, vx: 1200, vy: 0,
+    radius: 3, damage: 1, spawnedAt: 1100, expiresAt: 9999, rewindMs: 100,
+  });
+  simulation.step(DUSTY_FIXED_DT, 1134);
+  assert.equal(victim.hp, 2, "the shot crosses the victim's 100ms-rewound visible position");
+  assert.ok(simulation.drainEvents().some((event) => event.type === "impact" && event.target === "player"));
+
+  victim.hp = 3;
+  simulation.projectiles.push({
+    id: 502, ownerId: attacker.id, tier: 1, x: 1630, y: 931, vx: 1200, vy: 0,
+    radius: 3, damage: 1, spawnedAt: 1134, expiresAt: 9999, rewindMs: 0,
+  });
+  simulation.step(DUSTY_FIXED_DT, 1168);
+  assert.equal(victim.hp, 3, "the same segment misses the victim's newer hidden server position without rewind");
+  assert.equal(DUSTY_MAX_HIT_REWIND_MS, 250);
 });
 
 test("three authoritative hits kill, preserve the killer counter, and respawn after two seconds", () => {

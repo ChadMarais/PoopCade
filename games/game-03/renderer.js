@@ -1,5 +1,12 @@
 import { weaponPose, weaponVisualForTier } from "./weapon-visuals.js?v=20260813-5";
 import { fartCloudGrowth } from "./effect-timing.js?v=20260813";
+import {
+  NUKE_EFFECT_DURATION_MS,
+  createNukeBurst,
+  easeOutCubic,
+  nukeTimeline,
+  nukeWarningTimeline,
+} from "./nuke-vfx.js?v=20260813";
 
 function clamp(value, min, max) { return Math.max(min, Math.min(max, value)); }
 function mix(a, b, amount) { return a + (b - a) * amount; }
@@ -61,6 +68,11 @@ export class DustyOrbitMultiplayerRenderer {
     this.renderedPlayers = new Map();
     this.localPlayerId = null;
     this.minimapSurfaces = new Map();
+    this.nukeWarnings = new Map();
+    this.detonatedNukeIds = new Map();
+    this.reducedMotionQuery = globalThis.matchMedia?.("(prefers-reduced-motion: reduce)") || null;
+    this.reducedMotion = this.reducedMotionQuery?.matches === true;
+    this.reducedMotionQuery?.addEventListener?.("change", (event) => { this.reducedMotion = event.matches; });
     this.collisionEditor = null;
     this.uplink = { active: false, phase: null, changedAt: 0 };
     this.resize();
@@ -114,8 +126,12 @@ export class DustyOrbitMultiplayerRenderer {
     // Local presentation follows the barrel that was calculated for this very
     // render frame. The muzzle flash, projectile origin, and trajectory all
     // consume the same pose; there is no second nozzle calculation to drift.
-    const directionX = local && shotPose?.forward ? shotPose.forward.x : authoritativeDirection.x;
-    const directionY = local && shotPose?.forward ? shotPose.forward.y : authoritativeDirection.y;
+    // Ordinary local rounds follow the exact currently rendered barrel pose.
+    // Shotgun pellets are deliberately server-authored at different angles,
+    // so preserve each pellet's authoritative spread direction.
+    const useRenderedBarrel = local && shotPose?.forward && projectile.tier !== 5;
+    const directionX = useRenderedBarrel ? shotPose.forward.x : authoritativeDirection.x;
+    const directionY = useRenderedBarrel ? shotPose.forward.y : authoritativeDirection.y;
     const life = clamp((projectile.expiresAt || 0) - (projectile.spawnedAt || 0), 100, 3000);
     // Never fast-forward a newly confirmed local projectile. Backdating by
     // network transit time made its first visible frame appear downrange
@@ -203,8 +219,41 @@ export class DustyOrbitMultiplayerRenderer {
     this.weaponPoses.delete(event.ownerId);
     this.weaponRecoil.delete(event.ownerId);
   }
-  nukeWarning(event) { this.effects.push({ type: "nuke-warning", id: event.id, x: event.x, y: event.y, radius: event.radius, born: performance.now(), life: Math.max(100, event.detonateAt - event.startedAt) }); }
-  nukeDetonated(event) { this.effects.push({ type: "nuke-blast", x: event.x, y: event.y, radius: event.radius, born: performance.now(), life: 650 }); }
+  nukeWarning(event) {
+    if (!Number.isFinite(event?.x) || !Number.isFinite(event?.y) || !Number.isFinite(event?.radius)) return;
+    this.nukeWarnings.set(event.id, { ...event });
+    this.emitNukeAudioCue("warning-start", event);
+  }
+
+  nukeDetonated(event) {
+    if (!Number.isFinite(event?.x) || !Number.isFinite(event?.y) || !Number.isFinite(event?.radius)) return;
+    if (this.effects.some((effect) => effect.type === "nuke-blast" && effect.id === event.id)) return;
+    const born = performance.now();
+    const compact = this.viewport.width < 700 || globalThis.document?.documentElement?.classList.contains("mobile-preview");
+    const particleCount = this.reducedMotion ? 32 : compact ? 44 : 64;
+    const shardCount = this.reducedMotion ? 4 : compact ? 8 : 12;
+    const seed = (Number(event.id) || 1) * 101 + event.x * .17 + event.y * .29;
+    const burst = createNukeBurst(seed, event.radius, particleCount, shardCount);
+    this.nukeWarnings.delete(event.id);
+    this.detonatedNukeIds.set(event.id, born + NUKE_EFFECT_DURATION_MS + 250);
+    this.effects.push({
+      type: "nuke-blast", id: event.id, ownerId: event.ownerId, x: event.x, y: event.y,
+      radius: event.radius, born, life: NUKE_EFFECT_DURATION_MS, seed, shockwaveCuePlayed: false, ...burst,
+    });
+    for (const victimId of event.victims || []) {
+      const victim = this.renderedPlayers.get(victimId);
+      if (victim) this.effects.push({ type: "nuke-hit", x: victim.x, y: victim.y, born, life: 240 });
+    }
+    this.emitNukeAudioCue("ignition", event);
+    this.emitNukeAudioCue("detonation", event);
+  }
+
+  emitNukeAudioCue(cue, event) {
+    if (typeof globalThis.CustomEvent !== "function") return;
+    this.canvas.dispatchEvent?.(new CustomEvent("dusty-orbit:nuke-audio-cue", {
+      detail: { cue, id: event.id, x: event.x, y: event.y, radius: event.radius },
+    }));
+  }
 
   updateUplink(active, alive) {
     if (!alive) {
@@ -218,6 +267,7 @@ export class DustyOrbitMultiplayerRenderer {
   render(snapshot, localId, predicted, delta, inputVisual) {
     const { ctx } = this;
     const { width, height, dpr } = this.viewport;
+    const now = performance.now();
     this.localPlayerId = localId;
     this.weaponPoses.clear();
     this.collisionEditor?.update(delta);
@@ -230,12 +280,16 @@ export class DustyOrbitMultiplayerRenderer {
     const blend = 1 - Math.exp(-delta * 10);
     this.camera.x += (targetX - this.camera.x) * blend;
     this.camera.y += (targetY - this.camera.y) * blend;
-    this.playerScreen = { x: focus.x - this.camera.x, y: focus.y - this.camera.y };
+    const shake = this.getNukeScreenShake(now);
+    this.playerScreen = { x: focus.x - this.camera.x + shake.x, y: focus.y - this.camera.y + shake.y };
 
     ctx.fillStyle = "#371447";
     ctx.fillRect(0, 0, width, height);
+    ctx.save();
+    ctx.translate(shake.x, shake.y);
     this.drawTerrain();
-    this.drawNukes(snapshot?.nukes || []);
+    this.drawNukes(snapshot?.nukes || [], Date.now());
+    this.drawEffects("underlay", now);
 
     const players = (snapshot?.players || []).map((player) => player.id === localId && predicted
       ? { ...player, x: predicted.x, y: predicted.y, aimX: inputVisual?.aimX ?? player.aimX, aimY: inputVisual?.aimY ?? player.aimY }
@@ -270,7 +324,9 @@ export class DustyOrbitMultiplayerRenderer {
       this.drawWeaponDebug();
       this.drawCollision(players);
     }
+    ctx.restore();
     this.drawMinimap(snapshot, players.find((player) => player.id === localId));
+    this.drawNukeScreenEffects(now);
   }
 
   drawTerrain() {
@@ -663,11 +719,18 @@ export class DustyOrbitMultiplayerRenderer {
     this.drawProjectiles(projectiles);
   }
 
-  drawEffects(pass = "foreground") {
-    const now = performance.now();
+  drawEffects(pass = "foreground", now = performance.now()) {
     this.effects = this.effects.filter((effect) => now - effect.born < effect.life);
     for (const effect of this.effects) {
       const muzzleEffect = effect.type === "weapon-muzzle" || effect.type === "muzzle";
+      if (effect.type === "nuke-blast") {
+        this.ctx.save();
+        if (pass === "underlay") this.drawNukeUnderlay(effect, now);
+        else if (pass === "foreground") this.drawNukeForeground(effect, now);
+        this.ctx.restore();
+        continue;
+      }
+      if (pass === "underlay") continue;
       if ((pass === "muzzle") !== muzzleEffect) continue;
       const amount = (now - effect.born) / effect.life;
       this.ctx.save();
@@ -723,18 +786,174 @@ export class DustyOrbitMultiplayerRenderer {
         this.drawRespawnEffect(effect, amount, now);
         this.ctx.restore(); continue;
       }
-      if (effect.type === "nuke-warning" || effect.type === "nuke-blast") {
-        const expansion = effect.type === "nuke-warning" ? amount : Math.min(1, amount * 2.2);
-        this.ctx.strokeStyle = effect.type === "nuke-warning" ? "#ffdd62" : "#fff3c2";
-        this.ctx.fillStyle = effect.type === "nuke-blast" ? `rgba(255,225,120,${(1 - amount) * .2})` : "transparent";
-        this.ctx.lineWidth = effect.type === "nuke-warning" ? 5 : 9;
-        this.ctx.beginPath(); this.ctx.arc(effect.x - this.camera.x, effect.y - this.camera.y, effect.radius * expansion, 0, Math.PI * 2); this.ctx.fill(); this.ctx.stroke(); this.ctx.restore(); continue;
+      if (effect.type === "nuke-hit") {
+        this.drawNukeHit(effect, amount);
+        this.ctx.restore(); continue;
       }
       this.ctx.strokeStyle = "#91fbff";
       this.ctx.lineWidth = 2;
       this.ctx.beginPath(); this.ctx.arc(effect.x - this.camera.x, effect.y - this.camera.y, 4 + amount * 16, 0, Math.PI * 2); this.ctx.stroke();
       this.ctx.restore();
     }
+  }
+
+  drawNukeUnderlay(effect, now) {
+    const ctx = this.ctx;
+    const timeline = nukeTimeline(now - effect.born);
+    const x = effect.x - this.camera.x, y = effect.y - this.camera.y;
+    const bloomRadius = effect.radius * (.08 + timeline.plasmaProgress * .43);
+    if (timeline.plasmaAlpha <= .001) return;
+    ctx.globalCompositeOperation = "screen";
+    ctx.globalAlpha = timeline.plasmaAlpha * .58;
+    const haze = ctx.createRadialGradient(x, y, bloomRadius * .02, x, y, bloomRadius);
+    haze.addColorStop(0, "rgba(255,255,255,.95)");
+    haze.addColorStop(.12, "rgba(90,239,255,.82)");
+    haze.addColorStop(.42, "rgba(111,58,255,.62)");
+    haze.addColorStop(.73, "rgba(232,49,255,.34)");
+    haze.addColorStop(1, "rgba(70,28,170,0)");
+    ctx.fillStyle = haze;
+    ctx.beginPath(); ctx.arc(x, y, bloomRadius, 0, Math.PI * 2); ctx.fill();
+
+    const lobeColors = [
+      ["rgba(77,234,255,.68)", "rgba(62,75,255,0)"],
+      ["rgba(171,67,255,.67)", "rgba(100,32,211,0)"],
+      ["rgba(255,70,225,.55)", "rgba(175,25,181,0)"],
+    ];
+    for (const lobe of effect.lobes) {
+      const orbit = bloomRadius * lobe.orbit;
+      const lobeRadius = bloomRadius * lobe.radius;
+      const wobble = Math.sin(timeline.elapsed / 115 + lobe.angle * 4) * bloomRadius * .018;
+      const lx = x + Math.cos(lobe.angle) * (orbit + wobble);
+      const ly = y + Math.sin(lobe.angle) * (orbit + wobble) * lobe.squash;
+      const gradient = ctx.createRadialGradient(lx, ly, 0, lx, ly, lobeRadius);
+      gradient.addColorStop(0, lobeColors[lobe.colorIndex][0]);
+      gradient.addColorStop(1, lobeColors[lobe.colorIndex][1]);
+      ctx.fillStyle = gradient;
+      ctx.beginPath(); ctx.arc(lx, ly, lobeRadius, 0, Math.PI * 2); ctx.fill();
+    }
+  }
+
+  drawNukeForeground(effect, now) {
+    const ctx = this.ctx;
+    const timeline = nukeTimeline(now - effect.born);
+    const x = effect.x - this.camera.x, y = effect.y - this.camera.y;
+    ctx.globalCompositeOperation = "lighter";
+
+    if (timeline.ignitionAlpha > .001 || timeline.coreAlpha > .001) {
+      const ignitionRadius = mix(8, Math.min(92, effect.radius * .14), timeline.ignitionProgress);
+      const coreRadius = mix(ignitionRadius, effect.radius * .31, timeline.coreProgress);
+      ctx.globalAlpha = Math.max(timeline.ignitionAlpha, timeline.coreAlpha * .86);
+      const core = ctx.createRadialGradient(x, y, 0, x, y, coreRadius);
+      core.addColorStop(0, "rgba(255,255,255,1)");
+      core.addColorStop(.08, "rgba(255,248,219,.98)");
+      core.addColorStop(.2, "rgba(121,250,255,.94)");
+      core.addColorStop(.52, "rgba(90,88,255,.62)");
+      core.addColorStop(.76, "rgba(236,62,255,.36)");
+      core.addColorStop(1, "rgba(115,25,214,0)");
+      ctx.fillStyle = core;
+      ctx.beginPath(); ctx.arc(x, y, coreRadius, 0, Math.PI * 2); ctx.fill();
+
+      ctx.globalAlpha = timeline.ignitionAlpha;
+      ctx.strokeStyle = "#ffffff";
+      ctx.shadowColor = "#56f4ff"; ctx.shadowBlur = 12;
+      ctx.lineWidth = 3.5;
+      const starLength = ignitionRadius * 1.65;
+      ctx.beginPath();
+      ctx.moveTo(x - starLength, y); ctx.lineTo(x + starLength, y);
+      ctx.moveTo(x, y - starLength); ctx.lineTo(x, y + starLength);
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+    }
+
+    if (timeline.shockwaveAlpha > .001) {
+      const ringRadius = effect.radius * timeline.shockwaveProgress;
+      const lineWidth = mix(15, 2.2, timeline.shockwaveProgress);
+      ctx.globalAlpha = timeline.shockwaveAlpha;
+      ctx.strokeStyle = "#c9ffff";
+      ctx.shadowColor = "#35ddff"; ctx.shadowBlur = mix(15, 5, timeline.shockwaveProgress);
+      ctx.lineWidth = lineWidth;
+      ctx.beginPath(); ctx.arc(x, y, ringRadius, 0, Math.PI * 2); ctx.stroke();
+      ctx.globalAlpha *= .82;
+      ctx.strokeStyle = "#45cfff";
+      ctx.lineWidth = Math.max(1.5, lineWidth * .28);
+      ctx.beginPath(); ctx.arc(x, y, Math.max(0, ringRadius - lineWidth * .72), 0, Math.PI * 2); ctx.stroke();
+      ctx.shadowBlur = 0;
+      if (!effect.shockwaveCuePlayed && timeline.elapsed >= 100) {
+        effect.shockwaveCuePlayed = true;
+        this.emitNukeAudioCue("shockwave", effect);
+      }
+    }
+
+    if (timeline.secondaryAlpha > .001) {
+      ctx.globalAlpha = timeline.secondaryAlpha * .64;
+      ctx.strokeStyle = "#ef64ff";
+      ctx.shadowColor = "#9b54ff"; ctx.shadowBlur = 8;
+      ctx.lineWidth = mix(9, 1.5, timeline.secondaryProgress);
+      ctx.beginPath(); ctx.arc(x, y, effect.radius * timeline.secondaryProgress, 0, Math.PI * 2); ctx.stroke();
+      ctx.shadowBlur = 0;
+    }
+
+    for (const shard of effect.shards) {
+      const elapsed = timeline.elapsed - shard.delay;
+      if (elapsed <= 0 || elapsed >= shard.life) continue;
+      const amount = elapsed / shard.life;
+      const fade = 1 - smoothstep(amount);
+      const distance = shard.distance * easeOutCubic(amount);
+      const headX = x + Math.cos(shard.angle) * distance;
+      const headY = y + Math.sin(shard.angle) * distance;
+      const tailDistance = Math.max(0, distance - shard.length * (1 - amount * .45));
+      ctx.globalAlpha = fade * .95;
+      ctx.strokeStyle = shard.color;
+      ctx.lineWidth = shard.width * (1 - amount * .45);
+      ctx.beginPath();
+      ctx.moveTo(x + Math.cos(shard.angle) * tailDistance, y + Math.sin(shard.angle) * tailDistance);
+      ctx.lineTo(headX, headY);
+      ctx.stroke();
+    }
+    ctx.shadowBlur = 0;
+
+    for (const particle of effect.particles) {
+      const elapsed = timeline.elapsed - particle.delay;
+      if (elapsed <= 0 || elapsed >= particle.life) continue;
+      const amount = elapsed / particle.life;
+      const fade = (1 - smoothstep(amount)) * Math.min(1, elapsed / 55);
+      const distance = particle.distance * easeOutCubic(amount);
+      const angle = particle.angle + particle.drift * amount;
+      const px = x + Math.cos(angle) * distance;
+      const py = y + Math.sin(angle) * distance;
+      if (particle.type === "violet-fragment" || particle.type === "magenta-fragment") {
+        ctx.save();
+        ctx.globalAlpha = fade;
+        ctx.translate(px, py); ctx.rotate(angle + particle.spin * amount);
+        ctx.fillStyle = particle.color;
+        const size = particle.size * (1 - amount * .35);
+        ctx.beginPath(); ctx.moveTo(size * 1.45, 0); ctx.lineTo(-size * .65, size * .72); ctx.lineTo(-size, -size * .52); ctx.closePath(); ctx.fill();
+        ctx.restore();
+      } else {
+        ctx.globalAlpha = fade;
+        ctx.strokeStyle = particle.color;
+        ctx.lineWidth = particle.size;
+        const tailLength = particle.size * particle.stretch;
+        ctx.beginPath();
+        ctx.moveTo(px - Math.cos(angle) * tailLength, py - Math.sin(angle) * tailLength);
+        ctx.lineTo(px, py);
+        ctx.stroke();
+      }
+    }
+    ctx.globalCompositeOperation = "source-over";
+  }
+
+  drawNukeHit(effect, amount) {
+    const ctx = this.ctx;
+    const x = effect.x - this.camera.x, y = effect.y - this.camera.y;
+    const fade = 1 - smoothstep(amount);
+    ctx.globalCompositeOperation = "screen";
+    ctx.globalAlpha = fade;
+    ctx.fillStyle = "rgba(255,255,255,.78)";
+    ctx.shadowColor = "#60f4ff"; ctx.shadowBlur = 20;
+    ctx.beginPath(); ctx.arc(x, y, 19 + amount * 23, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = "#7bfbff"; ctx.lineWidth = 3 - amount * 1.5;
+    ctx.beginPath(); ctx.arc(x, y, 25 + amount * 32, 0, Math.PI * 2); ctx.stroke();
   }
 
   drawDirtEffect(effect, amount, now) {
@@ -1055,13 +1274,139 @@ export class DustyOrbitMultiplayerRenderer {
     }
   }
 
-  drawNukes(nukes) {
+  collectNukeWarnings(nukes, now = Date.now()) {
+    const renderNow = performance.now();
+    for (const [id, expiresAt] of this.detonatedNukeIds) if (renderNow >= expiresAt) this.detonatedNukeIds.delete(id);
+    for (const nuke of nukes || []) {
+      if (!this.detonatedNukeIds.has(nuke.id) && Number.isFinite(nuke.startedAt) && Number.isFinite(nuke.detonateAt)) {
+        this.nukeWarnings.set(nuke.id, { ...nuke });
+      }
+    }
+    for (const [id, nuke] of this.nukeWarnings) {
+      if (this.detonatedNukeIds.has(id) || now > nuke.detonateAt + 250) this.nukeWarnings.delete(id);
+    }
+    return [...this.nukeWarnings.values()];
+  }
+
+  getNukeScreenShake(now = performance.now()) {
+    if (this.reducedMotion) return { x: 0, y: 0 };
+    const compact = this.viewport.width < 700 || globalThis.document?.documentElement?.classList.contains("mobile-preview");
+    const baseAmplitude = compact ? 5 : 7.5;
+    let x = 0, y = 0;
+    for (const effect of this.effects) {
+      if (effect.type !== "nuke-blast") continue;
+      const timeline = nukeTimeline(now - effect.born);
+      const amplitude = baseAmplitude * timeline.shakeAmount;
+      x += (Math.sin(timeline.elapsed * .31 + effect.seed) * .68 + Math.sin(timeline.elapsed * .083 + effect.seed * .7) * .32) * amplitude;
+      y += (Math.cos(timeline.elapsed * .27 + effect.seed * 1.3) * .64 + Math.sin(timeline.elapsed * .097 + effect.seed) * .36) * amplitude;
+    }
+    return { x: clamp(x, -9, 9), y: clamp(y, -9, 9) };
+  }
+
+  drawNukeScreenEffects(now = performance.now()) {
+    let flashAlpha = 0, energyAlpha = 0;
+    for (const effect of this.effects) {
+      if (effect.type !== "nuke-blast") continue;
+      const timeline = nukeTimeline(now - effect.born);
+      flashAlpha = Math.max(flashAlpha, timeline.flashAlpha);
+      energyAlpha = Math.max(energyAlpha, (1 - smoothstep(timeline.elapsed / 520)) * .16);
+    }
+    if (flashAlpha <= .001 && energyAlpha <= .001) return;
     const ctx = this.ctx;
-    for (const nuke of nukes) {
-      const duration = Math.max(1, nuke.detonateAt - nuke.startedAt), amount = clamp((Date.now() - nuke.startedAt) / duration, 0, 1);
-      ctx.save(); ctx.strokeStyle = "rgba(255,218,82,.9)"; ctx.lineWidth = 4; ctx.setLineDash([14, 9]); ctx.shadowColor = "#ff9b46"; ctx.shadowBlur = 12;
-      ctx.beginPath(); ctx.arc(nuke.x - this.camera.x, nuke.y - this.camera.y, nuke.radius * amount, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
-      ctx.fillStyle = "#fff1a3"; ctx.textAlign = "center"; ctx.font = "1000 18px ui-monospace,monospace"; ctx.fillText("NUKE INCOMING", nuke.x - this.camera.x, nuke.y - this.camera.y - 28); ctx.restore();
+    const motionFactor = this.reducedMotion ? .35 : 1;
+    ctx.save();
+    ctx.globalCompositeOperation = "screen";
+    if (flashAlpha > .001) {
+      ctx.globalAlpha = flashAlpha * .44 * motionFactor;
+      ctx.fillStyle = "#eaffff";
+      ctx.fillRect(0, 0, this.viewport.width, this.viewport.height);
+    }
+    if (energyAlpha > .001) {
+      const left = ctx.createLinearGradient(0, 0, this.viewport.width * .32, 0);
+      left.addColorStop(0, `rgba(37,229,255,${energyAlpha * motionFactor})`);
+      left.addColorStop(1, "rgba(37,229,255,0)");
+      ctx.globalAlpha = 1; ctx.fillStyle = left; ctx.fillRect(0, 0, this.viewport.width * .34, this.viewport.height);
+      const right = ctx.createLinearGradient(this.viewport.width, 0, this.viewport.width * .68, 0);
+      right.addColorStop(0, `rgba(255,44,220,${energyAlpha * .7 * motionFactor})`);
+      right.addColorStop(1, "rgba(255,44,220,0)");
+      ctx.fillStyle = right; ctx.fillRect(this.viewport.width * .66, 0, this.viewport.width * .34, this.viewport.height);
+    }
+    ctx.restore();
+  }
+
+  drawNukes(nukes, now = Date.now()) {
+    const ctx = this.ctx;
+    for (const nuke of this.collectNukeWarnings(nukes, now)) {
+      const timeline = nukeWarningTimeline(nuke.startedAt, nuke.detonateAt, now);
+      const x = nuke.x - this.camera.x, y = nuke.y - this.camera.y;
+      const pulse = .5 + .5 * Math.sin(now / 58);
+      const targetRadius = nuke.radius * (.045 + smoothstep(timeline.amount) * .955);
+      ctx.save();
+      ctx.globalCompositeOperation = "screen";
+      ctx.strokeStyle = `rgba(255,102,56,${.68 + pulse * .25})`;
+      ctx.lineWidth = 3.5 + timeline.finalCharge * 3;
+      ctx.setLineDash([18, 11]);
+      ctx.lineDashOffset = -now / 18;
+      ctx.shadowColor = "#ff5c42"; ctx.shadowBlur = 11 + timeline.finalCharge * 15;
+      ctx.beginPath(); ctx.arc(x, y, targetRadius, 0, Math.PI * 2); ctx.stroke();
+      ctx.setLineDash([]);
+
+      ctx.globalAlpha = .25 + timeline.amount * .2;
+      ctx.strokeStyle = "#ffbd5e"; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(x, y, nuke.radius, 0, Math.PI * 2); ctx.stroke();
+      if (timeline.finalCharge > .001) {
+        ctx.globalAlpha = timeline.finalCharge * .8;
+        ctx.strokeStyle = "#8ffaff"; ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.arc(x, y, Math.max(5, nuke.radius * (1 - timeline.finalCharge) * .38), 0, Math.PI * 2); ctx.stroke();
+      }
+
+      const coreRadius = 12 + timeline.amount * 24 + pulse * 5;
+      ctx.globalAlpha = .6 + timeline.amount * .35;
+      const core = ctx.createRadialGradient(x, y, 0, x, y, coreRadius);
+      core.addColorStop(0, "rgba(255,255,255,.96)");
+      core.addColorStop(.22, "rgba(102,247,255,.88)");
+      core.addColorStop(.62, "rgba(255,91,64,.55)");
+      core.addColorStop(1, "rgba(255,61,113,0)");
+      ctx.fillStyle = core;
+      ctx.beginPath(); ctx.arc(x, y, coreRadius, 0, Math.PI * 2); ctx.fill();
+
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = timeline.finalCharge > .7 ? "#ffffff" : "#ffd5a1";
+      ctx.shadowColor = "#ff4f5d"; ctx.shadowBlur = 10;
+      ctx.textAlign = "center"; ctx.font = "1000 18px ui-monospace,monospace";
+      ctx.fillText("NUKE INCOMING", x, y - 34);
+      if (this.debug) {
+        ctx.globalAlpha = .72; ctx.strokeStyle = "#74f5ff"; ctx.lineWidth = 1.5; ctx.setLineDash([7, 7]);
+        ctx.beginPath(); ctx.arc(x, y, nuke.radius, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
+      }
+      ctx.restore();
+    }
+  }
+
+  drawNukeMinimap(snapshot, left, top, scaleX, scaleY, nowEpoch = Date.now(), nowRender = performance.now()) {
+    const ctx = this.ctx;
+    const radiusScale = (scaleX + scaleY) / 2;
+    for (const nuke of this.collectNukeWarnings(snapshot?.nukes || [], nowEpoch)) {
+      const timeline = nukeWarningTimeline(nuke.startedAt, nuke.detonateAt, nowEpoch);
+      ctx.save();
+      ctx.globalCompositeOperation = "screen";
+      ctx.globalAlpha = .42 + timeline.amount * .38;
+      ctx.strokeStyle = "#ff764f"; ctx.lineWidth = 1.5;
+      ctx.setLineDash([4, 3]);
+      ctx.beginPath(); ctx.arc(left + nuke.x * scaleX, top + nuke.y * scaleY, nuke.radius * radiusScale, 0, Math.PI * 2); ctx.stroke();
+      ctx.setLineDash([]); ctx.restore();
+    }
+    for (const effect of this.effects) {
+      if (effect.type !== "nuke-blast") continue;
+      const timeline = nukeTimeline(nowRender - effect.born);
+      if (timeline.shockwaveAlpha <= .001) continue;
+      ctx.save();
+      ctx.globalCompositeOperation = "screen";
+      ctx.globalAlpha = timeline.shockwaveAlpha * .78;
+      ctx.strokeStyle = "#79f8ff"; ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(left + effect.x * scaleX, top + effect.y * scaleY, effect.radius * timeline.shockwaveProgress * radiusScale, 0, Math.PI * 2);
+      ctx.stroke(); ctx.restore();
     }
   }
 
@@ -1097,6 +1442,7 @@ export class DustyOrbitMultiplayerRenderer {
     ctx.rect(left, top, width, height);
     ctx.clip();
     ctx.drawImage(surface, left, top, width, height);
+    this.drawNukeMinimap(snapshot, left, top, scaleX, scaleY);
     if (localPlayer?.alive) {
       const markerX = left + localPlayer.x * scaleX;
       const markerY = top + localPlayer.y * scaleY;
@@ -1166,6 +1512,18 @@ export class DustyOrbitMultiplayerRenderer {
 
   getDebugState(playerId = this.localPlayerId) {
     const pose = this.weaponPoses.get(playerId);
+    const now = performance.now();
+    const blast = this.effects.findLast?.((effect) => effect.type === "nuke-blast" && now - effect.born < effect.life)
+      || [...this.effects].reverse().find((effect) => effect.type === "nuke-blast" && now - effect.born < effect.life);
+    const warning = [...this.nukeWarnings.values()][0];
+    const nuke = blast ? {
+      state: now - blast.born < 900 ? "DETONATING" : "DECAY",
+      x: blast.x, y: blast.y, radius: blast.radius,
+      elapsed: Math.max(0, now - blast.born), particles: blast.particles.length,
+    } : warning ? {
+      state: "WARNING", x: warning.x, y: warning.y, radius: warning.radius,
+      elapsed: Math.max(0, Date.now() - warning.startedAt), particles: 0,
+    } : null;
     return {
       camera: { ...this.camera },
       playerScreen: { ...this.playerScreen },
@@ -1183,6 +1541,7 @@ export class DustyOrbitMultiplayerRenderer {
         muzzleWorld: { ...this.lastLocalLaunch.muzzleWorld },
         direction: { ...this.lastLocalLaunch.direction },
       } : null,
+      nuke,
     };
   }
 }

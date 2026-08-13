@@ -21,7 +21,7 @@ export const DUSTY_WEAPONS: readonly WeaponDefinition[] = Object.freeze([
   Object.freeze({ tier: 2, name: "PISTOL", cooldownMs: 700, speed: 600, lifetimeMs: 750, damage: 1, radius: 3.2, count: 1, spreadDegrees: [0], burstSpacingMs: 0, muzzleDistance: 36 }),
   Object.freeze({ tier: 3, name: "BURST", cooldownMs: 800, speed: 650, lifetimeMs: 800, damage: 1, radius: 3.2, count: 3, spreadDegrees: [0, 0, 0], burstSpacingMs: 90, muzzleDistance: 36 }),
   Object.freeze({ tier: 4, name: "SMG", cooldownMs: 220, speed: 700, lifetimeMs: 900, damage: 1, radius: 3, count: 1, spreadDegrees: [0], burstSpacingMs: 0, muzzleDistance: 36 }),
-  Object.freeze({ tier: 5, name: "SHOTGUN", cooldownMs: 850, speed: 700, lifetimeMs: 550, damage: 1, radius: 3, count: 5, spreadDegrees: [0, 0, 0, 0, 0], burstSpacingMs: 0, muzzleDistance: 36 }),
+  Object.freeze({ tier: 5, name: "SHOTGUN", cooldownMs: 850, speed: 700, lifetimeMs: 550, damage: 1, radius: 3, count: 3, spreadDegrees: [-8, 0, 8], burstSpacingMs: 0, muzzleDistance: 36 }),
   Object.freeze({ tier: 6, name: "PLASMA CANNON", cooldownMs: 450, speed: 1200, lifetimeMs: 1000, damage: 2, radius: 6, count: 1, spreadDegrees: [0], burstSpacingMs: 0, muzzleDistance: 42 }),
 ]);
 

@@ -25,6 +25,7 @@ export type ClientInput = {
   aimY: number;
   fire: boolean;
   nuke?: boolean;
+  viewAt?: number;
 };
 
 export type ClientPing = { type: "ping"; nonce: string };
@@ -93,6 +94,7 @@ export function parseClientMessage(raw: string | ArrayBuffer): ClientMessage | n
       aimY: Number(value.aimY),
       fire: value.fire,
       nuke: value.nuke === true,
+      ...(typeof value.viewAt === "number" && Number.isFinite(value.viewAt) && value.viewAt >= 0 ? { viewAt: value.viewAt } : {}),
     };
   }
 

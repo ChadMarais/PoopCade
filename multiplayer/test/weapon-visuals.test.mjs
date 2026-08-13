@@ -112,6 +112,27 @@ test("local confirmed shots stay on the currently rendered muzzle line without c
   assert.equal("convergeMs" in shot, false);
 });
 
+test("local Shotgun pellets preserve all three authoritative spread directions", () => {
+  const renderer = Object.create(DustyOrbitMultiplayerRenderer.prototype);
+  renderer.localPlayerId = "local";
+  renderer.pendingLocalShotConfirmations = [];
+  renderer.weaponPoses = new Map([["local", { muzzleWorld: { x: 411, y: 277 }, forward: { x: 1, y: 0 } }]]);
+  renderer.weaponRecoil = new Map();
+  renderer.effects = [];
+  renderer.localProjectiles = new Map();
+  for (const [index, degrees] of [-8, 0, 8].entries()) {
+    const angle = degrees * Math.PI / 180;
+    renderer.confirmShot({
+      playerId: "local",
+      projectile: { id: 80 + index, tier: 5, x: 400, y: 266, vx: Math.cos(angle) * 700, vy: Math.sin(angle) * 700, spawnedAt: 1000, expiresAt: 1550 },
+    }, true);
+  }
+  renderer.flushLocalShotConfirmations();
+  assert.equal(renderer.localProjectiles.size, 3);
+  assert.deepEqual([...renderer.localProjectiles.values()].map((shot) => Math.round(Math.atan2(shot.vy, shot.vx) * 180 / Math.PI)), [-8, 0, 8]);
+  assert.ok([...renderer.localProjectiles.values()].every((shot) => shot.startX === 411 && shot.startY === 277));
+});
+
 test("network transit never fast-forwards a bullet away from its muzzle", () => {
   const renderer = Object.create(DustyOrbitMultiplayerRenderer.prototype);
   renderer.localPlayerId = "local";

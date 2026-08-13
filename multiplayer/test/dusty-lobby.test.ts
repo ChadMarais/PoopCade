@@ -28,6 +28,13 @@ test("join protocol accepts profile identities and cosmetic choice but rejects m
   assert.equal(parseClientMessage(JSON.stringify({ type: "join", name: "Orbit Pilot", skinId: "../../bad" })), null);
 });
 
+test("input protocol carries a finite visual timeline for bounded hit rewind", () => {
+  const input = { type: "input", seq: 9, moveX: 0, moveY: 0, aimX: 1, aimY: 0, fire: true, viewAt: 12_345 };
+  assert.deepEqual(parseClientMessage(JSON.stringify(input)), { ...input, nuke: false });
+  const invalid = parseClientMessage(JSON.stringify({ ...input, viewAt: "yesterday" })) as Record<string, unknown>;
+  assert.equal("viewAt" in invalid, false);
+});
+
 test("authoritative capacity accepts 15 active players, rejects player 16, then releases a deliberate leave", () => {
   const simulation = new DustyOrbitSimulation(() => .5);
   assert.equal(DUSTY_MAX_PLAYERS, 15);
