@@ -5,6 +5,7 @@ android/
 assets/store/
 supabase/
 multiplayer/
+tools/
 .gitignore
 README.md
 AGENTS.md

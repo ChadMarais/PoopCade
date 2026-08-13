@@ -230,3 +230,32 @@ test("a quick drag-release preserves its shot direction until acknowledgement", 
   const queued = controller.sample(performance.now() + 20);
   assert.ok(queued.aimX < -.85); assert.equal(queued.fire, true);
 });
+
+test("collision editing neutralizes movement and fire until the editor is closed", () => {
+  class FakeElement {
+    constructor() {
+      this.listeners = new Map(); this.clientWidth = 800; this.clientHeight = 500;
+      this.style = { setProperty() {}, removeProperty() {} }; this.classList = { add() {}, remove() {} };
+    }
+    addEventListener(type, callback) { this.listeners.set(type, [...(this.listeners.get(type) || []), callback]); }
+    querySelector() { return null; } setPointerCapture() {} releasePointerCapture() {}
+    getBoundingClientRect() { return { left: 0, top: 0, width: this.clientWidth, height: this.clientHeight }; }
+  }
+  const fakeWindow = new FakeElement(); globalThis.window = fakeWindow; globalThis.matchMedia = () => ({ matches: false });
+  const controller = new InputController(new FakeElement(), null, null); controller.enabled = true;
+  controller.setEditorBlocked(true);
+  controller.keys.add("KeyD");
+  controller.mouseFiring = true;
+  controller.lastSampleAt = performance.now() - 50;
+
+  const blocked = controller.sample();
+  assert.equal(blocked.moveX, 0);
+  assert.equal(blocked.moveY, 0);
+  assert.equal(blocked.fire, false);
+
+  controller.setEditorBlocked(false);
+  controller.lastSampleAt = performance.now() - 50;
+  const restored = controller.sample();
+  assert.ok(restored.moveX > .5);
+  assert.equal(restored.fire, true);
+});

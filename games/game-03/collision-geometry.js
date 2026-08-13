@@ -4,10 +4,25 @@ export function transformNormalizedPolygon(definition, instance) {
   const { width, height, x, y } = instance;
   const left = x - definition.anchor.x * width;
   const top = y - definition.anchor.y * height;
-  return definition.collision.points.map((point) => ({
+  const normalizedPoints = definition.collision?.points ?? definition.collisionPolygon;
+  if (!Array.isArray(normalizedPoints)) throw new Error(`Asset ${definition.id || "unknown"} has no normalized collision polygon.`);
+  return normalizedPoints.map((point) => ({
     x: left + point.x * width,
     y: top + point.y * height,
   }));
+}
+
+export function collisionBlocksMovement(definition) {
+  return definition.blocksMovement === true || definition.collision?.blocksMovement === true;
+}
+
+export function collisionBlocksProjectiles(definition) {
+  return definition.blocksProjectiles === true || definition.collision?.blocksProjectiles === true;
+}
+
+export function depthSortY(definition, instance) {
+  const normalizedY = definition.depthSortAnchor?.y ?? definition.depth?.sortAnchorY ?? definition.anchor.y;
+  return instance.y + (normalizedY - definition.anchor.y) * instance.height;
 }
 
 export function polygonSignedArea(points) {

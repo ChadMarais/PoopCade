@@ -1,8 +1,9 @@
-import { moveCircleWithSliding } from "./collision-geometry.js?v=20260812";
-import { loadDustyOrbitAssets } from "./assets.js?v=20260813-5";
+import { moveCircleWithSliding } from "./collision-geometry.js?v=20260813";
+import { CollisionEditor } from "./collision-editor.js?v=20260813-8";
+import { loadDustyOrbitAssets } from "./assets.js?v=20260813-8";
 import { PRODUCTION_ARENA_WSS } from "./config.js?v=20260812";
-import { DustyOrbitMultiplayerRenderer } from "./renderer.js?v=20260813-8";
-import { InputController } from "./input.js?v=20260813";
+import { DustyOrbitMultiplayerRenderer } from "./renderer.js?v=20260813-14";
+import { InputController } from "./input.js?v=20260813-2";
 import { claimSessionIdentity } from "./identity.js?v=20260813";
 import { ArenaNetwork } from "./network.js?v=20260813";
 import { consumeFixedStep, convergeVisualPosition } from "./timing.js?v=20260813-2";
@@ -13,7 +14,8 @@ const PLAYER_RADIUS = 17;
 const FALLBACK_PLAYER_SPEED = 165;
 const ARENA_ID = "dusty-orbit-001";
 const parameters = new URLSearchParams(location.search);
-let debugCollision = parameters.get("debug") === "1";
+const debugMode = parameters.get("debug") === "1";
+let debugCollision = debugMode;
 document.documentElement.classList.toggle("mobile-preview", parameters.get("mobile") === "1");
 
 function finitePoint(value) { return Boolean(value) && Number.isFinite(value.x) && Number.isFinite(value.y); }
@@ -70,12 +72,38 @@ if (!arenaEndpoint) {
 }
 const assets = await loadDustyOrbitAssets((message, amount) => { loadingText.textContent = message; loadingBar.style.width = `${amount * 100}%`; });
 loadingBar.style.width = "100%";
-const renderer = new DustyOrbitMultiplayerRenderer(canvas, assets, debugCollision);
+const focusSatellite = parameters.get("focus") === "satellite-east" ? assets.satellites[1] : assets.satellites[0];
+const debugFocus = debugCollision && parameters.get("focus")?.startsWith("satellite") ? focusSatellite : null;
+const renderer = new DustyOrbitMultiplayerRenderer(canvas, assets, debugCollision, debugFocus);
 const input = new InputController(canvas, null, null, {
   movementSurface: canvas,
   movementGuide: document.querySelector("#mobileMoveGuide"),
   fireButton: document.querySelector("#mobileFireButton"),
 });
+const collisionEditor = debugMode ? new CollisionEditor({
+  canvas,
+  assets,
+  renderer,
+  input,
+  panel: document.querySelector("#collisionEditor"),
+  select: document.querySelector("#collisionEditorObject"),
+  toggle: document.querySelector("#collisionEditorToggle"),
+  copy: document.querySelector("#collisionEditorCopy"),
+  save: document.querySelector("#collisionEditorSave"),
+  reset: document.querySelector("#collisionEditorReset"),
+  remove: document.querySelector("#collisionEditorDelete"),
+  status: document.querySelector("#collisionEditorStatus"),
+  persistence: document.querySelector("#collisionEditorPersistence"),
+  onActivate() {
+    debugCollision = true;
+    renderer.debug = true;
+    debugHud.hidden = false;
+  },
+}) : null;
+if (collisionEditor) {
+  renderer.collisionEditor = collisionEditor;
+  collisionEditor.setVisible(true);
+}
 
 let connectionState = "connecting";
 let joined = false;
@@ -241,6 +269,7 @@ function sendInput(sample) {
 
 function updateHud(snapshot) {
   const player = snapshot?.players?.find((item) => item.id === localId);
+  const satellitePositions = assets.satellites.map((satellite) => `${satellite.id}: ${satellite.x},${satellite.y}`).join("  ·  ");
   const inputVisual = input.getVisualState();
   const remotes = (snapshot?.players || []).filter((item) => item.id !== localId);
   const remoteSummary = remotes.length
@@ -258,6 +287,10 @@ function updateHud(snapshot) {
     `PLAYERS: ${snapshot?.players?.length ?? 0}  ·  PING: ${network.rtt.toFixed(1)}ms`,
     `RATES: INPUT ${Math.min(INPUT_RATE, inputStepTimes.length)}/s · SNAP ${network.snapshotRate}/s · SERVER ${serverRates.tick}/${serverRates.snapshot}`,
     `TICK: ${snapshot?.tick ?? "—"}  ·  POS: ${player ? `${player.x.toFixed(1)}, ${player.y.toFixed(1)}` : "—"}`,
+    `SATELLITES: ${satellitePositions || "—"}`,
+    `SATELLITE CONNECTED: ${player?.satelliteConnected ? "YES" : "NO"}  ·  CONNECT DISTANCE: ${assets.satelliteConnection.connectTolerance}`,
+    `NEAREST SATELLITE: ${snapshot?.you?.nearestSatelliteId || "—"}  ·  DISTANCE: ${Number.isFinite(snapshot?.you?.satelliteDistance) ? snapshot.you.satelliteDistance.toFixed(1) : "—"}`,
+    `RADAR SOURCE: ${snapshot?.you?.radarSource || "NONE"}`,
     `AIM: ${latestAim.x.toFixed(2)}, ${latestAim.y.toFixed(2)}  ·  HP: ${player?.hp ?? "—"}/3  ·  KILLS: ${player?.kills ?? 0}`,
     ...weaponDebugLines,
     `MOUSE: ${inputVisual.mouseCanvasX.toFixed(0)}, ${inputVisual.mouseCanvasY.toFixed(0)}  ·  MODE: ${inputVisual.mode.toUpperCase()}`,
@@ -271,6 +304,7 @@ function updateHud(snapshot) {
   const weapon = weaponDefinitions.find((item) => item.tier === player?.weaponTier) || weaponDefinitions[0];
   const effects = [];
   if (player?.spyRemaining > 0) effects.push(`SPY ${(player.spyRemaining / 1000).toFixed(1)}s`);
+  if (player?.satelliteConnected) effects.push("UPLINK: ACTIVE");
   if (player?.speedRemaining > 0) effects.push(`SPEED ${(player.speedRemaining / 1000).toFixed(1)}s`);
   if (player?.moleMode) effects.push(`MOLE ${(player.moleRemaining / 1000).toFixed(1)}s${player.emergeBlocked ? " · BLOCKED" : ""}`);
   gameplayHud.textContent = [
@@ -354,6 +388,7 @@ addEventListener("keydown", (event) => {
     debugCollision = !debugCollision;
     renderer.debug = debugCollision;
     debugHud.hidden = !debugCollision;
+    if (!debugCollision) collisionEditor?.setActive(false);
   }
 });
 mobileNukeButton.addEventListener("pointerdown", (event) => {
@@ -363,6 +398,6 @@ mobileNukeButton.addEventListener("pointerdown", (event) => {
 document.addEventListener("visibilitychange", () => { input.reset(); input.enabled = connectionState === "online" && joined && !document.hidden; network.setActive(!document.hidden); if (!document.hidden) previousFrame = performance.now(); });
 addEventListener("beforeunload", () => { identity.release(); network.close(); });
 
-window.__DUSTY_ORBIT_MULTIPLAYER__ = { network, renderer, input, getState: () => ({ connectionState, joined, localId, guestName, latestSnapshot, predicted, visualPredicted, predictionOffset: { ...predictionOffset }, pending: [...pending], seq, reconciliationError, maximumReconciliationError, input: input.getVisualState() }) };
+window.__DUSTY_ORBIT_MULTIPLAYER__ = { network, renderer, input, collisionEditor, getState: () => ({ connectionState, joined, localId, guestName, latestSnapshot, predicted, visualPredicted, predictionOffset: { ...predictionOffset }, pending: [...pending], seq, reconciliationError, maximumReconciliationError, input: input.getVisualState() }) };
 network.connect(true);
 requestAnimationFrame(frame);

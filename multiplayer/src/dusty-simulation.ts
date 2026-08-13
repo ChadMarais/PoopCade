@@ -1,5 +1,16 @@
 import { distanceToPolygon, moveCircleWithSliding, pointInPolygon, sweptCircleIntersectsPolygon } from "../../games/game-03/collision-geometry.js";
-import { DUSTY_MAP, DUSTY_PLAYER_RADIUS, DUSTY_POLYGONS, DUSTY_SPAWNS, type Point } from "./dusty-map.ts";
+import { weaponPose, weaponVisualForTier } from "../../games/game-03/weapon-visuals.js";
+import {
+  DUSTY_MAP,
+  DUSTY_PLAYER_RADIUS,
+  DUSTY_POLYGONS,
+  DUSTY_PROJECTILE_POLYGONS,
+  DUSTY_SATELLITES,
+  DUSTY_SATELLITE_CONNECT_TOLERANCE,
+  DUSTY_SATELLITE_DISCONNECT_TOLERANCE,
+  DUSTY_SPAWNS,
+  type Point,
+} from "./dusty-map.ts";
 import { DUSTY_GAMEPLAY, DUSTY_WEAPONS, POWERUP_TYPES, weaponForTier, type PowerupType, type WeaponDefinition } from "./dusty-gameplay.ts";
 import type { ClientInput } from "./protocol.ts";
 
@@ -21,6 +32,7 @@ export type DustyPlayer = {
   aimX: number; aimY: number; hp: number; kills: number; deaths: number; killScore: number;
   weaponTier: number; nukeProgress: number; nukeReady: boolean; shieldHits: number;
   spyUntil: number; speedUntil: number; moleMode: boolean; moleUntil: number; moleForceAt: number;
+  connectedSatelliteId: string | null;
   emergeBlockedUntil: number; alive: boolean; respawnAt: number; protectedUntil: number;
   lastInputAt: number; lastMessageAt: number; lastInputSeq: number; lastFireAt: number;
   lastFireInput: boolean; suppressFireUntilRelease: boolean; lastNukeInput: boolean;
@@ -66,8 +78,11 @@ function segmentCircle(start: Point, end: Point, center: Point, radius: number):
   if (a < 0.00001) return null;
   const b = 2 * (fx * dx + fy * dy), c = fx * fx + fy * fy - radius * radius;
   const discriminant = b * b - 4 * a * c;
-  if (discriminant < 0) return null;
-  const root = Math.sqrt(discriminant), first = (-b - root) / (2 * a), second = (-b + root) / (2 * a);
+  // Treat a numerically-near-zero discriminant as a real tangent hit. This
+  // matters for the shoulder-offset muzzle line, which can graze a target at
+  // exactly player radius + projectile radius.
+  if (discriminant < -0.000001) return null;
+  const root = Math.sqrt(Math.max(0, discriminant)), first = (-b - root) / (2 * a), second = (-b + root) / (2 * a);
   if (first >= 0 && first <= 1) return first;
   return second >= 0 && second <= 1 ? second : null;
 }
@@ -115,6 +130,7 @@ export class DustyOrbitSimulation {
       id, name, joinOrder: ++this.joinCursor, x: spawn.x, y: spawn.y, vx: 0, vy: 0, aimX: 1, aimY: 0,
       hp: DUSTY_GAMEPLAY.maxHp, kills: 0, deaths: 0, killScore: 0, weaponTier: 1, nukeProgress: 0,
       nukeReady: false, shieldHits: 0, spyUntil: 0, speedUntil: 0, moleMode: false, moleUntil: 0,
+      connectedSatelliteId: null,
       moleForceAt: 0, emergeBlockedUntil: 0, alive: true, respawnAt: 0,
       protectedUntil: now + DUSTY_SPAWN_PROTECTION_MS, lastInputAt: now, lastMessageAt: now,
       lastInputSeq: 0, lastFireAt: Number.NEGATIVE_INFINITY, lastFireInput: false,
@@ -132,6 +148,7 @@ export class DustyOrbitSimulation {
     const player = this.players.get(id);
     if (!player) return;
     player.disconnectedAt = now; player.pendingInput = null;
+    player.connectedSatelliteId = null;
     player.input = { ...player.input, moveX: 0, moveY: 0, fire: false, nuke: false };
   }
 
@@ -201,6 +218,7 @@ export class DustyOrbitSimulation {
         this.events.push({ type: "stale", playerId: player.id }); this.removePlayer(player.id); continue;
       }
       if (!player.alive) {
+        player.connectedSatelliteId = null;
         player.pendingInput = null; player.lastProcessedInputSeq = player.lastInputSeq;
         if (now >= player.respawnAt) this.respawnPlayer(player, now);
         continue;
@@ -219,6 +237,7 @@ export class DustyOrbitSimulation {
       player.y = clamp(moved.y, DUSTY_PLAYER_RADIUS, DUSTY_MAP.height - DUSTY_PLAYER_RADIUS);
       this.collectPickups(player, now);
       this.processActions(player, now);
+      this.updateSatelliteConnection(player);
     }
     this.updateNukes(now);
     this.updateProjectiles(dt, now);
@@ -288,10 +307,12 @@ export class DustyOrbitSimulation {
   private spawnProjectile(player: DustyPlayer, weapon: WeaponDefinition, aimX: number, aimY: number, spread: number, now: number): void {
     if (this.projectiles.length >= DUSTY_GAMEPLAY.maxProjectiles) return;
     const direction = rotated(aimX, aimY, spread);
-    const x = player.x + direction.x * weapon.muzzleDistance, y = player.y + direction.y * weapon.muzzleDistance;
+    const muzzle = weaponPose({ ...player, aimX, aimY }, weaponVisualForTier(weapon.tier)).muzzleWorld;
+    const projectileSpeed = weapon.speed * (player.speedUntil > now ? DUSTY_GAMEPLAY.speedMultiplier : 1);
+    const x = muzzle.x, y = muzzle.y;
     const projectile: DustyProjectile = {
       id: ++this.projectileId, ownerId: player.id, tier: weapon.tier, x, y,
-      vx: direction.x * weapon.speed, vy: direction.y * weapon.speed, radius: weapon.radius,
+      vx: direction.x * projectileSpeed, vy: direction.y * projectileSpeed, radius: weapon.radius,
       damage: weapon.damage, spawnedAt: now, expiresAt: now + weapon.lifetimeMs,
     };
     this.projectiles.push(projectile);
@@ -306,7 +327,7 @@ export class DustyOrbitSimulation {
       const end = { x: projectile.x + projectile.vx * dt, y: projectile.y + projectile.vy * dt };
       let hit: { t: number; kind: "rock" | "player" | "boundary"; id?: string } | null = null;
       if (end.x < 0 || end.y < 0 || end.x > DUSTY_MAP.width || end.y > DUSTY_MAP.height) hit = { t: 1, kind: "boundary" };
-      for (const polygon of DUSTY_POLYGONS) {
+      for (const polygon of DUSTY_PROJECTILE_POLYGONS) {
         const t = sweptPolygonTime(start, end, projectile.radius, polygon);
         if (t !== null && (!hit || t < hit.t)) hit = { t, kind: "rock" };
       }
@@ -343,7 +364,7 @@ export class DustyOrbitSimulation {
     victim.alive = false; victim.hp = 0; victim.vx = victim.vy = 0; victim.deaths++;
     victim.killScore = Math.max(0, victim.killScore - 1);
     victim.weaponTier = Math.max(DUSTY_GAMEPLAY.minWeaponTier, victim.weaponTier - 1);
-    victim.spyUntil = 0; victim.speedUntil = 0; victim.shieldHits = 0; victim.moleMode = false;
+    victim.spyUntil = 0; victim.speedUntil = 0; victim.shieldHits = 0; victim.moleMode = false; victim.connectedSatelliteId = null;
     victim.moleUntil = 0; victim.moleForceAt = 0; victim.burstRemaining = 0; victim.suppressFireUntilRelease = false;
     victim.input = { ...victim.input, moveX: 0, moveY: 0, fire: false, nuke: false };
     victim.pendingInput = null; victim.lastProcessedInputSeq = victim.lastInputSeq;
@@ -423,6 +444,25 @@ export class DustyOrbitSimulation {
     this.events.push({ type: "mole_emerged", playerId: player.id, x: player.x, y: player.y, reason, at: now });
   }
 
+  private updateSatelliteConnection(player: DustyPlayer): void {
+    if (!player.alive || player.moleMode) {
+      player.connectedSatelliteId = null;
+      return;
+    }
+    const connected = DUSTY_SATELLITES.find((satellite) => satellite.id === player.connectedSatelliteId);
+    if (connected) {
+      const edgeGap = Math.max(0, distanceToPolygon(player, connected.polygon) - DUSTY_PLAYER_RADIUS);
+      if (edgeGap <= DUSTY_SATELLITE_DISCONNECT_TOLERANCE) return;
+    }
+    let nearest: (typeof DUSTY_SATELLITES)[number] | null = null;
+    let nearestGap = Number.POSITIVE_INFINITY;
+    for (const satellite of DUSTY_SATELLITES) {
+      const edgeGap = Math.max(0, distanceToPolygon(player, satellite.polygon) - DUSTY_PLAYER_RADIUS);
+      if (edgeGap < nearestGap) { nearest = satellite; nearestGap = edgeGap; }
+    }
+    player.connectedSatelliteId = nearest && nearestGap <= DUSTY_SATELLITE_CONNECT_TOLERANCE ? nearest.id : null;
+  }
+
   private maintainPickups(now: number): void {
     while (this.pickups.length < DUSTY_GAMEPLAY.pickupActiveCount) this.pickups.push({ id: ++this.pickupId, type: "health", x: 0, y: 0, active: false, respawnAt: 0 });
     for (const pickup of this.pickups) {
@@ -487,7 +527,7 @@ export class DustyOrbitSimulation {
 
   private respawnPlayer(player: DustyPlayer, now: number): void {
     const spawn = this.chooseRespawn(player.id);
-    Object.assign(player, { x: spawn.x, y: spawn.y, vx: 0, vy: 0, hp: DUSTY_GAMEPLAY.maxHp, alive: true, respawnAt: 0, protectedUntil: now + DUSTY_SPAWN_PROTECTION_MS, lastFireAt: Number.NEGATIVE_INFINITY, lastFireInput: false, lastNukeInput: false });
+    Object.assign(player, { x: spawn.x, y: spawn.y, vx: 0, vy: 0, hp: DUSTY_GAMEPLAY.maxHp, alive: true, respawnAt: 0, protectedUntil: now + DUSTY_SPAWN_PROTECTION_MS, lastFireAt: Number.NEGATIVE_INFINITY, lastFireInput: false, lastNukeInput: false, connectedSatelliteId: null });
     this.events.push({ type: "respawn", playerId: player.id, x: player.x, y: player.y, protectedUntil: player.protectedUntil });
   }
 
@@ -508,6 +548,15 @@ export class DustyOrbitSimulation {
     if (!player.alive) return false;
     for (const cloud of this.fartClouds) if (cloud.expiresAt > now && Math.hypot(player.x - cloud.x, player.y - cloud.y) <= cloud.radius) return true;
     return false;
+  }
+
+  private radarSource(player: DustyPlayer, now: number): "NONE" | "SPY" | "SATELLITE" | "SPY + SATELLITE" {
+    const spy = player.spyUntil > now;
+    const satellite = DUSTY_SATELLITES.some((item) => item.id === player.connectedSatelliteId);
+    if (spy && satellite) return "SPY + SATELLITE";
+    if (spy) return "SPY";
+    if (satellite) return "SATELLITE";
+    return "NONE";
   }
 
   private updateThreatLeader(): void {
@@ -533,6 +582,8 @@ export class DustyOrbitSimulation {
       speedRemaining: Math.max(0, player.speedUntil - now), moleMode: player.moleMode,
       moleRemaining: player.moleMode ? Math.max(0, player.moleUntil - now) : 0,
       emergeBlocked: player.emergeBlockedUntil > now, concealed: this.isConcealed(player, now), alive: player.alive,
+      satelliteConnected: DUSTY_SATELLITES.some((item) => item.id === player.connectedSatelliteId),
+      connectedSatelliteId: player.connectedSatelliteId,
       respawnAt: player.respawnAt, protectedUntil: player.protectedUntil, color: player.color,
     });
     const visiblePlayers = [...this.players.values()].filter((player) => player.id === viewerId || (!player.moleMode && !this.isConcealed(player, now)));
@@ -540,16 +591,26 @@ export class DustyOrbitSimulation {
     if (viewer) for (const player of visiblePlayers) {
       if (!player.alive || player.id === viewerId) continue;
       const threat = player.id === this.threatLeaderId;
-      if (threat || viewer.spyUntil > now) minimapPlayers.push({ id: player.id, x: round(player.x), y: round(player.y), color: player.color, threat });
+      if (threat || this.radarSource(viewer, now) !== "NONE") minimapPlayers.push({ id: player.id, x: round(player.x), y: round(player.y), color: player.color, threat });
     }
     return {
-      type: "snapshot", t: now, tick: this.tick, you: { id: viewerId, ack: viewer?.lastProcessedInputSeq ?? 0 },
+      type: "snapshot", t: now, tick: this.tick, you: {
+        id: viewerId,
+        ack: viewer?.lastProcessedInputSeq ?? 0,
+        radarSource: viewer ? this.radarSource(viewer, now) : "NONE",
+        satelliteDistance: viewer ? round(Math.min(...DUSTY_SATELLITES.map((satellite) => Math.max(0, distanceToPolygon(viewer, satellite.polygon) - DUSTY_PLAYER_RADIUS)))) : null,
+        nearestSatelliteId: viewer ? DUSTY_SATELLITES.reduce((nearest, satellite) => {
+          const gap = Math.max(0, distanceToPolygon(viewer, satellite.polygon) - DUSTY_PLAYER_RADIUS);
+          return gap < nearest.gap ? { id: satellite.id, gap } : nearest;
+        }, { id: null as string | null, gap: Number.POSITIVE_INFINITY }).id : null,
+      },
       players: visiblePlayers.map(serializePlayer),
       projectiles: this.projectiles.map((projectile) => ({ id: projectile.id, ownerId: projectile.ownerId, tier: projectile.tier, x: round(projectile.x), y: round(projectile.y), vx: Math.round(projectile.vx), vy: Math.round(projectile.vy), radius: projectile.radius, spawnedAt: projectile.spawnedAt, expiresAt: projectile.expiresAt })),
       pickups: this.pickups.filter((pickup) => pickup.active).map(({ id, type, x, y, active }) => ({ id, type, x, y, active })),
       fartClouds: this.fartClouds.map((cloud) => ({ ...cloud })),
       nukes: this.nukes.map((nuke) => ({ ...nuke })),
       threatLeaderId: this.threatLeaderId,
+      activeSatelliteIds: DUSTY_SATELLITES.filter((satellite) => [...this.players.values()].some((player) => player.alive && player.connectedSatelliteId === satellite.id)).map((satellite) => satellite.id),
       minimapPlayers,
     };
   }

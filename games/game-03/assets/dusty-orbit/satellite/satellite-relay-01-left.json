@@ -1,0 +1,73 @@
+{
+  "id": "satellite-relay-01-left",
+  "orientation": "left",
+  "render": {
+    "flipX": true
+  },
+  "sprite": "satellite-relay-01.png",
+  "footprint": "satellite-relay-01-footprint.png",
+  "anchor": {
+    "x": 0.5,
+    "y": 0.5
+  },
+  "depthSortAnchor": {
+    "x": 0.5,
+    "y": 0.68
+  },
+  "blocksMovement": true,
+  "blocksProjectiles": true,
+  "collisionPolygon": [
+    {
+      "x": 0.6641,
+      "y": 0.4424
+    },
+    {
+      "x": 0.5455,
+      "y": 0.4522
+    },
+    {
+      "x": 0.4402,
+      "y": 0.487
+    },
+    {
+      "x": 0.3254,
+      "y": 0.6268
+    },
+    {
+      "x": 0.2137,
+      "y": 0.6675
+    },
+    {
+      "x": 0.2177,
+      "y": 0.7504
+    },
+    {
+      "x": 0.327,
+      "y": 0.7735
+    },
+    {
+      "x": 0.4633,
+      "y": 0.8684
+    },
+    {
+      "x": 0.5781,
+      "y": 0.8708
+    },
+    {
+      "x": 0.7065,
+      "y": 0.8134
+    },
+    {
+      "x": 0.807,
+      "y": 0.6483
+    },
+    {
+      "x": 0.8054,
+      "y": 0.5326
+    },
+    {
+      "x": 0.7478,
+      "y": 0.4793
+    }
+  ]
+}

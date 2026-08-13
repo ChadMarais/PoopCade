@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { pointInPolygon } from "../../games/game-03/collision-geometry.js";
+import { distanceToPolygon, pointInPolygon } from "../../games/game-03/collision-geometry.js";
+import { weaponPose, weaponVisualForTier } from "../../games/game-03/weapon-visuals.js";
 import { DUSTY_GAMEPLAY, DUSTY_WEAPONS, POWERUP_TYPES, type PowerupType } from "../src/dusty-gameplay.ts";
-import { DUSTY_PLAYER_RADIUS, DUSTY_POLYGONS } from "../src/dusty-map.ts";
+import { DUSTY_PLAYER_RADIUS, DUSTY_POLYGONS, DUSTY_SATELLITES } from "../src/dusty-map.ts";
 import { DustyOrbitSimulation, DUSTY_FIXED_DT, type DustyPlayer, type DustyProjectile } from "../src/dusty-simulation.ts";
 
 const A = "20000000-0000-4000-8000-000000000001";
@@ -35,6 +36,11 @@ function projectile(ownerId: string, damage = 1): DustyProjectile {
   return { id: 99, ownerId, tier: 1, x: 0, y: 0, vx: 1, vy: 0, radius: 3, damage, spawnedAt: 0, expiresAt: 9999 };
 }
 function eventsOf(simulation: DustyOrbitSimulation, type: string) { return simulation.drainEvents().filter((event) => event.type === type); }
+function placeAtSatelliteGap(player: DustyPlayer, gap: number, satellite = DUSTY_SATELLITES[0]) {
+  const edge = satellite.polygon.reduce((left, point) => point.x < left.x ? point : left);
+  player.x = edge.x - DUSTY_PLAYER_RADIUS - gap;
+  player.y = edge.y;
+}
 
 test("central weapon table defines the six requested tiers and range progression", () => {
   assert.deepEqual(DUSTY_WEAPONS.map(({ tier, name, cooldownMs, speed, lifetimeMs, damage, radius, count }) => ({ tier, name, cooldownMs, speed, lifetimeMs, damage, radius, count })), [
@@ -117,6 +123,20 @@ test("speed doubles authoritative movement, refreshes without stacking, and expi
   simulation.applyInput(A, intent(4, { moveX: 1 }), 12000); simulation.step(DUSTY_FIXED_DT, 12000); assert.equal(Math.round(player.vx), 165);
 });
 
+test("turbo doubles projectile speed and authoritative shots begin on the shoulder muzzle line", () => {
+  const simulation = fresh(); const player = add(simulation, A, "Guest-1001");
+  collect(simulation, player, "speed", 1000);
+  player.aimX = Math.SQRT1_2; player.aimY = Math.SQRT1_2;
+  simulation.applyInput(A, intent(2, { aimX: player.aimX, aimY: player.aimY, fire: true }), 1034);
+  simulation.step(DUSTY_FIXED_DT, 1034);
+  const shot = eventsOf(simulation, "shot")[0] as { projectile: DustyProjectile };
+  const expected = weaponPose(player, weaponVisualForTier(1)).muzzleWorld;
+  assert.ok(shot);
+  assert.ok(Math.abs(shot.projectile.x - expected.x) < .001);
+  assert.ok(Math.abs(shot.projectile.y - expected.y) < .001);
+  assert.ok(Math.abs(Math.hypot(shot.projectile.vx, shot.projectile.vy) - DUSTY_WEAPONS[0].speed * DUSTY_GAMEPLAY.speedMultiplier) < .001);
+});
+
 test("teleport repeatedly chooses player-radius-safe points inside the world", () => {
   let value = 0; const simulation = fresh(() => (value = (value + .173) % 1)); const player = add(simulation, A, "Guest-1001");
   for (let index = 0; index < 40; index++) {
@@ -183,6 +203,94 @@ test("spy reveals visible players on minimap but stealth wins", () => {
   assert.equal(snapshot.minimapPlayers.some((player: any) => player.id === hidden.id), false);
   hidden.moleMode = false; snapshot = simulation.snapshot(spy.id, 1200) as any;
   assert.equal(snapshot.minimapPlayers.some((player: any) => player.id === hidden.id), true);
+});
+
+test("satellite contact is authoritative, hysteretic, immediate on exit, and combines with Spy", () => {
+  const simulation = fresh();
+  const viewer = add(simulation, A, "Guest-1001");
+  const visible = add(simulation, B, "Guest-1002");
+  const hidden = add(simulation, C, "Guest-1003");
+  hidden.moleMode = true; hidden.moleUntil = 9999;
+
+  placeAtSatelliteGap(viewer, 5);
+  simulation.applyInput(A, intent(1), 1000); simulation.step(DUSTY_FIXED_DT, 1000);
+  assert.equal(viewer.connectedSatelliteId, DUSTY_SATELLITES[0].id);
+  let snapshot = simulation.snapshot(viewer.id, 1000) as any;
+  assert.equal(snapshot.you.radarSource, "SATELLITE");
+  assert.equal(snapshot.minimapPlayers.some((player: any) => player.id === visible.id), true);
+  assert.equal(snapshot.minimapPlayers.some((player: any) => player.id === hidden.id), false);
+  hidden.moleMode = false;
+  simulation.fartClouds.push({ id: 4, ownerId: hidden.id, x: hidden.x, y: hidden.y, radius: 100, createdAt: 900, expiresAt: 5000 });
+  assert.equal((simulation.snapshot(viewer.id, 1001) as any).minimapPlayers.some((player: any) => player.id === hidden.id), false);
+  simulation.fartClouds.length = 0;
+  assert.equal((simulation.snapshot(viewer.id, 1002) as any).minimapPlayers.some((player: any) => player.id === hidden.id), true);
+
+  placeAtSatelliteGap(viewer, 8);
+  simulation.applyInput(A, intent(2), 1034); simulation.step(DUSTY_FIXED_DT, 1034);
+  assert.equal(viewer.connectedSatelliteId, DUSTY_SATELLITES[0].id);
+  viewer.spyUntil = 9000;
+  assert.equal((simulation.snapshot(viewer.id, 1040) as any).you.radarSource, "SPY + SATELLITE");
+
+  placeAtSatelliteGap(viewer, 10);
+  simulation.applyInput(A, intent(3), 1068); simulation.step(DUSTY_FIXED_DT, 1068);
+  snapshot = simulation.snapshot(viewer.id, 1068) as any;
+  assert.equal(viewer.connectedSatelliteId, null);
+  assert.equal(snapshot.you.radarSource, "SPY");
+  viewer.spyUntil = 0;
+  snapshot = simulation.snapshot(viewer.id, 1069) as any;
+  assert.equal(snapshot.you.radarSource, "NONE");
+  assert.equal(snapshot.minimapPlayers.some((player: any) => player.id === visible.id), false);
+});
+
+test("satellite permits simultaneous users, survives self-concealment, and disconnects for Mole, death, and Teleport", () => {
+  const simulation = fresh(() => .87);
+  const first = add(simulation, A, "Guest-1001");
+  const second = add(simulation, B, "Guest-1002");
+  placeAtSatelliteGap(first, 4); placeAtSatelliteGap(second, 5);
+  simulation.fartClouds.push({ id: 1, ownerId: first.id, x: first.x, y: first.y, radius: 100, createdAt: 900, expiresAt: 5000 });
+  simulation.applyInput(A, intent(1), 1000); simulation.applyInput(B, intent(1), 1000); simulation.step(DUSTY_FIXED_DT, 1000);
+  assert.equal(first.connectedSatelliteId, DUSTY_SATELLITES[0].id);
+  assert.equal(second.connectedSatelliteId, DUSTY_SATELLITES[0].id);
+  assert.deepEqual((simulation.snapshot(first.id, 1000) as any).activeSatelliteIds, [DUSTY_SATELLITES[0].id]);
+
+  placeAtSatelliteGap(second, 5, DUSTY_SATELLITES[1]);
+  simulation.applyInput(B, intent(2), 1034); simulation.step(DUSTY_FIXED_DT, 1034);
+  assert.equal(second.connectedSatelliteId, DUSTY_SATELLITES[1].id);
+  assert.deepEqual((simulation.snapshot(first.id, 1034) as any).activeSatelliteIds, DUSTY_SATELLITES.map((satellite) => satellite.id));
+
+  first.moleMode = true; first.moleUntil = 9999;
+  simulation.applyInput(A, intent(2), 1068); simulation.step(DUSTY_FIXED_DT, 1068);
+  assert.equal(first.connectedSatelliteId, null);
+
+  (simulation as any).killPlayer(second, first.id, 1102, "projectile");
+  assert.equal(second.connectedSatelliteId, null);
+  second.alive = true; second.hp = 3; placeAtSatelliteGap(second, 4, DUSTY_SATELLITES[1]);
+  simulation.applyInput(B, intent(3), 1136); simulation.step(DUSTY_FIXED_DT, 1136);
+  assert.equal(second.connectedSatelliteId, DUSTY_SATELLITES[1].id);
+  (simulation as any).applyPowerup(second, "teleport", 1170);
+  simulation.applyInput(B, intent(4), 1170); simulation.step(DUSTY_FIXED_DT, 1170);
+  assert.equal(second.connectedSatelliteId, null);
+});
+
+test("satellite footprint blocks player circles and swept projectiles", () => {
+  for (const [satelliteIndex, satellite] of DUSTY_SATELLITES.entries()) {
+    const simulation = fresh();
+    const player = add(simulation, A, "Guest-1001");
+    const edge = satellite.polygon.reduce((left, point) => point.x < left.x ? point : left);
+    player.x = edge.x - DUSTY_PLAYER_RADIUS - 24; player.y = edge.y;
+    for (let step = 0; step < 20; step++) {
+      simulation.applyInput(A, intent(step + 1, { moveX: 1 }), 1000 + step * 34);
+      simulation.step(DUSTY_FIXED_DT, 1000 + step * 34);
+    }
+    assert.ok(distanceToPolygon(player, satellite.polygon) >= DUSTY_PLAYER_RADIUS - .01);
+    assert.equal(pointInPolygon(player, satellite.polygon), false);
+
+    player.x = edge.x - 100; player.y = edge.y - 20; player.lastFireAt = -Infinity;
+    simulation.applyInput(A, intent(21, { aimX: 1, fire: true }), 1700); simulation.step(DUSTY_FIXED_DT, 1700);
+    for (let step = 1; step < 12 && simulation.projectiles.length; step++) simulation.step(DUSTY_FIXED_DT, 1700 + step * 34);
+    assert.equal(simulation.projectiles.length, 0, `relay ${satelliteIndex + 1} should block the projectile`);
+    assert.equal(eventsOf(simulation, "impact").some((event) => event.target === "rock"), true);
+  }
 });
 
 test("ten kills arm one nuke; detonation bypasses shield, mole, and concealment and charges again", () => {

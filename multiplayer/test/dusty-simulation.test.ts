@@ -1,20 +1,32 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { distanceToPolygon, pointInPolygon } from "../../games/game-03/collision-geometry.js";
-import { DUSTY_CANONICAL_COLLISION, DUSTY_POLYGONS } from "../src/dusty-map.ts";
+import { DUSTY_CANONICAL_COLLISION, DUSTY_POLYGONS, DUSTY_SATELLITES } from "../src/dusty-map.ts";
 import { DustyOrbitSimulation, DUSTY_FIXED_DT, DUSTY_RESPAWN_MS, DUSTY_SPAWN_PROTECTION_MS } from "../src/dusty-simulation.ts";
 
 function input(seq: number, moveX: number, moveY: number, aimX: number, aimY: number, fire = false) {
   return { type: "input" as const, seq, moveX, moveY, aimX, aimY, fire };
 }
 
-test("server imports the exact canonical 19-point rock JSON for all six scaled instances", () => {
+test("server imports canonical rock and satellite JSON for all eight scaled instances", () => {
   assert.equal(DUSTY_CANONICAL_COLLISION.normalizedPointCount, 19);
-  assert.equal(DUSTY_CANONICAL_COLLISION.instanceCount, 6);
-  assert.equal(DUSTY_POLYGONS.length, 6);
+  assert.equal(DUSTY_CANONICAL_COLLISION.instanceCount, 8);
+  assert.deepEqual(DUSTY_CANONICAL_COLLISION.definitions.map((item) => item.normalizedPointCount), [19, 13, 13]);
+  assert.equal(DUSTY_POLYGONS.length, 8);
   assert.equal(DUSTY_POLYGONS[0].length, 19);
   assert.equal(DUSTY_POLYGONS[0][0].x, 557.6);
   assert.equal(DUSTY_POLYGONS[0][0].y, 453.576);
+});
+
+test("east satellite collision is the exact horizontal mirror of the west satellite", () => {
+  const [west, east] = DUSTY_SATELLITES;
+  assert.equal(west.assetId, "satellite-relay-01");
+  assert.equal(east.assetId, "satellite-relay-01-left");
+  for (const westPoint of west.polygon) {
+    const mirroredX = east.x - (westPoint.x - west.x);
+    const mirroredY = east.y + (westPoint.y - west.y);
+    assert.ok(east.polygon.some((eastPoint) => Math.abs(eastPoint.x - mirroredX) < .001 && Math.abs(eastPoint.y - mirroredY) < .001));
+  }
 });
 
 test("authoritative movement slides a 17-unit player circle and never enters rock polygons", () => {
@@ -101,6 +113,9 @@ test("three authoritative hits kill, preserve the killer counter, and respawn af
   victim.protectedUntil = 0;
   attacker.aimX = 1;
   attacker.aimY = 0;
+  // The weapon is mounted on the outer shoulder, so a straight-east barrel
+  // line is intentionally offset from the attacker's centreline.
+  victim.y = 900 + 31;
   for (let shot = 0; shot < 3; shot++) {
     const fireAt = 1000 + shot * 1100;
     simulation.applyInput(attacker.id, input(shot + 1, 0, 0, 1, 0, true), fireAt);
@@ -111,7 +126,7 @@ test("three authoritative hits kill, preserve the killer counter, and respawn af
   assert.equal(victim.killScore, 0);
   assert.equal(attacker.kills, 1);
   const deathEvent = simulation.drainEvents().find((event) => event.type === "death") as { x?: number; y?: number } | undefined;
-  assert.deepEqual({ x: deathEvent?.x, y: deathEvent?.y }, { x: 1650, y: 900 });
+  assert.deepEqual({ x: deathEvent?.x, y: deathEvent?.y }, { x: 1650, y: 931 });
   assert.ok(victim.respawnAt >= 3200 + DUSTY_RESPAWN_MS);
   const respawnAt = victim.respawnAt;
   simulation.step(DUSTY_FIXED_DT, respawnAt);

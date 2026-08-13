@@ -1,4 +1,4 @@
-import { weaponPose, weaponVisualForTier } from "./weapon-visuals.js?v=20260813";
+import { weaponPose, weaponVisualForTier } from "./weapon-visuals.js?v=20260813-2";
 
 function clamp(value, min, max) { return Math.max(min, Math.min(max, value)); }
 function mix(a, b, amount) { return a + (b - a) * amount; }
@@ -34,18 +34,18 @@ function radialParticles(seed, count, colors, speedMin, speedMax) {
 }
 
 export class DustyOrbitMultiplayerRenderer {
-  constructor(canvas, assets, debug = false) {
+  constructor(canvas, assets, debug = false, debugFocus = null) {
     this.canvas = canvas;
     this.ctx = canvas.getContext("2d", { alpha: false });
     this.assets = assets;
     this.pickupLabelWidths = new Map();
     this.debug = debug;
+    this.debugFocus = debugFocus;
     this.camera = { x: 0, y: 0 };
     this.viewport = { width: 1, height: 1, dpr: 1 };
     this.playerScreen = { x: 0, y: 0 };
     this.effects = [];
     this.localProjectiles = new Map();
-    this.projectileVisualOffsets = new Map();
     this.hitUntil = new Map();
     this.spawnAnimations = new Map();
     this.moleTransitions = new Map();
@@ -57,6 +57,8 @@ export class DustyOrbitMultiplayerRenderer {
     this.weaponHiddenUntil = new Map();
     this.localPlayerId = null;
     this.minimapSurfaces = new Map();
+    this.collisionEditor = null;
+    this.uplink = { active: false, phase: null, changedAt: 0 };
     this.resize();
     addEventListener("resize", () => this.resize());
   }
@@ -76,7 +78,6 @@ export class DustyOrbitMultiplayerRenderer {
 
   impact(event) {
     if (Number.isSafeInteger(event.projectileId)) this.localProjectiles.delete(event.projectileId);
-    if (Number.isSafeInteger(event.projectileId)) this.projectileVisualOffsets.delete(event.projectileId);
     this.effects.push({ x: event.x, y: event.y, born: performance.now(), life: 280 });
   }
 
@@ -93,27 +94,21 @@ export class DustyOrbitMultiplayerRenderer {
     const pose = this.weaponPoses.get(event.playerId);
     if (pose) {
       this.weaponRecoil.set(event.playerId, { born, life: visual.recoilMs, distance: visual.recoilDistance });
-      this.effects.push({
-        type: "weapon-muzzle", tier: projectile.tier, x: pose.muzzleWorld.x, y: pose.muzzleWorld.y,
-        angle: Math.atan2(directionY, directionX), size: visual.flashSize, born,
-        life: projectile.tier === 6 ? 175 : projectile.tier === 1 ? 85 : 115,
-      });
-      if (!local) {
-        this.projectileVisualOffsets.set(projectile.id, {
-          x: pose.muzzleWorld.x - projectile.x,
-          y: pose.muzzleWorld.y - projectile.y,
-          born,
-          life: 150,
-        });
-      }
     }
+    // Local movement is predicted ahead of the authoritative server position.
+    // Anchor the local presentation to the muzzle currently visible on screen
+    // and keep that parallel offset for the entire shot; never converge toward
+    // the player's centreline after leaving the barrel.
+    const visualOrigin = local && pose ? pose.muzzleWorld : projectile;
+    this.effects.push({
+      type: "weapon-muzzle", tier: projectile.tier, x: visualOrigin.x, y: visualOrigin.y,
+      angle: Math.atan2(directionY, directionX), size: visual.flashSize, born,
+      life: projectile.tier === 6 ? 175 : projectile.tier === 1 ? 85 : 115,
+    });
     if (!local) return;
-    const visualOffsetX = pose ? pose.muzzleWorld.x - projectile.x : 0;
-    const visualOffsetY = pose ? pose.muzzleWorld.y - projectile.y : 0;
     const life = clamp((projectile.expiresAt || 0) - (projectile.spawnedAt || 0), 100, 3000);
     this.localProjectiles.set(projectile.id, {
-      ...projectile, startX: projectile.x, startY: projectile.y,
-      visualOffsetX, visualOffsetY, convergeMs: 90, born, life,
+      ...projectile, startX: visualOrigin.x, startY: visualOrigin.y, born, life,
     });
   }
 
@@ -159,14 +154,25 @@ export class DustyOrbitMultiplayerRenderer {
   nukeWarning(event) { this.effects.push({ type: "nuke-warning", id: event.id, x: event.x, y: event.y, radius: event.radius, born: performance.now(), life: Math.max(100, event.detonateAt - event.startedAt) }); }
   nukeDetonated(event) { this.effects.push({ type: "nuke-blast", x: event.x, y: event.y, radius: event.radius, born: performance.now(), life: 650 }); }
 
+  updateUplink(active, alive) {
+    if (!alive) {
+      this.uplink = { active: false, phase: null, changedAt: performance.now() };
+      return;
+    }
+    if (active === this.uplink.active) return;
+    this.uplink = { active, phase: active ? "linked" : "lost", changedAt: performance.now() };
+  }
+
   render(snapshot, localId, predicted, delta, inputVisual) {
     const { ctx } = this;
     const { width, height, dpr } = this.viewport;
     this.localPlayerId = localId;
     this.weaponPoses.clear();
+    this.collisionEditor?.update(delta);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     const local = snapshot?.players?.find((player) => player.id === localId);
-    const focus = predicted || local || { x: this.assets.world.width / 2, y: this.assets.world.height / 2 };
+    this.updateUplink(Boolean(local?.satelliteConnected), Boolean(local?.alive));
+    const focus = this.debug && this.debugFocus ? this.debugFocus : predicted || local || { x: this.assets.world.width / 2, y: this.assets.world.height / 2 };
     const targetX = clamp(focus.x - width / 2, 0, Math.max(0, this.assets.world.width - width));
     const targetY = clamp(focus.y - height / 2, 0, Math.max(0, this.assets.world.height - height));
     const blend = 1 - Math.exp(-delta * 10);
@@ -183,12 +189,12 @@ export class DustyOrbitMultiplayerRenderer {
       ? { ...player, x: predicted.x, y: predicted.y, aimX: inputVisual?.aimX ?? player.aimX, aimY: inputVisual?.aimY ?? player.aimY }
       : player);
     const layers = [
-      ...this.assets.rocks.map((rock) => ({ type: "rock", depth: rock.depthY, value: rock })),
+      ...this.assets.environment.map((item) => ({ type: "environment", depth: item.depthY, value: item })),
       ...(snapshot?.pickups || []).map((pickup) => ({ type: "pickup", depth: pickup.y, value: pickup })),
       ...players.map((player) => ({ type: "player", depth: player.y, value: player })),
     ].sort((a, b) => a.depth - b.depth);
     for (const layer of layers) {
-      if (layer.type === "rock") this.drawRock(layer.value);
+      if (layer.type === "environment") this.drawEnvironmentObject(layer.value, snapshot?.activeSatelliteIds?.includes(layer.value.id) === true);
       else if (layer.type === "pickup") this.drawPickup(layer.value);
       else this.drawPlayer(layer.value, layer.value.id === localId);
     }
@@ -216,11 +222,33 @@ export class DustyOrbitMultiplayerRenderer {
     ctx.drawImage(assets.terrain, sx, sy, sw, sh, sx - camera.x, sy - camera.y, sw, sh);
   }
 
-  drawRock(rock) {
-    const x = rock.x - this.camera.x;
-    const y = rock.y - this.camera.y;
-    if (x + rock.width / 2 < -20 || x - rock.width / 2 > this.viewport.width + 20 || y + rock.height / 2 < -20 || y - rock.height / 2 > this.viewport.height + 20) return;
-    this.ctx.drawImage(this.assets.rock, x - rock.width / 2, y - rock.height / 2, rock.width, rock.height);
+  drawEnvironmentObject(item, satelliteActive) {
+    const x = item.x - this.camera.x;
+    const y = item.y - this.camera.y;
+    if (x + item.width / 2 < -20 || x - item.width / 2 > this.viewport.width + 20 || y + item.height / 2 < -20 || y - item.height / 2 > this.viewport.height + 20) return;
+    this.ctx.save();
+    this.ctx.translate(x, y);
+    if (item.definition.render?.flipX === true) this.ctx.scale(-1, 1);
+    this.ctx.drawImage(item.image, -item.width / 2, -item.height / 2, item.width, item.height);
+    this.ctx.restore();
+    if (item.kind === "satellite" && satelliteActive) this.drawSatelliteActivePulse(item, x, y);
+  }
+
+  drawSatelliteActivePulse(item, x, y) {
+    const pulse = .5 + .5 * Math.sin(performance.now() / 180);
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.globalCompositeOperation = "screen";
+    ctx.globalAlpha = .25 + pulse * .3;
+    ctx.strokeStyle = "#5ff7ff";
+    ctx.shadowColor = "#42eaff";
+    ctx.shadowBlur = 12;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    const mirror = item.definition.render?.flipX === true ? -1 : 1;
+    ctx.ellipse(x + item.width * .035 * mirror, y - item.height * .18, item.width * (.08 + pulse * .018), item.height * (.025 + pulse * .008), -.15 * mirror, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
   }
 
   drawPlayer(player, local) {
@@ -318,8 +346,6 @@ export class DustyOrbitMultiplayerRenderer {
       shadowSize.width, shadowSize.height);
     ctx.restore();
 
-    if (modulePose && modulePose.depthOffset < 0) this.drawWeaponModule(modulePose, now);
-
     ctx.save();
     ctx.globalAlpha = moleAlpha * unitAlpha;
     ctx.translate(x, y + bob + spawnLift + moleOffset);
@@ -336,7 +362,9 @@ export class DustyOrbitMultiplayerRenderer {
     }
     ctx.restore();
 
-    if (modulePose && modulePose.depthOffset >= 0) this.drawWeaponModule(modulePose, now);
+    // Shoulder modules are foreground equipment: rotating the player must
+    // never push the weapon beneath the body and turn it into an under-arm gun.
+    if (modulePose) this.drawWeaponModule(modulePose, now);
 
     if (player.shieldHits) {
       ctx.save(); ctx.strokeStyle = "rgba(120,241,255,.86)"; ctx.lineWidth = 2; ctx.shadowColor = "#72efff"; ctx.shadowBlur = 10;
@@ -352,6 +380,43 @@ export class DustyOrbitMultiplayerRenderer {
     const label = this.debug && !local ? `${player.name} · HP${player.hp} · T${player.weaponTier} · S${player.killScore}` : player.name;
     ctx.fillText(label, x, y - 55);
     this.drawHealthBar(x, y - 48, player.hp, local ? "#a6ff65" : (player.color || "#ff6cca"));
+    if (local) this.drawUplinkLabel(x, y, now);
+    ctx.restore();
+  }
+
+  drawUplinkLabel(x, y, now) {
+    if (!this.uplink.active && this.uplink.phase !== "lost") return;
+    const elapsed = now - this.uplink.changedAt;
+    let text = "UPLINK ACTIVE";
+    let alpha = .92;
+    let lift = 0;
+    if (this.uplink.phase === "linked" && elapsed < 1150) {
+      text = "UPLINK CONNECTED";
+      alpha = clamp(elapsed / 130, 0, 1);
+      lift = 5 * (1 - smoothstep(elapsed / 500));
+    } else if (this.uplink.phase === "lost") {
+      if (elapsed >= 720) { this.uplink.phase = null; return; }
+      text = "UPLINK LOST";
+      alpha = 1 - smoothstep(elapsed / 720);
+      lift = -4 * smoothstep(elapsed / 720);
+    }
+    const ctx = this.ctx;
+    const fontSize = Math.round(clamp(this.viewport.width / 110, 8, 10));
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.font = `900 ${fontSize}px ui-monospace,monospace`;
+    ctx.textAlign = "center";
+    const width = ctx.measureText(text).width + 12;
+    const labelY = y - 84 + lift;
+    ctx.fillStyle = "rgba(5,24,34,.82)";
+    ctx.fillRect(x - width / 2, labelY - fontSize - 5, width, fontSize + 9);
+    ctx.strokeStyle = "rgba(87,244,255,.65)";
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x - width / 2 + .5, labelY - fontSize - 4.5, width - 1, fontSize + 8);
+    ctx.shadowColor = "#50efff";
+    ctx.shadowBlur = this.uplink.active ? 8 : 3;
+    ctx.fillStyle = this.uplink.active ? "#9afaff" : "#79cbd2";
+    ctx.fillText(text, x, labelY);
     ctx.restore();
   }
 
@@ -447,20 +512,9 @@ export class DustyOrbitMultiplayerRenderer {
 
   drawProjectiles(projectiles) {
     const ctx = this.ctx;
-    const now = performance.now();
     for (const projectile of projectiles) {
-      let x = projectile.x - this.camera.x;
-      let y = projectile.y - this.camera.y;
-      const visualOffset = this.projectileVisualOffsets.get(projectile.id);
-      if (visualOffset) {
-        const amount = clamp((now - visualOffset.born) / visualOffset.life, 0, 1);
-        if (amount >= 1) this.projectileVisualOffsets.delete(projectile.id);
-        else {
-          const remaining = 1 - smoothstep(amount);
-          x += visualOffset.x * remaining;
-          y += visualOffset.y * remaining;
-        }
-      }
+      const x = projectile.x - this.camera.x;
+      const y = projectile.y - this.camera.y;
       ctx.save();
       const plasma = projectile.tier === 6;
       const colors = ["#d8ff8a", "#fff0a4", "#98f8ff", "#ffb1f0", "#ffc977", "#c89cff"];
@@ -515,8 +569,8 @@ export class DustyOrbitMultiplayerRenderer {
       }
       projectiles.push({
         ...projectile,
-        x: projectile.startX + projectile.vx * age / 1000 + projectile.visualOffsetX * (1 - smoothstep(clamp(age / projectile.convergeMs, 0, 1))),
-        y: projectile.startY + projectile.vy * age / 1000 + projectile.visualOffsetY * (1 - smoothstep(clamp(age / projectile.convergeMs, 0, 1))),
+        x: projectile.startX + projectile.vx * age / 1000,
+        y: projectile.startY + projectile.vy * age / 1000,
       });
     }
     this.drawProjectiles(projectiles);
@@ -740,9 +794,21 @@ export class DustyOrbitMultiplayerRenderer {
       polygon.forEach((point, index) => index ? ctx.lineTo(point.x - this.camera.x, point.y - this.camera.y) : ctx.moveTo(point.x - this.camera.x, point.y - this.camera.y));
       ctx.closePath(); ctx.stroke();
     }
+    for (const satellite of this.assets.satellites) {
+      ctx.save();
+      ctx.strokeStyle = "rgba(69,239,255,.16)";
+      ctx.lineWidth = 46;
+      ctx.lineJoin = "round";
+      ctx.beginPath();
+      satellite.polygon.forEach((point, index) => index ? ctx.lineTo(point.x - this.camera.x, point.y - this.camera.y) : ctx.moveTo(point.x - this.camera.x, point.y - this.camera.y));
+      ctx.closePath();
+      ctx.stroke();
+      ctx.restore();
+    }
     ctx.strokeStyle = "rgba(157,255,88,.95)";
     for (const player of players) { if (!player.alive) continue; ctx.beginPath(); ctx.arc(player.x - this.camera.x, player.y - this.camera.y, 17, 0, Math.PI * 2); ctx.stroke(); }
     ctx.restore();
+    this.collisionEditor?.draw(ctx, this.camera);
   }
 
   drawPickup(pickup) {
@@ -932,7 +998,10 @@ export class DustyOrbitMultiplayerRenderer {
     ctx.fillStyle = "#c9fbff";
     ctx.font = "900 9px ui-monospace, monospace";
     ctx.textAlign = "left";
-    ctx.fillText(localPlayer?.spyRemaining > 0 ? "MINIMAP · SPY ACTIVE" : "MINIMAP", left, top - 9);
+    const spyActive = localPlayer?.spyRemaining > 0;
+    const satelliteConnected = localPlayer?.satelliteConnected === true;
+    const radarLabel = spyActive && satelliteConnected ? "SPY + SATELLITE" : spyActive ? "SPY ACTIVE" : satelliteConnected ? "UPLINK ACTIVE" : "";
+    ctx.fillText(radarLabel ? `MINIMAP · ${radarLabel}` : "MINIMAP", left, top - 9);
 
     ctx.save();
     ctx.beginPath();
@@ -988,17 +1057,17 @@ export class DustyOrbitMultiplayerRenderer {
     ctx.globalAlpha = 1;
     ctx.fillStyle = "rgba(19,5,30,.32)";
     ctx.fillRect(0, 0, width, height);
-    for (const rock of this.assets.rocks) {
+    for (const item of this.assets.environment) {
       ctx.beginPath();
-      rock.polygon.forEach((point, index) => {
+      item.polygon.forEach((point, index) => {
         const x = point.x * scaleX;
         const y = point.y * scaleY;
         if (index) ctx.lineTo(x, y); else ctx.moveTo(x, y);
       });
       ctx.closePath();
-      ctx.fillStyle = "rgba(229,137,255,.6)";
+      ctx.fillStyle = item.kind === "satellite" ? "rgba(74,239,255,.78)" : "rgba(229,137,255,.6)";
       ctx.fill();
-      ctx.strokeStyle = "rgba(255,213,255,.62)";
+      ctx.strokeStyle = item.kind === "satellite" ? "rgba(184,252,255,.92)" : "rgba(255,213,255,.62)";
       ctx.lineWidth = .75;
       ctx.stroke();
     }

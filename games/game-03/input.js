@@ -95,6 +95,7 @@ export class InputController {
     this.lastSampleAt = performance.now();
     this.visualState = { mode: "mouse", aimX: 1, aimY: 0, fire: false, moveX: 0, moveY: 0, mouseCanvasX: this.mouseCanvasX, mouseCanvasY: this.mouseCanvasY };
     this.enabled = false;
+    this.editorBlocked = false;
     this.pointerCoarse = matchMedia("(pointer: coarse)").matches;
     this.bindDesktop();
     this.bindStick(moveStick, "move");
@@ -104,7 +105,7 @@ export class InputController {
 
   bindDesktop() {
     window.addEventListener("keydown", (event) => {
-      if (!this.enabled || !GAME_KEYS.has(event.code)) return;
+      if (!this.enabled || this.editorBlocked || !GAME_KEYS.has(event.code)) return;
       event.preventDefault();
       if (event.repeat) return;
       this.keys.add(event.code);
@@ -117,7 +118,7 @@ export class InputController {
     });
     window.addEventListener("blur", () => this.reset());
     window.addEventListener("pointermove", (event) => {
-      if (!this.enabled || event.pointerType === "touch") return;
+      if (!this.enabled || this.editorBlocked || event.pointerType === "touch") return;
       const rect = this.canvas.getBoundingClientRect();
       this.mouseCanvasX = event.clientX - rect.left;
       this.mouseCanvasY = event.clientY - rect.top;
@@ -125,7 +126,7 @@ export class InputController {
       this.updateMouseAim();
     }, { passive: true });
     this.canvas.addEventListener("pointerdown", (event) => {
-      if (!this.enabled || event.pointerType === "touch" || event.button !== 0) return;
+      if (!this.enabled || this.editorBlocked || event.pointerType === "touch" || event.button !== 0) return;
       event.preventDefault();
       // Pointer movement is not guaranteed to fire after focus/visibility
       // changes. Resolve the click position before the first fire sample so a
@@ -189,7 +190,7 @@ export class InputController {
       else this.aimTouch = { ...this.aimTouch, firing: false };
     };
     element.addEventListener("pointerdown", (event) => {
-      if (!this.enabled || pointerId !== null) return;
+      if (!this.enabled || this.editorBlocked || pointerId !== null) return;
       event.preventDefault();
       pointerId = event.pointerId;
       element.setPointerCapture(pointerId);
@@ -223,7 +224,7 @@ export class InputController {
       if (guideKnob) guideKnob.style.transform = "translate(-50%,-50%)";
     };
     movementSurface.addEventListener("pointerdown", (event) => {
-      if (!this.enabled || event.pointerType !== "touch" || this.freeMovePointerId !== null) return;
+      if (!this.enabled || this.editorBlocked || event.pointerType !== "touch" || this.freeMovePointerId !== null) return;
       event.preventDefault();
       this.freeMovePointerId = event.pointerId;
       this.touchModeUntil = performance.now() + 1500;
@@ -269,7 +270,7 @@ export class InputController {
       fireButton.style.removeProperty("--aim-y");
     };
     fireButton.addEventListener("pointerdown", (event) => {
-      if (!this.enabled || this.firePointerId !== null) return;
+      if (!this.enabled || this.editorBlocked || this.firePointerId !== null) return;
       event.preventDefault();
       event.stopPropagation();
       this.firePointerId = event.pointerId;
@@ -336,7 +337,7 @@ export class InputController {
       mode = "touch";
     }
 
-    if (!this.enabled) {
+    if (!this.enabled || this.editorBlocked) {
       fire = false;
       this.moveOutput = { x: 0, y: 0 };
     }
@@ -345,8 +346,8 @@ export class InputController {
       aimX: finiteAxis(aimX, 1),
       aimY: finiteAxis(aimY),
       fire,
-      moveX: finiteAxis(move.x),
-      moveY: finiteAxis(move.y),
+      moveX: finiteAxis(!this.enabled || this.editorBlocked ? 0 : move.x),
+      moveY: finiteAxis(!this.enabled || this.editorBlocked ? 0 : move.y),
       mouseCanvasX: this.mouseCanvasX,
       mouseCanvasY: this.mouseCanvasY,
       mouseRecent: now - this.mouseMovedAt < 1800,
@@ -361,6 +362,12 @@ export class InputController {
   }
 
   getVisualState() { return { ...this.visualState }; }
+
+  setEditorBlocked(blocked) {
+    const next = Boolean(blocked);
+    if (next && !this.editorBlocked) this.reset();
+    this.editorBlocked = next;
+  }
 
   acknowledgeFire() {
     this.mouseFireQueuedUntil = 0;

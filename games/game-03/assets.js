@@ -1,9 +1,8 @@
-import { ROCK_INSTANCES, TERRAIN_URL, WORLD } from "./map.js?v=20260812";
-import { transformNormalizedPolygon } from "./collision-geometry.js?v=20260812";
+import { ASSET_DEFINITION_URLS, ENVIRONMENT_INSTANCES, SATELLITE_CONNECTION, TERRAIN_URL, WORLD } from "./map.js?v=20260813-3";
+import { collisionBlocksMovement, depthSortY, transformNormalizedPolygon } from "./collision-geometry.js?v=20260813";
 
-const ASSET_VERSION = "20260813-5";
+const ASSET_VERSION = "20260813-8";
 const versioned = (url) => `${url}?v=${ASSET_VERSION}`;
-const ROCK_DEFINITION_URL = versioned("./assets/dusty-orbit/rocks/rock-cluster-01.json");
 const CHARACTER_DEFINITION_URL = versioned("./assets/characters/moon-blob-01/moon-blob-01.json");
 const POWERUP_ART = Object.freeze({
   health: Object.freeze({ sprite: "health.png", sourceBounds: Object.freeze({ x: 229, y: 193, width: 797, height: 785 }) }),
@@ -36,20 +35,21 @@ function loadImage(url) {
 
 export async function loadDustyOrbitAssets(onProgress = () => {}) {
   onProgress("Loading canonical collision geometry…", 0.12);
-  const [rockDefinition, characterDefinition] = await Promise.all([
-    loadJson(ROCK_DEFINITION_URL),
+  const [environmentDefinitions, characterDefinition] = await Promise.all([
+    Promise.all(ASSET_DEFINITION_URLS.map((url) => loadJson(versioned(url)))),
     loadJson(CHARACTER_DEFINITION_URL),
   ]);
   onProgress("Loading Dusty Orbit artwork…", 0.34);
-  const root = "./assets/characters/moon-blob-01/";
-  const rockRoot = "./assets/dusty-orbit/rocks/";
+  const characterRoot = "./assets/characters/moon-blob-01/";
   const powerupRoot = "./assets/dusty-orbit/powerups/";
   const weaponRoot = "./assets/weapons/";
-  const [terrain, rock, body, shadow, health, spy, speed, mole, shield, teleport, fart, peaShooter] = await Promise.all([
+  const definitionById = new Map(environmentDefinitions.map((definition) => [definition.id, definition]));
+  const definitionRoot = new Map(ASSET_DEFINITION_URLS.map((url, index) => [environmentDefinitions[index].id, url.slice(0, url.lastIndexOf("/") + 1)]));
+  const [terrain, environmentImages, body, shadow, health, spy, speed, mole, shield, teleport, fart, peaShooter] = await Promise.all([
     loadImage(TERRAIN_URL),
-    loadImage(versioned(rockRoot + rockDefinition.sprite)),
-    loadImage(versioned(root + characterDefinition.sprite)),
-    loadImage(versioned(root + characterDefinition.shadow)),
+    Promise.all(environmentDefinitions.map((definition) => loadImage(versioned(definitionRoot.get(definition.id) + definition.sprite)))),
+    loadImage(versioned(characterRoot + characterDefinition.sprite)),
+    loadImage(versioned(characterRoot + characterDefinition.shadow)),
     loadImage(versioned(powerupRoot + POWERUP_ART.health.sprite)),
     loadImage(versioned(powerupRoot + POWERUP_ART.spy.sprite)),
     loadImage(versioned(powerupRoot + POWERUP_ART.speed.sprite)),
@@ -59,19 +59,31 @@ export async function loadDustyOrbitAssets(onProgress = () => {}) {
     loadImage(versioned(powerupRoot + POWERUP_ART.fart.sprite)),
     loadImage(versioned(weaponRoot + WEAPON_ART.peaShooter.sprite)),
   ]);
-  onProgress("Building shared rock polygons…", 0.8);
-  const rocks = ROCK_INSTANCES.map((instance) => ({
-    ...instance,
-    polygon: transformNormalizedPolygon(rockDefinition, instance),
-    depthY: instance.y + (rockDefinition.depth?.sortAnchorY - rockDefinition.anchor.y) * instance.height,
-  }));
+  onProgress("Building shared environment polygons…", 0.8);
+  const imageByAssetId = new Map(environmentDefinitions.map((definition, index) => [definition.id, environmentImages[index]]));
+  const environment = ENVIRONMENT_INSTANCES.map((instance) => {
+    const definition = definitionById.get(instance.assetId);
+    if (!definition) throw new Error(`Missing environment definition for ${instance.assetId}.`);
+    return {
+      ...instance,
+      definition,
+      image: imageByAssetId.get(instance.assetId),
+      polygon: transformNormalizedPolygon(definition, instance),
+      depthY: depthSortY(definition, instance),
+    };
+  });
+  const rocks = environment.filter((item) => item.kind === "rock");
+  const satellites = environment.filter((item) => item.kind === "satellite");
   return {
     world: WORLD,
     terrain,
-    rock,
-    rockDefinition,
+    rock: rocks[0]?.image,
+    rockDefinition: rocks[0]?.definition,
     rocks,
-    polygons: rocks.map((item) => item.polygon),
+    satellites,
+    satelliteConnection: SATELLITE_CONNECTION,
+    environment,
+    polygons: environment.filter((item) => collisionBlocksMovement(item.definition)).map((item) => item.polygon),
     character: { definition: characterDefinition, body, shadow },
     powerups: {
       health: { image: health, sourceBounds: POWERUP_ART.health.sourceBounds },

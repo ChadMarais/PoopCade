@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { WEAPON_VISUALS, weaponPose, weaponVisualForTier } from "../../games/game-03/weapon-visuals.js";
+import { DustyOrbitMultiplayerRenderer } from "../../games/game-03/renderer.js";
+import { SHOULDER_SIDE_OFFSET, WEAPON_VISUALS, weaponPose, weaponVisualForTier } from "../../games/game-03/weapon-visuals.js";
 
 function close(actual, expected, tolerance = .001) {
   assert.ok(Math.abs(actual - expected) <= tolerance, `${actual} should be within ${tolerance} of ${expected}`);
@@ -33,7 +34,18 @@ test("Pea Shooter stays right-side docked and muzzle-aligned through 360 degrees
     close(muzzleDelta.x * perpendicular.x + muzzleDelta.y * perpendicular.y, expectedSide);
   }
   close(expectedForward, 35.98);
-  close(expectedSide, 20);
+  close(expectedSide, SHOULDER_SIDE_OFFSET);
+});
+
+test("all weapon tiers use the same shoulder-side mount through every aim quadrant", () => {
+  for (const visual of Object.values(WEAPON_VISUALS)) for (let degrees = 0; degrees < 360; degrees += 45) {
+    const angle = degrees * Math.PI / 180;
+    const forward = { x: Math.cos(angle), y: Math.sin(angle) };
+    const perpendicular = { x: -forward.y, y: forward.x };
+    const pose = weaponPose({ x: 400, y: 300, aimX: forward.x, aimY: forward.y, weaponTier: visual.tier }, visual);
+    const pivotDelta = { x: pose.pivotWorld.x - 400, y: pose.pivotWorld.y - 300 };
+    close(pivotDelta.x * perpendicular.x + pivotDelta.y * perpendicular.y, SHOULDER_SIDE_OFFSET);
+  }
 });
 
 test("recoil moves only backward along aim and returns without changing the side mount", () => {
@@ -44,3 +56,24 @@ test("recoil moves only backward along aim and returns without changing the side
   close(normal.muzzleWorld.y, recoiled.muzzleWorld.y);
 });
 
+test("character drawing always completes before the shoulder weapon foreground pass", () => {
+  const source = DustyOrbitMultiplayerRenderer.prototype.drawPlayer.toString();
+  assert.ok(source.indexOf("ctx.drawImage(body") < source.indexOf("this.drawWeaponModule(modulePose"));
+  assert.equal(source.includes("modulePose.depthOffset"), false);
+});
+
+test("local confirmed shots stay on the currently rendered muzzle line without convergence", () => {
+  const renderer = Object.create(DustyOrbitMultiplayerRenderer.prototype);
+  renderer.weaponPoses = new Map([["local", { muzzleWorld: { x: 411, y: 277 } }]]);
+  renderer.weaponRecoil = new Map();
+  renderer.effects = [];
+  renderer.localProjectiles = new Map();
+  renderer.confirmShot({
+    playerId: "local",
+    projectile: { id: 7, tier: 1, x: 400, y: 266, vx: 500, vy: 0, spawnedAt: 1000, expiresAt: 1500 },
+  }, true);
+  const shot = renderer.localProjectiles.get(7);
+  assert.deepEqual({ x: shot.startX, y: shot.startY }, { x: 411, y: 277 });
+  assert.equal("visualOffsetX" in shot, false);
+  assert.equal("convergeMs" in shot, false);
+});
