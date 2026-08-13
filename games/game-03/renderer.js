@@ -1,4 +1,5 @@
 import { weaponPose, weaponVisualForTier } from "./weapon-visuals.js?v=20260813-2";
+import { fartCloudGrowth } from "./effect-timing.js?v=20260813";
 
 function clamp(value, min, max) { return Math.max(min, Math.min(max, value)); }
 function mix(a, b, amount) { return a + (b - a) * amount; }
@@ -55,6 +56,7 @@ export class DustyOrbitMultiplayerRenderer {
     this.weaponPoses = new Map();
     this.weaponHiddenByMole = new Set();
     this.weaponHiddenUntil = new Map();
+    this.renderedPlayers = new Map();
     this.localPlayerId = null;
     this.minimapSurfaces = new Map();
     this.collisionEditor = null;
@@ -120,7 +122,11 @@ export class DustyOrbitMultiplayerRenderer {
     this.weaponHiddenByMole.add(event.playerId);
     this.weaponPoses.delete(event.playerId);
     this.moleTransitions.set(event.playerId, { kind: "burrow", born, life: 760 });
-    this.effects.push({ type: "dirt", direction: "burrow", x: event.x, y: event.y, born, life: 820, particles: radialParticles(event.x + event.y, 18, ["#ddb46f", "#9c694d", "#6c3f43", "#f2d394"], 45, 135) });
+    const rendered = this.renderedPlayers.get(event.playerId);
+    const movementLength = Math.hypot(event.vx || 0, event.vy || 0);
+    const lead = movementLength > .001 ? { x: event.vx / movementLength * 27, y: event.vy / movementLength * 27 } : { x: 0, y: 0 };
+    const origin = rendered ? { x: rendered.x + lead.x, y: rendered.y + lead.y } : { x: event.x, y: event.y };
+    this.effects.push({ type: "dirt", direction: "burrow", x: origin.x, y: origin.y, born, life: 820, particles: radialParticles(origin.x + origin.y, 18, ["#ddb46f", "#9c694d", "#6c3f43", "#f2d394"], 45, 135) });
   }
   moleEmerged(event) {
     const born = performance.now();
@@ -188,6 +194,7 @@ export class DustyOrbitMultiplayerRenderer {
     const players = (snapshot?.players || []).map((player) => player.id === localId && predicted
       ? { ...player, x: predicted.x, y: predicted.y, aimX: inputVisual?.aimX ?? player.aimX, aimY: inputVisual?.aimY ?? player.aimY }
       : player);
+    this.renderedPlayers = new Map(players.map((player) => [player.id, { x: player.x, y: player.y, vx: player.vx || 0, vy: player.vy || 0 }]));
     const layers = [
       ...this.assets.environment.map((item) => ({ type: "environment", depth: item.depthY, value: item })),
       ...(snapshot?.pickups || []).map((pickup) => ({ type: "pickup", depth: pickup.y, value: pickup })),
@@ -927,7 +934,7 @@ export class DustyOrbitMultiplayerRenderer {
       const remaining = Math.max(0, cloud.expiresAt - now);
       const visibility = Math.min(1, age / 260, remaining / 650);
       const pulse = 1 + Math.sin(performance.now() / 310 + cloud.id) * .025;
-      const radius = cloud.radius * pulse;
+      const radius = cloud.radius * fartCloudGrowth(cloud.createdAt, now, cloud.growMs) * pulse;
       ctx.save();
       ctx.globalAlpha = visibility;
       const base = ctx.createRadialGradient(x, y, radius * .05, x, y, radius);

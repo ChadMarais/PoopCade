@@ -204,6 +204,7 @@ test("centre press waits briefly for a drag so the first mobile shot uses the dr
   controller.aimTouch = { x: 1, y: 0, firing: false };
   fireButton.dispatch("pointerdown", { pointerId: 7, clientX: 40, clientY: 40 });
   assert.equal(controller.sample(performance.now() + 10).fire, false, "old facing is gated during aim acquisition");
+  assert.equal(controller.sample(performance.now() + 200).fire, false, "a held press never falls back to the previous facing after the grace period");
   fireButton.dispatch("pointermove", { pointerId: 7, clientX: 0, clientY: 40 });
   const firstShot = controller.sample(performance.now() + 20);
   assert.ok(firstShot.aimX < -.85); close(firstShot.aimY, 0); assert.equal(firstShot.fire, true);

@@ -333,7 +333,10 @@ export class InputController {
       aimX = this.aimTouch.x;
       aimY = this.aimTouch.y;
       const wantsFire = Boolean(this.aimTouch.firing) || now < this.touchFireQueuedUntil;
-      fire = wantsFire && (this.touchFireAimReady || now >= this.touchFireAimGraceUntil);
+      // Never authorize a held fire-control press with the previous facing.
+      // While the pointer is down, the current press must first establish its
+      // own direction. The grace fallback is only for a completed centre tap.
+      fire = wantsFire && (this.touchFireAimReady || (this.firePointerId === null && now >= this.touchFireAimGraceUntil));
       mode = "touch";
     }
 

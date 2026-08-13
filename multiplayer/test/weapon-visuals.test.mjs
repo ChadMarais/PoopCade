@@ -77,3 +77,16 @@ test("local confirmed shots stay on the currently rendered muzzle line without c
   assert.equal("visualOffsetX" in shot, false);
   assert.equal("convergeMs" in shot, false);
 });
+
+test("local mole burrow dirt uses the currently rendered movement lead instead of the stale pickup position", () => {
+  const renderer = Object.create(DustyOrbitMultiplayerRenderer.prototype);
+  renderer.localPlayerId = "local";
+  renderer.renderedPlayers = new Map([["local", { x: 500, y: 300, vx: 165, vy: 0 }]]);
+  renderer.weaponHiddenByMole = new Set();
+  renderer.weaponPoses = new Map();
+  renderer.moleTransitions = new Map();
+  renderer.effects = [];
+  renderer.moleBurrowed({ playerId: "local", x: 120, y: 90, vx: 165, vy: 0 });
+  assert.equal(renderer.effects[0].x, 527);
+  assert.equal(renderer.effects[0].y, 300);
+});

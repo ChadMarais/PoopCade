@@ -2,9 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { distanceToPolygon, pointInPolygon } from "../../games/game-03/collision-geometry.js";
 import { weaponPose, weaponVisualForTier } from "../../games/game-03/weapon-visuals.js";
+import { FART_CLOUD_GROW_MS, fartCloudGrowth } from "../../games/game-03/effect-timing.js";
 import { DUSTY_GAMEPLAY, DUSTY_WEAPONS, POWERUP_TYPES, type PowerupType } from "../src/dusty-gameplay.ts";
 import { DUSTY_PLAYER_RADIUS, DUSTY_POLYGONS, DUSTY_SATELLITES } from "../src/dusty-map.ts";
-import { DustyOrbitSimulation, DUSTY_FIXED_DT, type DustyPlayer, type DustyProjectile } from "../src/dusty-simulation.ts";
+import { DustyOrbitSimulation, DUSTY_FIXED_DT, moleBurrowOrigin, type DustyPlayer, type DustyProjectile } from "../src/dusty-simulation.ts";
 
 const A = "20000000-0000-4000-8000-000000000001";
 const B = "20000000-0000-4000-8000-000000000002";
@@ -123,7 +124,7 @@ test("speed doubles authoritative movement, refreshes without stacking, and expi
   simulation.applyInput(A, intent(4, { moveX: 1 }), 12000); simulation.step(DUSTY_FIXED_DT, 12000); assert.equal(Math.round(player.vx), 165);
 });
 
-test("turbo doubles projectile speed and authoritative shots begin on the shoulder muzzle line", () => {
+test("turbo doubles projectile speed without extending weapon range and shots begin on the shoulder muzzle line", () => {
   const simulation = fresh(); const player = add(simulation, A, "Guest-1001");
   collect(simulation, player, "speed", 1000);
   player.aimX = Math.SQRT1_2; player.aimY = Math.SQRT1_2;
@@ -135,6 +136,24 @@ test("turbo doubles projectile speed and authoritative shots begin on the should
   assert.ok(Math.abs(shot.projectile.x - expected.x) < .001);
   assert.ok(Math.abs(shot.projectile.y - expected.y) < .001);
   assert.ok(Math.abs(Math.hypot(shot.projectile.vx, shot.projectile.vy) - DUSTY_WEAPONS[0].speed * DUSTY_GAMEPLAY.speedMultiplier) < .001);
+  const turboLifeMs = shot.projectile.expiresAt - shot.projectile.spawnedAt;
+  assert.equal(turboLifeMs, DUSTY_WEAPONS[0].lifetimeMs / DUSTY_GAMEPLAY.speedMultiplier);
+  assert.equal(Math.hypot(shot.projectile.vx, shot.projectile.vy) * turboLifeMs / 1000, DUSTY_WEAPONS[0].speed * DUSTY_WEAPONS[0].lifetimeMs / 1000);
+});
+
+test("moving players burrow ahead of their current movement instead of at the pickup", () => {
+  const simulation = fresh(); const player = add(simulation, A, "Guest-1001");
+  const pickup = simulation.pickups[0];
+  pickup.type = "mole"; pickup.x = player.x + 20; pickup.y = player.y; pickup.active = true;
+  simulation.applyInput(A, intent(1, { moveX: 1 }), 1000);
+  simulation.step(DUSTY_FIXED_DT, 1000);
+  const expected = moleBurrowOrigin(player);
+  const burrow = eventsOf(simulation, "mole_burrowed")[0] as { x: number; y: number; vx: number; vy: number };
+  assert.ok(burrow.x > player.x);
+  assert.ok(burrow.x > pickup.x);
+  assert.deepEqual({ x: burrow.x, y: burrow.y }, expected);
+  assert.equal(burrow.vx, player.vx);
+  assert.equal(burrow.vy, player.vy);
 });
 
 test("teleport repeatedly chooses player-radius-safe points inside the world", () => {
@@ -187,12 +206,20 @@ test("fart clouds coexist, conceal without invulnerability, and expire after fiv
   const simulation = fresh(); const player = add(simulation, A, "Guest-1001"); const viewer = add(simulation, B, "Guest-1002");
   collect(simulation, player, "fart", 1000); collect(simulation, viewer, "fart", 1100); assert.equal(simulation.fartClouds.length, 2);
   assert.equal(simulation.fartClouds[0].radius, 360);
+  assert.equal(simulation.fartClouds[0].growMs, FART_CLOUD_GROW_MS);
   player.x = simulation.fartClouds[0].x; player.y = simulation.fartClouds[0].y;
   let snapshot = simulation.snapshot(viewer.id, 1200) as any; assert.equal(snapshot.players.some((item: any) => item.id === player.id), false);
   player.weaponTier = 1; simulation.applyInput(A, intent(3, { fire: true }), 1200); simulation.step(DUSTY_FIXED_DT, 1200); assert.ok(simulation.projectiles.some((item) => item.ownerId === player.id));
   (simulation as any).damagePlayer(player.id, projectile(viewer.id), 1200); assert.equal(player.hp, 2);
   (simulation as any).damagePlayer(player.id, projectile(viewer.id, 2), 1300); assert.equal(player.alive, false);
   simulation.step(DUSTY_FIXED_DT, 6200); assert.equal(simulation.fartClouds.length, 0);
+});
+
+test("fart cloud radius grows rapidly instead of appearing full-size", () => {
+  assert.equal(fartCloudGrowth(1000, 1000), 0);
+  assert.ok(fartCloudGrowth(1000, 1100) > .5);
+  assert.ok(fartCloudGrowth(1000, 1250) > .9);
+  assert.equal(fartCloudGrowth(1000, 1000 + FART_CLOUD_GROW_MS), 1);
 });
 
 test("spy reveals visible players on minimap but stealth wins", () => {

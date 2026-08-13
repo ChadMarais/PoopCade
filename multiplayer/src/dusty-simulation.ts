@@ -1,5 +1,6 @@
 import { distanceToPolygon, moveCircleWithSliding, pointInPolygon, sweptCircleIntersectsPolygon } from "../../games/game-03/collision-geometry.js";
 import { weaponPose, weaponVisualForTier } from "../../games/game-03/weapon-visuals.js";
+import { FART_CLOUD_GROW_MS, fartCloudGrowth } from "../../games/game-03/effect-timing.js";
 import {
   DUSTY_MAP,
   DUSTY_PLAYER_RADIUS,
@@ -51,7 +52,7 @@ export type DustyPickup = {
 };
 
 export type DustyFartCloud = {
-  id: number; ownerId: string; x: number; y: number; radius: number; createdAt: number; expiresAt: number;
+  id: number; ownerId: string; x: number; y: number; radius: number; growMs: number; createdAt: number; expiresAt: number;
 };
 
 export type DustyNuke = {
@@ -71,6 +72,12 @@ function rotated(x: number, y: number, degrees: number): Point {
   if (!degrees) return { x, y };
   const angle = degrees * Math.PI / 180;
   return { x: x * Math.cos(angle) - y * Math.sin(angle), y: x * Math.sin(angle) + y * Math.cos(angle) };
+}
+export function moleBurrowOrigin(player: Pick<DustyPlayer, "x" | "y" | "vx" | "vy">, leadDistance = DUSTY_PLAYER_RADIUS + 10): Point {
+  const movement = normalized(player.vx, player.vy);
+  return movement.length
+    ? { x: player.x + movement.x * leadDistance, y: player.y + movement.y * leadDistance }
+    : { x: player.x, y: player.y };
 }
 function segmentCircle(start: Point, end: Point, center: Point, radius: number): number | null {
   const dx = end.x - start.x, dy = end.y - start.y, fx = start.x - center.x, fy = start.y - center.y;
@@ -313,7 +320,10 @@ export class DustyOrbitSimulation {
     const projectile: DustyProjectile = {
       id: ++this.projectileId, ownerId: player.id, tier: weapon.tier, x, y,
       vx: direction.x * projectileSpeed, vy: direction.y * projectileSpeed, radius: weapon.radius,
-      damage: weapon.damage, spawnedAt: now, expiresAt: now + weapon.lifetimeMs,
+      damage: weapon.damage, spawnedAt: now,
+      // Turbo changes speed, not the gun's maximum range. Shorten lifetime by
+      // the same multiplier so speed * lifetime remains weapon-authored.
+      expiresAt: now + weapon.lifetimeMs * weapon.speed / projectileSpeed,
     };
     this.projectiles.push(projectile);
     this.events.push({ type: "shot", playerId: player.id, x, y, projectile: { ...projectile } });
@@ -429,10 +439,10 @@ export class DustyOrbitSimulation {
       case "mole":
         player.moleMode = true; player.moleUntil = now + DUSTY_GAMEPLAY.moleMaxDurationMs; player.moleForceAt = 0;
         player.burstRemaining = 0; player.lastFireInput = player.input.fire;
-        this.events.push({ type: "mole_burrowed", playerId: player.id, x: player.x, y: player.y, at: now });
+        this.events.push({ type: "mole_burrowed", playerId: player.id, ...moleBurrowOrigin(player), vx: player.vx, vy: player.vy, at: now });
         return true;
       case "fart": {
-        const cloud: DustyFartCloud = { id: ++this.cloudId, ownerId: player.id, x: player.x, y: player.y, radius: DUSTY_GAMEPLAY.fartCloudRadius, createdAt: now, expiresAt: now + DUSTY_GAMEPLAY.fartCloudDurationMs };
+        const cloud: DustyFartCloud = { id: ++this.cloudId, ownerId: player.id, x: player.x, y: player.y, radius: DUSTY_GAMEPLAY.fartCloudRadius, growMs: FART_CLOUD_GROW_MS, createdAt: now, expiresAt: now + DUSTY_GAMEPLAY.fartCloudDurationMs };
         this.fartClouds.push(cloud); this.events.push({ type: "fart_cloud", ...cloud }); return true;
       }
     }
@@ -546,7 +556,10 @@ export class DustyOrbitSimulation {
 
   private isConcealed(player: DustyPlayer, now: number): boolean {
     if (!player.alive) return false;
-    for (const cloud of this.fartClouds) if (cloud.expiresAt > now && Math.hypot(player.x - cloud.x, player.y - cloud.y) <= cloud.radius) return true;
+    for (const cloud of this.fartClouds) {
+      const activeRadius = cloud.radius * fartCloudGrowth(cloud.createdAt, now, cloud.growMs);
+      if (cloud.expiresAt > now && Math.hypot(player.x - cloud.x, player.y - cloud.y) <= activeRadius) return true;
+    }
     return false;
   }
 

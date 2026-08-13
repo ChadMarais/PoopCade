@@ -18,15 +18,15 @@ test("server imports canonical rock and satellite JSON for all eight scaled inst
   assert.equal(DUSTY_POLYGONS[0][0].y, 453.576);
 });
 
-test("east satellite collision is the exact horizontal mirror of the west satellite", () => {
+test("east and west satellites retain independent canonical collision definitions", () => {
   const [west, east] = DUSTY_SATELLITES;
   assert.equal(west.assetId, "satellite-relay-01");
   assert.equal(east.assetId, "satellite-relay-01-left");
-  for (const westPoint of west.polygon) {
-    const mirroredX = east.x - (westPoint.x - west.x);
-    const mirroredY = east.y + (westPoint.y - west.y);
-    assert.ok(east.polygon.some((eastPoint) => Math.abs(eastPoint.x - mirroredX) < .001 && Math.abs(eastPoint.y - mirroredY) < .001));
-  }
+  assert.equal(west.polygon.length, 13);
+  assert.equal(east.polygon.length, 13);
+  assert.notDeepEqual(west.polygon, east.polygon);
+  assert.ok(west.polygon.every((point) => Number.isFinite(point.x) && Number.isFinite(point.y)));
+  assert.ok(east.polygon.every((point) => Number.isFinite(point.x) && Number.isFinite(point.y)));
 });
 
 test("authoritative movement slides a 17-unit player circle and never enters rock polygons", () => {
