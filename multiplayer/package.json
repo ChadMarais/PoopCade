@@ -8,7 +8,8 @@
     "dev:lan": "wrangler dev --port 8787 --ip 0.0.0.0",
     "check": "wrangler deploy --dry-run --outdir .wrangler/check",
     "test": "node --experimental-strip-types --test test/*.test.ts test/*.test.mjs",
-    "test:wire": "node --experimental-strip-types test/local-ws-harness.mjs"
+    "test:wire": "node --experimental-strip-types test/local-ws-harness.mjs",
+    "test:lobby-wire": "node test/local-lobby-cap-harness.mjs"
   },
   "devDependencies": {
     "wrangler": "^4.120.0"

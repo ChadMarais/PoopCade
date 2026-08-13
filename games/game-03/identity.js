@@ -59,3 +59,18 @@ export async function claimSessionIdentity({
 
   return { ...identity, release() { channel.close(); } };
 }
+
+/** Resolve the current Poopcade gamer profile without making auth mandatory. */
+export async function resolvePoopcadePlayerIdentity(guestName, authApi = null) {
+  try {
+    const { getMyProfile, getSession } = authApi || await import("/js/auth.js");
+    const session = await getSession();
+    if (!session?.user || !session.access_token) return { playerName: guestName, accessToken: null, authenticated: false };
+    const profile = await getMyProfile();
+    const displayName = typeof profile?.display_name === "string" ? profile.display_name.trim() : "";
+    if (!displayName) return { playerName: guestName, accessToken: null, authenticated: false };
+    return { playerName: displayName, accessToken: session.access_token, authenticated: true };
+  } catch {
+    return { playerName: guestName, accessToken: null, authenticated: false };
+  }
+}

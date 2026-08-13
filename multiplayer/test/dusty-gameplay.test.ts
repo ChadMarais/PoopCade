@@ -88,11 +88,11 @@ test("Plasma is server-authored at tier 6 with two damage", () => {
   assert.equal(Math.hypot(shot.projectile.vx, shot.projectile.vy), 1200);
 });
 
-test("kills upgrade, deaths downgrade one tier, and score never drops below zero", () => {
+test("kills add one, deaths subtract one, and weapon tiers remain bounded", () => {
   const simulation = fresh(); const killer = add(simulation, A, "Guest-1001"); const victim = add(simulation, B, "Guest-1002");
   (simulation as any).killPlayer(victim, killer.id, 1000, "projectile");
   assert.equal(killer.kills, 1); assert.equal(killer.killScore, 1); assert.equal(killer.weaponTier, 2);
-  assert.equal(victim.deaths, 1); assert.equal(victim.killScore, 0); assert.equal(victim.weaponTier, 1);
+  assert.equal(victim.deaths, 1); assert.equal(victim.killScore, -1); assert.equal(victim.weaponTier, 1);
   const death = eventsOf(simulation, "death")[0] as { x: number; y: number };
   assert.deepEqual({ x: death.x, y: death.y }, { x: 600, y: 300 });
   victim.alive = true; victim.hp = 3; victim.weaponTier = 5; victim.killScore = 2;
@@ -102,7 +102,7 @@ test("kills upgrade, deaths downgrade one tier, and score never drops below zero
   (simulation as any).killPlayer(victim, killer.id, 1200, "projectile");
   assert.equal(victim.killScore, 0); assert.equal(killer.weaponTier, 6);
   victim.alive = true; victim.hp = 3;
-  (simulation as any).killPlayer(victim, killer.id, 1300, "projectile"); assert.equal(victim.killScore, 0);
+  (simulation as any).killPlayer(victim, killer.id, 1300, "projectile"); assert.equal(victim.killScore, -1);
 });
 
 test("health does not consume at full HP and shield absorbs exactly one projectile", () => {

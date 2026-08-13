@@ -6,6 +6,7 @@
   <meta name="theme-color" content="#26132f">
   <meta name="description" content="Dusty Orbit, Poopcade Game 03 multiplayer development build.">
   <title>DUSTY ORBIT — Poopcade Game 03</title>
+  <link rel="stylesheet" href="./lobby.css?v=20260813">
   <style>
     :root { color-scheme: dark; font-family: ui-sans-serif, system-ui, sans-serif; }
     * { box-sizing: border-box; }
@@ -13,8 +14,10 @@
     canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; cursor: crosshair; outline: none; touch-action: none; user-select: none; -webkit-user-select: none; }
     canvas.collision-editing { cursor: grab; }
     .panel { position: fixed; z-index: 2; pointer-events: none; border: 1px solid rgba(117,239,255,.4); border-radius: 11px; background: rgba(18,8,27,.9); box-shadow: 0 12px 35px rgba(10,0,20,.38); backdrop-filter: blur(9px); }
-    .title { top: 12px; left: 12px; display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 9px; padding: 8px 11px 8px 8px; pointer-events: auto; }
+    .title { top: 12px; left: 12px; display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 9px; padding: 8px; pointer-events: auto; }
     .home-link { display: grid; width: 31px; height: 31px; place-items: center; border: 1px solid rgba(255,255,255,.16); border-radius: 8px; color: #fff; text-decoration: none; background: rgba(255,255,255,.06); }
+    .leave-button { min-height:31px; padding:0 9px; border:1px solid rgba(255,183,104,.35); border-radius:8px; color:#ffd18c; background:rgba(255,151,72,.08); font:900 8px ui-monospace,monospace; cursor:pointer; }
+    .title .leave-button { position:static; pointer-events:auto; }
     .title-copy { min-width: 0; }
     .title strong { display: block; letter-spacing: .14em; font-size: 14px; }
     .title span { display: block; margin-top: 3px; color: #75efff; font: 900 9px ui-monospace, monospace; letter-spacing: .13em; }
@@ -68,8 +71,27 @@
   </style>
 </head>
 <body>
+  <main id="lobby" class="lobby-shell" aria-label="Dusty Orbit multiplayer lobby">
+    <header class="lobby-top">
+      <div class="lobby-brand"><a class="lobby-back" href="/?devtest=true" data-lobby-home aria-label="Back to Poopcade">&larr;</a><div><h1>DUSTY ORBIT</h1><p>LIVE MULTIPLAYER ARENA</p></div></div>
+      <div class="lobby-profile"><strong data-lobby-player-name>Guest pilot</strong><p data-lobby-identity>CHECKING PROFILE</p></div>
+    </header>
+    <div class="lobby-grid">
+      <section class="lobby-panel selector-panel" aria-labelledby="characterHeading">
+        <div><span class="eyebrow">CHARACTER SELECT</span><h2 id="characterHeading">PICK YOUR PROBLEM</h2></div>
+        <div class="character-stage"><i class="character-glow"></i><img data-skin-preview alt=""><div class="preview-copy"><h3 data-preview-name></h3><p data-preview-description></p></div></div>
+        <div class="skin-rail" data-skin-cards aria-label="Available character skins"></div>
+      </section>
+      <section class="lobby-panel roster-panel" aria-labelledby="rosterHeading">
+        <div class="roster-heading"><div><span class="eyebrow">CURRENTLY CAUSING TROUBLE</span><h2 id="rosterHeading">WHO'S IN ORBIT?</h2></div><div class="player-count"><span>PLAYERS</span><strong data-player-count>0 / 15</strong></div></div>
+        <div class="live-roster" data-lobby-roster aria-live="polite"><p class="roster-empty">Contacting the arena…</p></div>
+        <div class="join-zone"><div class="arena-status"><strong data-arena-status>CONNECTING</strong><small data-arena-status-copy>Finding the bad decisions…</small></div><button class="join-button" data-join-arena type="button" disabled>CONNECTING…</button></div>
+      </section>
+    </div>
+  </main>
   <canvas id="world" tabindex="0" aria-label="Dusty Orbit multiplayer arena"></canvas>
   <header class="panel title"><a id="homeLink" class="home-link" href="/" aria-label="Back to Poopcade">←</a><div class="title-copy"><strong>DUSTY ORBIT</strong><span>MULTIPLAYER DEVELOPMENT BUILD</span></div></header>
+  <button id="leaveGame" class="panel leave-button" type="button">LOBBY</button>
   <div id="devBadge" class="dev-badge" hidden>DEV TEST</div>
   <div id="connection" class="panel status">LOADING</div>
   <pre id="gameplayHud" class="panel gameplay-hud">HP: ---\nSHIELD: NO\nWEAPON: T1 PEA SHOOTER\nSCORE: 0\nNUKE: 0/10</pre>
@@ -95,6 +117,6 @@
     </div>
   </div>
   <div id="loading" class="loading"><div><h1>DUSTY ORBIT</h1><p id="loadingText">LOADING MULTIPLAYER ASSETS…</p><div class="track"><div id="loadingBar" class="bar"></div></div></div></div>
-  <script type="module" src="./game.js?v=20260813-28"></script>
+  <script type="module" src="./game.js?v=20260813-29"></script>
 </body>
 </html>

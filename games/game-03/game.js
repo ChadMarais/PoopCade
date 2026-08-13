@@ -1,12 +1,13 @@
 import { moveCircleWithSliding } from "./collision-geometry.js?v=20260813";
 import { CollisionEditor } from "./collision-editor.js?v=20260813-8";
-import { loadDustyOrbitAssets } from "./assets.js?v=20260813-8";
+import { loadDustyOrbitAssets } from "./assets.js?v=20260813-9";
 import { PRODUCTION_ARENA_WSS } from "./config.js?v=20260812";
-import { DustyOrbitMultiplayerRenderer } from "./renderer.js?v=20260813-15";
+import { DustyOrbitMultiplayerRenderer } from "./renderer.js?v=20260813-16";
 import { InputController } from "./input.js?v=20260813-3";
-import { claimSessionIdentity } from "./identity.js?v=20260813";
+import { claimSessionIdentity, resolvePoopcadePlayerIdentity } from "./identity.js?v=20260813-2";
 import { ArenaNetwork } from "./network.js?v=20260813";
 import { consumeFixedStep, convergeVisualPosition } from "./timing.js?v=20260813-2";
+import { DustyLobby } from "./lobby.js?v=20260813";
 
 const INPUT_RATE = 30;
 const INPUT_DT = 1 / INPUT_RATE;
@@ -50,6 +51,8 @@ function endpoint() {
 
 const identity = await claimSessionIdentity();
 const { sessionId, guestName } = identity;
+const poopcadeIdentity = await resolvePoopcadePlayerIdentity(guestName);
+const { playerName, accessToken, authenticated } = poopcadeIdentity;
 const canvas = document.querySelector("#world");
 const loading = document.querySelector("#loading");
 const loadingBar = document.querySelector("#loadingBar");
@@ -60,8 +63,11 @@ const events = document.querySelector("#events");
 const gameplayHud = document.querySelector("#gameplayHud");
 const mobileFireLabel = document.querySelector("#mobileFireButton .mobile-fire-label");
 const mobileNukeButton = document.querySelector("#mobileNukeButton");
+const leaveGame = document.querySelector("#leaveGame");
 const devtest = parameters.get("devtest") === "true";
 document.querySelector("#homeLink").href = devtest ? "/?devtest=true" : "/";
+document.querySelector("[data-lobby-home]").href = devtest ? "/?devtest=true" : "/";
+document.querySelector(".title").append(leaveGame);
 document.querySelector("#devBadge").hidden = !devtest;
 debugHud.hidden = !debugCollision;
 const arenaEndpoint = endpoint();
@@ -71,6 +77,7 @@ if (!arenaEndpoint) {
   throw new Error("Set PRODUCTION_ARENA_WSS in games/game-03/config.js before production deployment.");
 }
 const assets = await loadDustyOrbitAssets((message, amount) => { loadingText.textContent = message; loadingBar.style.width = `${amount * 100}%`; });
+function preloadCharacterSkin(skinId) { void assets.ensureCharacterSkin(skinId).catch(() => {}); }
 loadingBar.style.width = "100%";
 const focusSatellite = parameters.get("focus") === "satellite-east" ? assets.satellites[1] : assets.satellites[0];
 const debugFocus = debugCollision && parameters.get("focus")?.startsWith("satellite") ? focusSatellite : null;
@@ -106,6 +113,7 @@ if (collisionEditor) {
 }
 
 let connectionState = "connecting";
+let applicationState = "LOBBY";
 let joined = false;
 let localId = sessionId;
 let latestSnapshot = null;
@@ -129,13 +137,31 @@ let maximumReconciliationError = 0;
 const eventLines = [];
 let nukeQueuedUntil = 0;
 let localSpeedBoostUntil = 0;
+let network;
+
+const lobby = new DustyLobby(document.querySelector("#lobby"), {
+  playerName,
+  authenticated,
+  onJoin(skinId) {
+    applicationState = "JOINING";
+    if (!network.send({ type: "join", name: playerName, skinId, ...(accessToken ? { accessToken } : {}) })) {
+      applicationState = "DISCONNECTED";
+      lobby.setApplicationState(applicationState);
+    }
+  },
+  onRetry() { network.connect(true); },
+  onSkinSelected(skinId) { preloadCharacterSkin(skinId); },
+});
+lobby.show();
+loading.classList.add("done");
 
 function addEvent(text) { eventLines.unshift(text); eventLines.splice(6); events.textContent = eventLines.join("\n"); }
 
-const network = new ArenaNetwork({
-  url: arenaEndpoint, sessionId, name: guestName,
+network = new ArenaNetwork({
+  url: arenaEndpoint, sessionId, name: playerName,
   onState(state, detail) {
     connectionState = state;
+    lobby.setConnectionState(state, detail);
     connection.textContent = state === "online" ? "● ONLINE" : `${state.toUpperCase()}${detail ? ` · ${detail}` : ""}`;
     connection.classList.toggle("online", state === "online");
     if (state !== "online") {
@@ -145,6 +171,13 @@ const network = new ArenaNetwork({
       sendAccumulator = 0;
       inputStepTimes.length = 0;
       localSpeedBoostUntil = 0;
+      applicationState = state === "connecting" ? "CONNECTING" : "DISCONNECTED";
+      lobby.setApplicationState(applicationState);
+      lobby.show();
+    } else if (!joined) {
+      applicationState = "LOBBY";
+      lobby.setApplicationState(applicationState);
+      lobby.show();
     }
     // A TCP/WebSocket open is not yet an arena join. Waiting for welcome
     // prevents pre-handshake input from racing the server's restored sequence.
@@ -156,7 +189,23 @@ const network = new ArenaNetwork({
     }
   },
   onMessage(message) {
+    if (message.type === "lobby_state") {
+      lobby.update(message);
+      if (!joined && applicationState !== "JOINING") {
+        applicationState = message.full ? "FULL" : "LOBBY";
+        lobby.setApplicationState(applicationState);
+      }
+      return;
+    }
+    if (message.type === "join_rejected") {
+      joined = false;
+      applicationState = message.reason === "ARENA_FULL" ? "FULL" : "LOBBY";
+      lobby.setApplicationState(applicationState);
+      lobby.show();
+      return;
+    }
     if (message.type === "welcome") {
+      preloadCharacterSkin(message.player?.skinId);
       localId = message.playerId;
       serverRates = message.rates || serverRates;
       weaponDefinitions = Array.isArray(message.weapons) && message.weapons.length ? message.weapons : weaponDefinitions;
@@ -169,13 +218,19 @@ const network = new ArenaNetwork({
       input.reset();
       if (finitePoint(message.player)) resetPredictionTo(message.player);
       joined = true;
+      applicationState = "PLAYING";
+      lobby.setApplicationState(applicationState);
+      lobby.hide();
       input.enabled = !document.hidden;
-      addEvent(`JOINED ${message.arenaId} AS ${guestName}`);
+      addEvent(`JOINED ${message.arenaId} AS ${playerName}`);
       loading.classList.add("done");
       canvas.focus({ preventScroll: true });
       return;
     }
-    if (message.type === "snapshot") { latestSnapshot = message; reconcile(message); return; }
+    if (message.type === "snapshot") {
+      for (const player of message.players || []) preloadCharacterSkin(player.skinId);
+      latestSnapshot = message; reconcile(message); return;
+    }
     if (message.type === "shot") {
       const localShot = message.playerId === localId;
       if (localShot) input.acknowledgeFire();
@@ -283,7 +338,7 @@ function updateHud(snapshot) {
   ] : ["WEAPON: HIDDEN"];
   debugHud.textContent = [
     `CONNECTION: ${connectionState.toUpperCase()}  ·  ARENA: ${ARENA_ID}`,
-    `LOCAL ID: ${localId.slice(0, 8)}…  ·  NAME: ${guestName}`,
+    `LOCAL ID: ${localId.slice(0, 8)}…  ·  NAME: ${playerName}`,
     `PLAYERS: ${snapshot?.players?.length ?? 0}  ·  PING: ${network.rtt.toFixed(1)}ms`,
     `RATES: INPUT ${Math.min(INPUT_RATE, inputStepTimes.length)}/s · SNAP ${network.snapshotRate}/s · SERVER ${serverRates.tick}/${serverRates.snapshot}`,
     `TICK: ${snapshot?.tick ?? "—"}  ·  POS: ${player ? `${player.x.toFixed(1)}, ${player.y.toFixed(1)}` : "—"}`,
@@ -364,7 +419,7 @@ function frame(now) {
     const visualIntegrated = applyMovement(visualPredicted || visualTarget, sample, delta, player);
     visualPredicted = convergeVisualPosition(visualIntegrated, visualTarget, delta, turboActive(player) ? 6 : 8);
   }
-  renderer.render(snapshot || latestSnapshot, localId, visualPredicted || predicted, delta, input.getVisualState());
+  if (applicationState === "PLAYING") renderer.render(snapshot || latestSnapshot, localId, visualPredicted || predicted, delta, input.getVisualState());
   fpsFrames++;
   if (now - fpsWindow >= 500) { fps = Math.round(fpsFrames * 1000 / (now - fpsWindow)); fpsFrames = 0; fpsWindow = now; updateHud(latestSnapshot); }
   requestAnimationFrame(frame);
@@ -395,9 +450,23 @@ mobileNukeButton.addEventListener("pointerdown", (event) => {
   event.preventDefault(); event.stopPropagation();
   if (!mobileNukeButton.disabled) nukeQueuedUntil = performance.now() + 800;
 });
+leaveGame.addEventListener("click", () => {
+  if (!joined || !confirm("Leave the arena and return to the lobby?")) return;
+  network.send({ type: "leave" });
+  joined = false;
+  applicationState = "LOBBY";
+  input.reset();
+  input.enabled = false;
+  pending = [];
+  predicted = null;
+  visualPredicted = null;
+  latestSnapshot = null;
+  lobby.setApplicationState(applicationState);
+  lobby.show();
+});
 document.addEventListener("visibilitychange", () => { input.reset(); input.enabled = connectionState === "online" && joined && !document.hidden; network.setActive(!document.hidden); if (!document.hidden) previousFrame = performance.now(); });
 addEventListener("beforeunload", () => { identity.release(); network.close(); });
 
-window.__DUSTY_ORBIT_MULTIPLAYER__ = { network, renderer, input, collisionEditor, getState: () => ({ connectionState, joined, localId, guestName, latestSnapshot, predicted, visualPredicted, predictionOffset: { ...predictionOffset }, pending: [...pending], seq, reconciliationError, maximumReconciliationError, input: input.getVisualState() }) };
+window.__DUSTY_ORBIT_MULTIPLAYER__ = { network, renderer, input, collisionEditor, lobby, getState: () => ({ applicationState, connectionState, joined, localId, playerName, authenticated, latestSnapshot, predicted, visualPredicted, predictionOffset: { ...predictionOffset }, pending: [...pending], seq, reconciliationError, maximumReconciliationError, input: input.getVisualState() }) };
 network.connect(true);
 requestAnimationFrame(frame);

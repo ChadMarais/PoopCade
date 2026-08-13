@@ -14,6 +14,7 @@ import {
 } from "./dusty-map.ts";
 import { DUSTY_GAMEPLAY, DUSTY_WEAPONS, POWERUP_TYPES, weaponForTier, type PowerupType, type WeaponDefinition } from "./dusty-gameplay.ts";
 import type { ClientInput } from "./protocol.ts";
+import { DEFAULT_CHARACTER_SKIN_ID, characterSkinById, validCharacterSkinId } from "../../games/game-03/character-skins.js";
 
 export const DUSTY_TICK_RATE = 30;
 export const DUSTY_SNAPSHOT_RATE = 15;
@@ -23,13 +24,13 @@ export const DUSTY_SPAWN_PROTECTION_MS = 2000;
 export const DUSTY_STALE_INPUT_MS = 300;
 export const DUSTY_STALE_PLAYER_MS = 15000;
 export const DUSTY_DISCONNECT_GRACE_MS = 5000;
-export const DUSTY_MAX_PLAYERS = 20;
+export const DUSTY_MAX_PLAYERS = 15;
 
 // Backwards-compatible exports for the arena welcome packet and older tests.
 export const DUSTY_WEAPON = DUSTY_WEAPONS[0];
 
 export type DustyPlayer = {
-  id: string; name: string; joinOrder: number; x: number; y: number; vx: number; vy: number;
+  id: string; name: string; skinId: string; joinedAt: number; joinOrder: number; x: number; y: number; vx: number; vy: number;
   aimX: number; aimY: number; hp: number; kills: number; deaths: number; killScore: number;
   weaponTier: number; nukeProgress: number; nukeReady: boolean; shieldHits: number;
   spyUntil: number; speedUntil: number; moleMode: boolean; moleUntil: number; moleForceAt: number;
@@ -128,13 +129,19 @@ export class DustyOrbitSimulation {
     this.maintainPickups(0);
   }
 
-  addPlayer(id: string, name: string, now: number): DustyPlayer {
+  addPlayer(id: string, name: string, now: number, options: { skinId?: string; joinedAt?: number } = {}): DustyPlayer {
     const existing = this.players.get(id);
-    if (existing) { existing.name = name; existing.disconnectedAt = 0; existing.lastMessageAt = now; return existing; }
+    if (existing) {
+      existing.name = name;
+      if (options.skinId) existing.skinId = validCharacterSkinId(options.skinId);
+      existing.disconnectedAt = 0; existing.lastMessageAt = now; return existing;
+    }
     if (this.players.size >= DUSTY_MAX_PLAYERS) throw new Error("arena-full");
     const spawn = this.chooseInitialSpawn();
     const player: DustyPlayer = {
-      id, name, joinOrder: ++this.joinCursor, x: spawn.x, y: spawn.y, vx: 0, vy: 0, aimX: 1, aimY: 0,
+      id, name, skinId: validCharacterSkinId(options.skinId ?? DEFAULT_CHARACTER_SKIN_ID),
+      joinedAt: Number.isFinite(options.joinedAt) ? Math.min(now, Number(options.joinedAt)) : now,
+      joinOrder: ++this.joinCursor, x: spawn.x, y: spawn.y, vx: 0, vy: 0, aimX: 1, aimY: 0,
       hp: DUSTY_GAMEPLAY.maxHp, kills: 0, deaths: 0, killScore: 0, weaponTier: 1, nukeProgress: 0,
       nukeReady: false, shieldHits: 0, spyUntil: 0, speedUntil: 0, moleMode: false, moleUntil: 0,
       connectedSatelliteId: null,
@@ -147,7 +154,7 @@ export class DustyOrbitSimulation {
     };
     this.players.set(id, player);
     this.updateThreatLeader();
-    this.events.push({ type: "player_joined", player: { id, name } });
+    this.events.push({ type: "player_joined", player: { id, name, skinId: player.skinId, joinedAt: player.joinedAt } });
     return player;
   }
 
@@ -314,7 +321,7 @@ export class DustyOrbitSimulation {
   private spawnProjectile(player: DustyPlayer, weapon: WeaponDefinition, aimX: number, aimY: number, spread: number, now: number): void {
     if (this.projectiles.length >= DUSTY_GAMEPLAY.maxProjectiles) return;
     const direction = rotated(aimX, aimY, spread);
-    const muzzle = weaponPose({ ...player, aimX, aimY }, weaponVisualForTier(weapon.tier)).muzzleWorld;
+    const muzzle = weaponPose({ ...player, aimX, aimY }, weaponVisualForTier(weapon.tier), { weaponMount: characterSkinById(player.skinId)?.weaponMount }).muzzleWorld;
     const projectileSpeed = weapon.speed * (player.speedUntil > now ? DUSTY_GAMEPLAY.speedMultiplier : 1);
     const x = muzzle.x, y = muzzle.y;
     const projectile: DustyProjectile = {
@@ -372,7 +379,7 @@ export class DustyOrbitSimulation {
     const killer = this.players.get(killerId);
     const deathX = victim.x, deathY = victim.y;
     victim.alive = false; victim.hp = 0; victim.vx = victim.vy = 0; victim.deaths++;
-    victim.killScore = Math.max(0, victim.killScore - 1);
+    victim.killScore--;
     victim.weaponTier = Math.max(DUSTY_GAMEPLAY.minWeaponTier, victim.weaponTier - 1);
     victim.spyUntil = 0; victim.speedUntil = 0; victim.shieldHits = 0; victim.moleMode = false; victim.connectedSatelliteId = null;
     victim.moleUntil = 0; victim.moleForceAt = 0; victim.burstRemaining = 0; victim.suppressFireUntilRelease = false;
@@ -590,7 +597,8 @@ export class DustyOrbitSimulation {
     const serializePlayer = (player: DustyPlayer) => ({
       id: player.id, name: player.name, x: round(player.x), y: round(player.y), vx: Math.round(player.vx), vy: Math.round(player.vy),
       aimX: round(player.aimX, 1000), aimY: round(player.aimY, 1000), hp: player.hp, kills: player.kills,
-      deaths: player.deaths, killScore: Math.max(0, player.killScore), weaponTier: player.weaponTier, nukeProgress: player.nukeProgress,
+      deaths: player.deaths, killScore: player.killScore, skinId: player.skinId, joinedAt: player.joinedAt,
+      weaponTier: player.weaponTier, nukeProgress: player.nukeProgress,
       nukeReady: player.nukeReady, shieldHits: player.shieldHits, spyRemaining: Math.max(0, player.spyUntil - now),
       speedRemaining: Math.max(0, player.speedUntil - now), moleMode: player.moleMode,
       moleRemaining: player.moleMode ? Math.max(0, player.moleUntil - now) : 0,
@@ -625,6 +633,28 @@ export class DustyOrbitSimulation {
       threatLeaderId: this.threatLeaderId,
       activeSatelliteIds: DUSTY_SATELLITES.filter((satellite) => [...this.players.values()].some((player) => player.alive && player.connectedSatelliteId === satellite.id)).map((satellite) => satellite.id),
       minimapPlayers,
+    };
+  }
+
+  lobbyState(now = Date.now()): Record<string, unknown> {
+    const players = [...this.players.values()]
+      .sort((a, b) => b.killScore - a.killScore || b.kills - a.kills || a.joinOrder - b.joinOrder || a.id.localeCompare(b.id))
+      .map((player) => ({
+        id: player.id,
+        name: player.name,
+        skinId: player.skinId,
+        killScore: player.killScore,
+        kills: player.kills,
+        joinedAt: player.joinedAt,
+      }));
+    return {
+      type: "lobby_state",
+      arenaId: DUSTY_MAP.id,
+      serverTime: now,
+      activePlayers: players.length,
+      maxPlayers: DUSTY_MAX_PLAYERS,
+      full: players.length >= DUSTY_MAX_PLAYERS,
+      players,
     };
   }
 }

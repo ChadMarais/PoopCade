@@ -8,7 +8,7 @@ interface Env {
 
 function originAllowed(origin: string | null): boolean {
   if (origin === null) return true;
-  if (origin === "https://poopcade.com") return true;
+  if (origin === "https://poopcade.com" || origin === "https://www.poopcade.com") return true;
   try {
     const url = new URL(origin);
     if (url.protocol !== "http:" && url.protocol !== "https:") return false;

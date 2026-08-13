@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { claimSessionIdentity } from "../../games/game-03/identity.js";
+import { claimSessionIdentity, resolvePoopcadePlayerIdentity } from "../../games/game-03/identity.js";
 
 class MemoryStorage {
   constructor(values = {}) { this.values = new Map(Object.entries(values)); }
@@ -47,4 +47,20 @@ test("refresh continuity is preserved when no other live tab owns the session", 
   const identity = await claimSessionIdentity({ storage, BroadcastChannelClass: FakeBroadcastChannel, cryptoApi: cryptoSequence("refresh"), waitMs: 1 });
   assert.equal(identity.sessionId, "refresh-session"); assert.equal(identity.guestName, "Guest-2222");
   identity.release();
+});
+
+test("signed-in Dusty Orbit players use the existing Poopcade profile instead of a guest name", async () => {
+  const identity = await resolvePoopcadePlayerIdentity("Guest-1234", {
+    async getSession() { return { user: { id: "profile-1" }, access_token: "verified-access-token" }; },
+    async getMyProfile() { return { display_name: "Orbit Veteran" }; },
+  });
+  assert.deepEqual(identity, { playerName: "Orbit Veteran", accessToken: "verified-access-token", authenticated: true });
+});
+
+test("Dusty Orbit keeps the guest fallback when no Poopcade session exists", async () => {
+  const identity = await resolvePoopcadePlayerIdentity("Guest-4321", {
+    async getSession() { return null; },
+    async getMyProfile() { throw new Error("should not be called"); },
+  });
+  assert.deepEqual(identity, { playerName: "Guest-4321", accessToken: null, authenticated: false });
 });

@@ -261,7 +261,8 @@ export class DustyOrbitMultiplayerRenderer {
   drawPlayer(player, local) {
     if (!player.alive) return;
     const now = performance.now();
-    const { definition, body, shadow } = this.assets.character;
+    const character = this.assets.characters?.get(player.skinId) || this.assets.character;
+    const { definition, body, shadow } = character;
     const x = player.x - this.camera.x;
     const y = player.y - this.camera.y;
     const moving = Math.hypot(player.vx || 0, player.vy || 0) > 10;
@@ -337,7 +338,7 @@ export class DustyOrbitMultiplayerRenderer {
         else recoil = recoilState.distance * (1 - smoothstep(amount));
       }
       modulePose = {
-        ...weaponPose(player, visual, { scale: spawnScale, verticalOffset: bob + spawnLift, recoil }),
+        ...weaponPose(player, visual, { scale: spawnScale, verticalOffset: bob + spawnLift, recoil, weaponMount: character.skin?.weaponMount }),
         playerId: player.id,
         tier,
         alpha: unitAlpha,

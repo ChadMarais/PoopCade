@@ -1,0 +1,71 @@
+import assert from "node:assert/strict";
+import WebSocket from "ws";
+
+const endpoint = process.env.DUSTY_LOBBY_WS || "ws://127.0.0.1:8787/arena/dusty-orbit-001/ws";
+
+function client(index) {
+  const sessionId = crypto.randomUUID();
+  const name = `Guest-${String(7000 + index).padStart(4, "0")}`;
+  const socket = new WebSocket(`${endpoint}?session=${sessionId}&name=${name}`);
+  const messages = [];
+  const waiters = [];
+  socket.on("message", (raw) => {
+    const message = JSON.parse(String(raw));
+    messages.push(message);
+    for (let waiterIndex = waiters.length - 1; waiterIndex >= 0; waiterIndex--) {
+      if (!waiters[waiterIndex].predicate(message)) continue;
+      const [waiter] = waiters.splice(waiterIndex, 1);
+      clearTimeout(waiter.timer);
+      waiter.resolve(message);
+    }
+  });
+  const waitFor = (predicate, timeoutMs = 5000, afterIndex = 0) => {
+    const existing = messages.slice(afterIndex).find(predicate);
+    if (existing) return Promise.resolve(existing);
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error(`Timed out waiting for lobby message for ${name}.`)), timeoutMs);
+      waiters.push({ predicate, resolve, timer });
+    });
+  };
+  const opened = new Promise((resolve, reject) => {
+    socket.once("open", () => { socket.send(JSON.stringify({ type: "hello", sessionId, name })); resolve(); });
+    socket.once("error", reject);
+  });
+  return { socket, sessionId, name, opened, waitFor, messages };
+}
+
+const clients = Array.from({ length: 16 }, (_, index) => client(index + 1));
+
+try {
+  await Promise.all(clients.map((item) => item.opened));
+  await Promise.all(clients.map((item) => item.waitFor((message) => message.type === "lobby_state")));
+  assert.ok(clients.every((item) => item.messages.some((message) => message.type === "lobby_state")));
+
+  const productionSkins = ["moon-blob-01", "ivory-dart-01", "mint-tank-01", "void-orb-01"];
+  for (const [index, item] of clients.slice(0, 14).entries()) {
+    item.socket.send(JSON.stringify({ type: "join", name: item.name, skinId: productionSkins[index % productionSkins.length] }));
+    await item.waitFor((message) => message.type === "welcome");
+  }
+
+  const finalists = clients.slice(14);
+  for (const item of finalists) item.socket.send(JSON.stringify({ type: "join", name: item.name, skinId: "moon-blob-01" }));
+  const results = await Promise.all(finalists.map((item) => item.waitFor((message) => message.type === "welcome" || message.type === "join_rejected")));
+  assert.deepEqual(results.map((message) => message.type === "welcome" ? "JOINED" : message.reason).sort(), ["ARENA_FULL", "JOINED"]);
+  assert.equal(Math.max(...finalists.flatMap((item) => item.messages.filter((message) => message.type === "lobby_state").map((message) => message.activePlayers))), 15);
+
+  const rejected = finalists[results.findIndex((message) => message.type === "join_rejected")];
+  const leaveCursor = rejected.messages.length;
+  clients[0].socket.send(JSON.stringify({ type: "leave" }));
+  await rejected.waitFor((message) => message.type === "lobby_state" && message.activePlayers === 14, 5000, leaveCursor);
+  const replacementCursor = rejected.messages.length;
+  rejected.socket.send(JSON.stringify({ type: "join", name: rejected.name, skinId: "unknown-but-valid-id" }));
+  const replacement = await rejected.waitFor((message) => message.type === "welcome", 5000, replacementCursor);
+  assert.equal(replacement.player.skinId, "moon-blob-01");
+  console.log("Lobby wire QA passed: 16 lobby spectators, 15-player cap, final-slot race, leave/rejoin, and skin fallback.");
+} finally {
+  for (const item of clients) {
+    if (item.socket.readyState === WebSocket.OPEN) item.socket.send(JSON.stringify({ type: "leave" }));
+  }
+  await new Promise((resolve) => setTimeout(resolve, 250));
+  for (const item of clients) item.socket.close();
+}

@@ -1,9 +1,9 @@
 import { ASSET_DEFINITION_URLS, ENVIRONMENT_INSTANCES, SATELLITE_CONNECTION, TERRAIN_URL, WORLD } from "./map.js?v=20260813-3";
 import { collisionBlocksMovement, depthSortY, transformNormalizedPolygon } from "./collision-geometry.js?v=20260813";
+import { DEFAULT_CHARACTER_SKIN_ID, characterSkinById } from "./character-skins.js?v=20260813";
 
 const ASSET_VERSION = "20260813-8";
 const versioned = (url) => `${url}?v=${ASSET_VERSION}`;
-const CHARACTER_DEFINITION_URL = versioned("./assets/characters/moon-blob-01/moon-blob-01.json");
 const POWERUP_ART = Object.freeze({
   health: Object.freeze({ sprite: "health.png", sourceBounds: Object.freeze({ x: 229, y: 193, width: 797, height: 785 }) }),
   spy: Object.freeze({ sprite: "spy.png", sourceBounds: Object.freeze({ x: 306, y: 180, width: 654, height: 793 }) }),
@@ -33,23 +33,30 @@ function loadImage(url) {
   });
 }
 
+async function loadCharacterAsset(skin) {
+  const [body, shadow] = await Promise.all([loadImage(versioned(skin.sprite)), loadImage(versioned(skin.shadow))]);
+  return {
+    skin,
+    definition: { ...skin.visual, bodyPivot: { normalized: skin.visual.bodyPivot } },
+    body,
+    shadow,
+  };
+}
+
 export async function loadDustyOrbitAssets(onProgress = () => {}) {
   onProgress("Loading canonical collision geometry…", 0.12);
-  const [environmentDefinitions, characterDefinition] = await Promise.all([
-    Promise.all(ASSET_DEFINITION_URLS.map((url) => loadJson(versioned(url)))),
-    loadJson(CHARACTER_DEFINITION_URL),
-  ]);
+  const environmentDefinitions = await Promise.all(ASSET_DEFINITION_URLS.map((url) => loadJson(versioned(url))));
   onProgress("Loading Dusty Orbit artwork…", 0.34);
-  const characterRoot = "./assets/characters/moon-blob-01/";
+  const defaultSkin = characterSkinById(DEFAULT_CHARACTER_SKIN_ID);
+  if (!defaultSkin) throw new Error("Dusty Orbit requires one enabled default character skin.");
   const powerupRoot = "./assets/dusty-orbit/powerups/";
   const weaponRoot = "./assets/weapons/";
   const definitionById = new Map(environmentDefinitions.map((definition) => [definition.id, definition]));
   const definitionRoot = new Map(ASSET_DEFINITION_URLS.map((url, index) => [environmentDefinitions[index].id, url.slice(0, url.lastIndexOf("/") + 1)]));
-  const [terrain, environmentImages, body, shadow, health, spy, speed, mole, shield, teleport, fart, peaShooter] = await Promise.all([
+  const [terrain, environmentImages, defaultCharacter, health, spy, speed, mole, shield, teleport, fart, peaShooter] = await Promise.all([
     loadImage(TERRAIN_URL),
     Promise.all(environmentDefinitions.map((definition) => loadImage(versioned(definitionRoot.get(definition.id) + definition.sprite)))),
-    loadImage(versioned(characterRoot + characterDefinition.sprite)),
-    loadImage(versioned(characterRoot + characterDefinition.shadow)),
+    loadCharacterAsset(defaultSkin),
     loadImage(versioned(powerupRoot + POWERUP_ART.health.sprite)),
     loadImage(versioned(powerupRoot + POWERUP_ART.spy.sprite)),
     loadImage(versioned(powerupRoot + POWERUP_ART.speed.sprite)),
@@ -74,6 +81,19 @@ export async function loadDustyOrbitAssets(onProgress = () => {}) {
   });
   const rocks = environment.filter((item) => item.kind === "rock");
   const satellites = environment.filter((item) => item.kind === "satellite");
+  const characters = new Map([[defaultCharacter.skin.id, defaultCharacter]]);
+  const characterLoads = new Map();
+  const ensureCharacterSkin = (skinId) => {
+    const skin = characterSkinById(skinId);
+    if (!skin) return Promise.resolve(defaultCharacter);
+    if (characters.has(skin.id)) return Promise.resolve(characters.get(skin.id));
+    if (!characterLoads.has(skin.id)) characterLoads.set(skin.id, loadCharacterAsset(skin).then((asset) => {
+      characters.set(skin.id, asset);
+      characterLoads.delete(skin.id);
+      return asset;
+    }));
+    return characterLoads.get(skin.id);
+  };
   return {
     world: WORLD,
     terrain,
@@ -84,7 +104,9 @@ export async function loadDustyOrbitAssets(onProgress = () => {}) {
     satelliteConnection: SATELLITE_CONNECTION,
     environment,
     polygons: environment.filter((item) => collisionBlocksMovement(item.definition)).map((item) => item.polygon),
-    character: { definition: characterDefinition, body, shadow },
+    characters,
+    character: defaultCharacter,
+    ensureCharacterSkin,
     powerups: {
       health: { image: health, sourceBounds: POWERUP_ART.health.sourceBounds },
       spy: { image: spy, sourceBounds: POWERUP_ART.spy.sourceBounds },
