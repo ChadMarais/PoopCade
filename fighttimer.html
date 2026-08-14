@@ -1,0 +1,576 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <meta name="theme-color" content="#07070d">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="description" content="A focused boxing round and interval timer.">
+  <title>Fight Timer</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #07070d;
+      --panel: rgba(19, 18, 30, .88);
+      --ink: #fbfaff;
+      --soft: #a9a5b4;
+      --line: rgba(255, 255, 255, .13);
+      --cyan: #52efff;
+      --violet: #9b69ff;
+      --pink: #ff4fbd;
+      --acid: #c8ff47;
+      --danger: #ff617d;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { min-height: 100%; }
+    body {
+      min-width: 300px;
+      margin: 0;
+      overflow-x: hidden;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 10% 4%, rgba(155, 105, 255, .2), transparent 28rem),
+        radial-gradient(circle at 93% 92%, rgba(82, 239, 255, .13), transparent 25rem),
+        var(--bg);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      -webkit-font-smoothing: antialiased;
+      -webkit-tap-highlight-color: transparent;
+      overscroll-behavior: none;
+    }
+    body::before {
+      position: fixed;
+      inset: 0;
+      z-index: -1;
+      content: "";
+      pointer-events: none;
+      opacity: .17;
+      background-image:
+        linear-gradient(rgba(255,255,255,.035) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,.035) 1px, transparent 1px);
+      background-size: 42px 42px;
+      mask-image: linear-gradient(#000, transparent 82%);
+    }
+    button, input { color: inherit; font: inherit; }
+    button { touch-action: manipulation; }
+    :focus-visible { outline: 3px solid var(--acid); outline-offset: 3px; }
+
+    .app {
+      width: min(calc(100% - 24px), 760px);
+      min-height: 100svh;
+      margin: 0 auto;
+      padding: max(18px, env(safe-area-inset-top)) 0 max(20px, env(safe-area-inset-bottom));
+      display: grid;
+      align-content: center;
+      gap: 14px;
+    }
+    .topbar { display: flex; min-width: 0; align-items: center; justify-content: space-between; gap: 12px; }
+    .brand { display: grid; gap: 3px; }
+    .brand strong { font-size: .73rem; font-weight: 1000; letter-spacing: .18em; text-transform: uppercase; }
+    .brand span { color: var(--soft); font: 700 .58rem/1.2 ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: .08em; text-transform: uppercase; }
+    .wake-status {
+      display: inline-flex;
+      min-height: 32px;
+      align-items: center;
+      gap: 7px;
+      padding: 0 11px;
+      border: 1px solid rgba(200, 255, 71, .25);
+      border-radius: 999px;
+      color: var(--soft);
+      background: rgba(200, 255, 71, .045);
+      cursor: pointer;
+      font: 800 .58rem/1 ui-monospace, SFMono-Regular, Consolas, monospace;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+    }
+    .wake-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--soft); }
+    .wake-status.on { color: var(--acid); }
+    .wake-status.on .wake-dot { background: var(--acid); box-shadow: 0 0 12px var(--acid); }
+    .wake-status.warn { color: #ffcb72; border-color: rgba(255, 203, 114, .32); }
+    .wake-status.warn .wake-dot { background: #ffcb72; }
+
+    .timer-card {
+      position: relative;
+      min-width: 0;
+      overflow: hidden;
+      padding: clamp(24px, 6vw, 48px) clamp(18px, 5vw, 42px) clamp(22px, 5vw, 38px);
+      border: 1px solid var(--line);
+      border-radius: 28px;
+      background: linear-gradient(145deg, rgba(28, 23, 48, .94), rgba(10, 11, 18, .97) 68%);
+      box-shadow: 0 28px 90px rgba(0, 0, 0, .5), inset 0 1px rgba(255,255,255,.08);
+      isolation: isolate;
+    }
+    .timer-card::before {
+      position: absolute;
+      inset: 0;
+      z-index: -1;
+      content: "";
+      opacity: .85;
+      background: radial-gradient(circle at 50% 30%, rgba(82, 239, 255, .1), transparent 38%);
+      transition: background .3s ease;
+    }
+    .timer-card[data-phase="interval"]::before { background: radial-gradient(circle at 50% 30%, rgba(155, 105, 255, .22), transparent 42%); }
+    .timer-card[data-phase="paused"]::before { background: radial-gradient(circle at 50% 30%, rgba(255, 203, 114, .16), transparent 42%); }
+    .timer-card[data-phase="complete"]::before { background: radial-gradient(circle at 50% 30%, rgba(200, 255, 71, .14), transparent 42%); }
+    .phase {
+      display: flex;
+      min-height: 30px;
+      align-items: center;
+      justify-content: center;
+      gap: 9px;
+      color: var(--cyan);
+      font: 950 clamp(.72rem, 2.4vw, .92rem)/1 ui-monospace, SFMono-Regular, Consolas, monospace;
+      letter-spacing: .2em;
+      text-transform: uppercase;
+    }
+    .phase::before { width: 7px; height: 7px; content: ""; border-radius: 50%; background: currentColor; box-shadow: 0 0 13px currentColor; }
+    [data-phase="interval"] .phase { color: var(--violet); }
+    [data-phase="paused"] .phase { color: #ffcb72; }
+    [data-phase="complete"] .phase { color: var(--acid); }
+    .time {
+      margin: clamp(8px, 2vh, 16px) 0 4px;
+      text-align: center;
+      font-size: clamp(5.1rem, 24vw, 10.4rem);
+      font-weight: 1000;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: -.09em;
+      line-height: .84;
+      text-shadow: 0 0 38px rgba(82, 239, 255, .12);
+    }
+    .round-label { margin: 15px 0 0; color: var(--soft); text-align: center; font-size: clamp(.82rem, 2.8vw, 1.04rem); font-weight: 850; letter-spacing: .04em; }
+    .progress { height: 5px; margin-top: 22px; overflow: hidden; border-radius: 99px; background: rgba(255,255,255,.09); }
+    .progress-bar { width: 100%; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--violet), var(--cyan)); transform-origin: left; transition: background .25s ease; }
+    [data-phase="interval"] .progress-bar { background: linear-gradient(90deg, var(--pink), var(--violet)); }
+    [data-phase="complete"] .progress-bar { background: var(--acid); }
+
+    .controls { display: grid; grid-template-columns: 1fr 1.65fr 1fr; gap: 10px; }
+    .control {
+      min-height: 62px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: rgba(255,255,255,.055);
+      cursor: pointer;
+      font-size: clamp(.65rem, 2.5vw, .78rem);
+      font-weight: 1000;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      transition: transform .15s ease, border-color .15s ease, background .15s ease;
+    }
+    .control:active { transform: scale(.975); }
+    .control.primary { border-color: transparent; color: #07090b; background: var(--acid); box-shadow: 0 14px 35px rgba(200,255,71,.14); }
+    .control.pause { border-color: rgba(82,239,255,.3); color: var(--cyan); background: rgba(82,239,255,.075); }
+    .control.pause[data-paused="true"] { border-color: rgba(255,203,114,.35); color: #ffcb72; background: rgba(255,203,114,.07); }
+    .control:disabled { cursor: not-allowed; opacity: .35; }
+
+    .settings {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      background: var(--panel);
+      box-shadow: 0 18px 50px rgba(0,0,0,.22);
+    }
+    .setting { display: grid; gap: 7px; }
+    .setting label { color: var(--soft); font: 800 clamp(.54rem, 2vw, .65rem)/1.2 ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: .05em; text-align: center; text-transform: uppercase; }
+    .setting input {
+      width: 100%;
+      min-height: 48px;
+      padding: 0 8px;
+      border: 1px solid rgba(255,255,255,.13);
+      border-radius: 12px;
+      outline: 0;
+      color: white;
+      background: rgba(3,3,7,.55);
+      font-size: clamp(1.05rem, 4vw, 1.28rem);
+      font-weight: 950;
+      text-align: center;
+      font-variant-numeric: tabular-nums;
+    }
+    .setting input:focus { border-color: var(--cyan); box-shadow: 0 0 0 3px rgba(82,239,255,.1); }
+    .setting input:disabled { opacity: .4; }
+    .footer-actions { display: flex; justify-content: center; gap: 18px; }
+    .text-button { padding: 7px; border: 0; color: var(--soft); background: none; cursor: pointer; font-size: .65rem; font-weight: 850; letter-spacing: .07em; text-transform: uppercase; }
+    .text-button:hover { color: white; }
+    .sound-note { margin: -2px 0 0; color: #777382; text-align: center; font: 650 .59rem/1.45 ui-monospace, SFMono-Regular, Consolas, monospace; }
+
+    @media (max-height: 690px) and (orientation: landscape) {
+      .app { width: min(100% - 28px, 980px); grid-template-columns: 1.45fr 1fr; grid-template-rows: auto auto auto; align-content: center; }
+      .topbar { grid-column: 1 / -1; }
+      .timer-card { grid-row: 2 / 4; padding-block: 22px; }
+      .time { font-size: clamp(5rem, 20vh, 8rem); }
+      .controls { align-self: end; }
+      .settings { align-self: start; }
+      .footer-actions, .sound-note { display: none; }
+    }
+    @media (max-width: 390px) {
+      .wake-status { padding-inline: 9px; }
+      .wake-copy { display: none; }
+      .settings { padding: 11px 8px; gap: 7px; }
+    }
+    @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; transition: none !important; } }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <header class="topbar">
+      <div class="brand">
+        <strong>Fight Timer</strong>
+        <span>Poopcade ringside utility</span>
+      </div>
+      <button class="wake-status" id="wakeStatus" type="button" aria-live="polite" title="Screen wake lock status">
+        <span class="wake-dot"></span><span class="wake-copy">Keep awake</span>
+      </button>
+    </header>
+
+    <section class="timer-card" id="timerCard" data-phase="ready" aria-live="polite">
+      <div class="phase" id="phaseLabel">Ready</div>
+      <div class="time" id="timeDisplay">02:00</div>
+      <p class="round-label" id="roundLabel">Round 1 of 3</p>
+      <div class="progress" aria-hidden="true"><div class="progress-bar" id="progressBar"></div></div>
+    </section>
+
+    <div class="controls">
+      <button class="control" id="resetButton" type="button">Reset</button>
+      <button class="control primary" id="startButton" type="button">Start fight</button>
+      <button class="control pause" id="pauseButton" type="button" disabled>Pause</button>
+    </div>
+
+    <section class="settings" aria-label="Fight settings">
+      <div class="setting">
+        <label for="roundsInput">Rounds</label>
+        <input id="roundsInput" type="number" value="3" min="1" max="30" step="1" inputmode="numeric">
+      </div>
+      <div class="setting">
+        <label for="roundMinutesInput">Round min</label>
+        <input id="roundMinutesInput" type="number" value="2" min="0.25" max="60" step="0.25" inputmode="decimal">
+      </div>
+      <div class="setting">
+        <label for="intervalMinutesInput">Interval min</label>
+        <input id="intervalMinutesInput" type="number" value="1" min="0.25" max="15" step="0.25" inputmode="decimal">
+      </div>
+    </section>
+
+    <div class="footer-actions">
+      <button class="text-button" id="soundButton" type="button">Test sounds</button>
+      <button class="text-button" id="fullscreenButton" type="button">Full screen</button>
+    </div>
+    <p class="sound-note" id="soundNote">Single ding to start · double ding to finish · 3 claps at 10 seconds</p>
+  </main>
+
+  <script>
+    (() => {
+      'use strict';
+
+      const els = {
+        card: document.getElementById('timerCard'),
+        phase: document.getElementById('phaseLabel'),
+        time: document.getElementById('timeDisplay'),
+        round: document.getElementById('roundLabel'),
+        progress: document.getElementById('progressBar'),
+        start: document.getElementById('startButton'),
+        pause: document.getElementById('pauseButton'),
+        reset: document.getElementById('resetButton'),
+        sound: document.getElementById('soundButton'),
+        fullscreen: document.getElementById('fullscreenButton'),
+        wake: document.getElementById('wakeStatus'),
+        wakeCopy: document.querySelector('.wake-copy'),
+        inputs: [
+          document.getElementById('roundsInput'),
+          document.getElementById('roundMinutesInput'),
+          document.getElementById('intervalMinutesInput')
+        ]
+      };
+
+      let settings = readSettings();
+      let state = 'ready';
+      let currentRound = 1;
+      let phaseDurationMs = settings.roundMs;
+      let remainingMs = phaseDurationMs;
+      let deadline = 0;
+      let animationFrame = 0;
+      let clapperPlayed = false;
+      let audioContext = null;
+      let wakeLock = null;
+
+      function clamp(value, min, max, fallback) {
+        const number = Number(value);
+        return Number.isFinite(number) ? Math.min(max, Math.max(min, number)) : fallback;
+      }
+
+      function readSettings() {
+        const rounds = Math.round(clamp(els.inputs[0].value, 1, 30, 3));
+        const roundMinutes = clamp(els.inputs[1].value, .25, 60, 2);
+        const intervalMinutes = clamp(els.inputs[2].value, .25, 15, 1);
+        els.inputs[0].value = rounds;
+        els.inputs[1].value = roundMinutes;
+        els.inputs[2].value = intervalMinutes;
+        return { rounds, roundMs: roundMinutes * 60000, intervalMs: intervalMinutes * 60000 };
+      }
+
+      function formatTime(ms) {
+        const totalSeconds = Math.max(0, Math.ceil(ms / 1000));
+        const minutes = Math.floor(totalSeconds / 60);
+        const seconds = totalSeconds % 60;
+        return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+      }
+
+      function setInputsDisabled(disabled) {
+        els.inputs.forEach(input => { input.disabled = disabled; });
+      }
+
+      function render() {
+        const isPaused = state === 'paused';
+        const displayPhase = isPaused ? 'paused' : state;
+        const progress = phaseDurationMs > 0 ? Math.max(0, Math.min(1, remainingMs / phaseDurationMs)) : 0;
+        els.card.dataset.phase = displayPhase;
+        els.time.textContent = formatTime(remainingMs);
+        els.progress.style.transform = `scaleX(${progress})`;
+        els.pause.dataset.paused = String(isPaused);
+
+        if (state === 'ready') {
+          els.phase.textContent = 'Ready';
+          els.round.textContent = `Round 1 of ${settings.rounds}`;
+          els.start.textContent = 'Start fight';
+        } else if (state === 'round') {
+          els.phase.textContent = 'Fight';
+          els.round.textContent = `Round ${currentRound} of ${settings.rounds}`;
+          els.start.textContent = 'Fight running';
+        } else if (state === 'interval') {
+          els.phase.textContent = 'Seconds out';
+          els.round.textContent = `Next: Round ${currentRound + 1} of ${settings.rounds}`;
+          els.start.textContent = 'Fight running';
+        } else if (state === 'paused') {
+          els.phase.textContent = 'Paused';
+          els.round.textContent = pausedFrom === 'round'
+            ? `Round ${currentRound} of ${settings.rounds}`
+            : `Next: Round ${currentRound + 1} of ${settings.rounds}`;
+          els.start.textContent = 'Fight paused';
+        } else {
+          els.phase.textContent = 'Fight complete';
+          els.round.textContent = `${settings.rounds} ${settings.rounds === 1 ? 'round' : 'rounds'} complete`;
+          els.start.textContent = 'Start again';
+        }
+
+        els.start.disabled = state === 'round' || state === 'interval' || state === 'paused';
+        els.pause.disabled = state === 'ready' || state === 'complete';
+        els.pause.textContent = isPaused ? 'Resume' : 'Pause';
+      }
+
+      let pausedFrom = 'round';
+
+      function beginPhase(nextState, durationMs, shouldRing = false) {
+        state = nextState;
+        phaseDurationMs = durationMs;
+        remainingMs = durationMs;
+        deadline = performance.now() + durationMs;
+        clapperPlayed = false;
+        if (shouldRing) playStartBell();
+        render();
+        cancelAnimationFrame(animationFrame);
+        animationFrame = requestAnimationFrame(tick);
+      }
+
+      function tick(now) {
+        if (state !== 'round' && state !== 'interval') return;
+        remainingMs = Math.max(0, deadline - now);
+
+        if (!clapperPlayed && phaseDurationMs > 10000 && remainingMs <= 10000) {
+          clapperPlayed = true;
+          playClapper();
+        }
+
+        render();
+        if (remainingMs <= 0) {
+          if (state === 'round') {
+            playEndBell();
+            if (currentRound >= settings.rounds) {
+              state = 'complete';
+              remainingMs = 0;
+              setInputsDisabled(false);
+              render();
+              return;
+            }
+            beginPhase('interval', settings.intervalMs);
+          } else {
+            currentRound += 1;
+            beginPhase('round', settings.roundMs, true);
+          }
+          return;
+        }
+        animationFrame = requestAnimationFrame(tick);
+      }
+
+      async function prepareAudio() {
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContext) return false;
+        audioContext ||= new AudioContext();
+        if (audioContext.state === 'suspended') await audioContext.resume();
+        return true;
+      }
+
+      async function playBell(strikes = 1) {
+        if (!await prepareAudio()) return;
+        const now = audioContext.currentTime;
+        const compressor = audioContext.createDynamicsCompressor();
+        compressor.threshold.value = -10;
+        compressor.knee.value = 8;
+        compressor.ratio.value = 8;
+        compressor.attack.value = .002;
+        compressor.release.value = .18;
+        compressor.connect(audioContext.destination);
+
+        for (let strike = 0; strike < strikes; strike += 1) {
+          const strikeAt = now + strike * .52;
+          const master = audioContext.createGain();
+          master.gain.setValueAtTime(.0001, strikeAt);
+          master.gain.exponentialRampToValueAtTime(1.35, strikeAt + .006);
+          master.gain.exponentialRampToValueAtTime(.0001, strikeAt + 1.9);
+          master.connect(compressor);
+
+          [523.25, 659.25, 783.99, 1046.5, 1318.51].forEach((frequency, index) => {
+            const oscillator = audioContext.createOscillator();
+            const gain = audioContext.createGain();
+            oscillator.type = index < 2 ? 'sine' : 'triangle';
+            oscillator.frequency.setValueAtTime(frequency, strikeAt);
+            oscillator.frequency.exponentialRampToValueAtTime(frequency * .988, strikeAt + 1.8);
+            gain.gain.value = [.55, .36, .23, .14, .09][index];
+            oscillator.connect(gain).connect(master);
+            oscillator.start(strikeAt);
+            oscillator.stop(strikeAt + 2);
+          });
+        }
+        vibrate(strikes === 1 ? 140 : [140, 120, 180]);
+      }
+
+      function playStartBell() { return playBell(1); }
+      function playEndBell() { return playBell(2); }
+
+      async function playClapper() {
+        if (!await prepareAudio()) return;
+        const now = audioContext.currentTime;
+        const length = Math.floor(audioContext.sampleRate * .105);
+        const buffer = audioContext.createBuffer(1, length, audioContext.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < length; i += 1) data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / length, 2);
+
+        const compressor = audioContext.createDynamicsCompressor();
+        compressor.threshold.value = -12;
+        compressor.knee.value = 6;
+        compressor.ratio.value = 10;
+        compressor.attack.value = .001;
+        compressor.release.value = .1;
+        compressor.connect(audioContext.destination);
+
+        [0, .16, .32].forEach(offset => {
+          const source = audioContext.createBufferSource();
+          const filter = audioContext.createBiquadFilter();
+          const gain = audioContext.createGain();
+          source.buffer = buffer;
+          filter.type = 'bandpass';
+          filter.frequency.value = 1450;
+          filter.Q.value = .65;
+          gain.gain.setValueAtTime(2.2, now + offset);
+          gain.gain.exponentialRampToValueAtTime(.001, now + offset + .1);
+          source.connect(filter).connect(gain).connect(compressor);
+          source.start(now + offset);
+        });
+        vibrate([55, 65, 55, 65, 55]);
+      }
+
+      function vibrate(pattern) {
+        if ('vibrate' in navigator) navigator.vibrate(pattern);
+      }
+
+      async function acquireWakeLock() {
+        if (!('wakeLock' in navigator) || document.visibilityState !== 'visible') {
+          els.wake.className = 'wake-status warn';
+          els.wakeCopy.textContent = 'Keep screen on';
+          return;
+        }
+        try {
+          if (!wakeLock) {
+            wakeLock = await navigator.wakeLock.request('screen');
+            wakeLock.addEventListener('release', () => {
+              wakeLock = null;
+              if (document.visibilityState === 'visible') acquireWakeLock();
+            });
+          }
+          els.wake.className = 'wake-status on';
+          els.wakeCopy.textContent = 'Screen awake';
+        } catch (error) {
+          els.wake.className = 'wake-status warn';
+          els.wakeCopy.textContent = 'Tap to wake';
+        }
+      }
+
+      async function startFight() {
+        await prepareAudio();
+        acquireWakeLock();
+        settings = readSettings();
+        currentRound = 1;
+        setInputsDisabled(true);
+        beginPhase('round', settings.roundMs, true);
+      }
+
+      function togglePause() {
+        if (state === 'round' || state === 'interval') {
+          pausedFrom = state;
+          remainingMs = Math.max(0, deadline - performance.now());
+          state = 'paused';
+          cancelAnimationFrame(animationFrame);
+          vibrate(40);
+          render();
+        } else if (state === 'paused') {
+          state = pausedFrom;
+          deadline = performance.now() + remainingMs;
+          vibrate(40);
+          render();
+          animationFrame = requestAnimationFrame(tick);
+        }
+      }
+
+      function resetFight() {
+        cancelAnimationFrame(animationFrame);
+        settings = readSettings();
+        state = 'ready';
+        currentRound = 1;
+        phaseDurationMs = settings.roundMs;
+        remainingMs = phaseDurationMs;
+        clapperPlayed = false;
+        setInputsDisabled(false);
+        render();
+      }
+
+      els.start.addEventListener('click', startFight);
+      els.pause.addEventListener('click', togglePause);
+      els.reset.addEventListener('click', resetFight);
+      els.inputs.forEach(input => input.addEventListener('change', resetFight));
+      els.sound.addEventListener('click', async () => {
+        await playClapper();
+        window.setTimeout(playStartBell, 850);
+        window.setTimeout(playEndBell, 2100);
+        acquireWakeLock();
+      });
+      els.fullscreen.addEventListener('click', async () => {
+        try {
+          if (!document.fullscreenElement) await document.documentElement.requestFullscreen();
+          else await document.exitFullscreen();
+        } catch (error) { /* Fullscreen is optional on browsers that block it. */ }
+        acquireWakeLock();
+      });
+      els.wake.addEventListener('click', acquireWakeLock);
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') acquireWakeLock();
+      });
+      document.addEventListener('pointerdown', acquireWakeLock, { once: true });
+      window.addEventListener('beforeunload', () => { if (wakeLock) wakeLock.release(); });
+
+      render();
+      acquireWakeLock();
+    })();
+  </script>
+</body>
+</html>
