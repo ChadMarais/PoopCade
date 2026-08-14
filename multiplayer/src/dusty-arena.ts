@@ -195,10 +195,8 @@ export class DustyOrbitArena extends DurableObject<Env> {
 
     if (message.type === "leave") {
       const player = session.role === "active" ? this.simulation.players.get(session.playerId) : null;
-      if (player) {
-        await this.persistFinalScore(this.scoreTokens.get(session.playerId) ?? session.accessToken, player, now);
-        this.simulation.removePlayer(session.playerId);
-      }
+      const scoreToken = this.scoreTokens.get(session.playerId) ?? session.accessToken;
+      if (player) this.simulation.removePlayer(session.playerId);
       this.scoreTokens.delete(session.playerId);
       session.role = "lobby";
       session.joinedAt = 0;
@@ -207,9 +205,10 @@ export class DustyOrbitArena extends DurableObject<Env> {
       session.joinPending = false;
       session.accessToken = undefined;
       socket.serializeAttachment(session);
+      socket.send(encode({ type: "leave_confirmed", playerId: session.playerId, at: now }));
       this.flushEvents();
-      this.sendLobbyState(socket);
       if (!this.simulation.players.size) this.stopLoop();
+      if (player) this.ctx.waitUntil(this.persistFinalScore(scoreToken, player, now));
       return;
     }
 

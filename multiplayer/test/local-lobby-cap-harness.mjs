@@ -65,13 +65,19 @@ try {
 
   const rejected = finalists[results.findIndex((message) => message.type === "join_rejected")];
   const leaveCursor = rejected.messages.length;
+  const departedCursor = clients[0].messages.length;
   clients[0].socket.send(JSON.stringify({ type: "leave" }));
+  await clients[0].waitFor((message) => message.type === "leave_confirmed", 5000, departedCursor);
   await rejected.waitFor((message) => message.type === "lobby_state" && message.activePlayers === 14, 5000, leaveCursor);
+  const helloCursor = clients[0].messages.length;
+  clients[0].socket.send(JSON.stringify({ type: "hello", sessionId: clients[0].sessionId, name: clients[0].name }));
+  await clients[0].waitFor((message) => message.type === "lobby_state", 5000, helloCursor);
+  assert.equal(clients[0].messages.slice(helloCursor).some((message) => message.type === "welcome"), false);
   const replacementCursor = rejected.messages.length;
   rejected.socket.send(JSON.stringify({ type: "join", name: rejected.name, skinId: "unknown-but-valid-id" }));
   const replacement = await rejected.waitFor((message) => message.type === "welcome", 5000, replacementCursor);
   assert.equal(replacement.player.skinId, "moon-blob-01");
-  console.log("Lobby wire QA passed: exact live aim, 16 lobby spectators, 15-player cap, final-slot race, leave/rejoin, and skin fallback.");
+  console.log("Lobby wire QA passed: exact live aim, 16 lobby spectators, 15-player cap, authoritative leave-to-lobby, final-slot race, and skin fallback.");
 } finally {
   for (const item of clients) {
     if (item.socket.readyState === WebSocket.OPEN) item.socket.send(JSON.stringify({ type: "leave" }));

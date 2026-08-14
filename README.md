@@ -83,7 +83,7 @@ The repository is configured for Cloudflare Workers Static Assets:
 - Worker JavaScript entry point: none
 - Static asset directory: repository root (`.`)
 - Upload exclusions: `.assetsignore` (including `android/` and `supabase/` source)
-- Production routes include `/`, `/games/orbit-shift/`, `/games/next/`, `/games/game-03/`, `/leaderboard/orbit-shift/`, `/leaderboard/next/`, `/leaderboard/dusty-orbit/`, and `/account/`. Dusty Orbit launches directly without a development-mode query parameter.
+- Production routes include `/`, `/games/orbit-shift/`, `/games/next/`, `/games/game-03/`, the overall `/leaderboard/`, `/leaderboard/orbit-shift/`, `/leaderboard/next/`, `/leaderboard/dusty-orbit/`, and `/account/`. Dusty Orbit launches directly without a development-mode query parameter.
 - Custom response headers: `_headers`
 
 No Content Security Policy is set yet because the current homepage and game use inline CSS and JavaScript, and the game uses WebAudio. A CSP should be designed and tested separately rather than added in a way that breaks the application.

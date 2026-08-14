@@ -15,6 +15,13 @@ export async function getLeaderboard(gameSlug = "orbit-shift", difficulty = "All
   return Array.isArray(data) ? data : [];
 }
 
+export async function getOverallLeaderboard(limit = 50) {
+  const safeLimit = Math.min(Math.max(Number(limit) || 50, 1), 100);
+  const { data, error } = await supabase.rpc("get_overall_leaderboard", { result_limit: safeLimit });
+  if (error) throw error;
+  return Array.isArray(data) ? data : [];
+}
+
 function setVisible(element, visible) {
   if (element) element.hidden = !visible;
 }
@@ -48,6 +55,26 @@ function renderRows(body, entries, gameSlug) {
       addCell(row, entry.level, "level-cell");
       addCell(row, entry.difficulty, "difficulty-cell");
     }
+    body.append(row);
+  });
+}
+
+function formatRank(value) {
+  const rank = Number(value);
+  return Number.isInteger(rank) && rank > 0 ? `#${rank}` : "—";
+}
+
+function renderOverallRows(body, entries) {
+  body.replaceChildren();
+  entries.forEach((entry) => {
+    const row = document.createElement("tr");
+    addCell(row, `#${entry.rank}`, "rank-cell");
+    addCell(row, entry.display_name, "name-cell");
+    addCell(row, Number(entry.rank_points).toLocaleString(), "score-cell");
+    addCell(row, `${Number(entry.games_ranked)}/${Number(entry.total_games) || 3}`, "difficulty-cell");
+    addCell(row, formatRank(entry.orbit_shift_rank), "level-cell");
+    addCell(row, formatRank(entry.next_rank), "level-cell");
+    addCell(row, formatRank(entry.dusty_orbit_rank), "level-cell");
     body.append(row);
   });
 }
@@ -142,5 +169,28 @@ function initLeaderboardPage(page) {
   void loadLeaderboard(page, selectedDifficulty, gameSlug);
 }
 
+async function loadOverallLeaderboard(page) {
+  const loading = page.querySelector("[data-loading]");
+  const empty = page.querySelector("[data-empty]");
+  const errorState = page.querySelector("[data-error]");
+  const table = page.querySelector("[data-table]");
+  const body = page.querySelector("[data-leaderboard-body]");
+  setVisible(loading, true); setVisible(empty, false); setVisible(errorState, false); setVisible(table, false);
+  try {
+    const entries = await getOverallLeaderboard();
+    if (!entries.length) setVisible(empty, true);
+    else { renderOverallRows(body, entries); setVisible(table, true); }
+  } catch {
+    setVisible(errorState, true);
+  } finally {
+    setVisible(loading, false);
+  }
+}
+
 const leaderboardPage = document.querySelector("[data-leaderboard-page]");
 if (leaderboardPage) initLeaderboardPage(leaderboardPage);
+const overallLeaderboardPage = document.querySelector("[data-overall-leaderboard-page]");
+if (overallLeaderboardPage) {
+  overallLeaderboardPage.querySelector("[data-retry]")?.addEventListener("click", () => void loadOverallLeaderboard(overallLeaderboardPage));
+  void loadOverallLeaderboard(overallLeaderboardPage);
+}

@@ -236,9 +236,11 @@ network = new ArenaNetwork({
       lobby.show();
       return;
     }
+    if (message.type === "leave_confirmed") { completeLeaveToLobby(); return; }
     if (message.type === "recruitment_status") { lobby.recruitmentStatus(message); return; }
     if (message.type === "recruitment") { showRecruitment(message); return; }
     if (message.type === "welcome") {
+      if (leavePending) { network.send({ type: "leave" }); return; }
       preloadCharacterSkin(message.player?.skinId);
       localId = message.playerId;
       serverRates = message.rates || serverRates;
@@ -514,21 +516,7 @@ mobileNukeButton.addEventListener("pointerdown", (event) => {
   if (!mobileNukeButton.disabled) nukeQueuedUntil = performance.now() + 800;
 });
 let leavePending = false;
-leaveGame.addEventListener("click", async () => {
-  if (!joined || !confirm("Leave the arena and return to the lobby?")) return;
-  if (leavePending) return;
-  leavePending = true;
-  leaveGame.disabled = true;
-  const finalPlayer = latestSnapshot?.players?.find((item) => item.id === localId);
-  if (authenticated && finalPlayer) {
-    highscoreStatus = "FINAL SAVE...";
-    const saved = await Promise.race([
-      highscoreTracker.flush(finalPlayer),
-      new Promise((resolve) => setTimeout(() => resolve(false), 4_000)),
-    ]);
-    if (!saved) highscoreStatus = "SERVER SAVE PENDING";
-  }
-  network.send({ type: "leave" });
+function completeLeaveToLobby() {
   joined = false;
   applicationState = "LOBBY";
   input.reset();
@@ -542,6 +530,31 @@ leaveGame.addEventListener("click", async () => {
   lobby.show();
   leavePending = false;
   leaveGame.disabled = false;
+  leaveGame.textContent = "LOBBY";
+}
+leaveGame.addEventListener("click", () => {
+  if (!joined || !confirm("Leave the arena and return to the lobby?")) return;
+  if (leavePending) return;
+  leavePending = true;
+  leaveGame.disabled = true;
+  leaveGame.textContent = "LEAVING…";
+  input.reset();
+  input.enabled = false;
+  const finalPlayer = latestSnapshot?.players?.find((item) => item.id === localId);
+  if (!network.send({ type: "leave" })) {
+    leavePending = false;
+    leaveGame.disabled = false;
+    leaveGame.textContent = "LOBBY";
+    input.enabled = connectionState === "online" && joined && !document.hidden;
+    return;
+  }
+  if (authenticated && finalPlayer) {
+    highscoreStatus = "FINAL SAVE...";
+    void Promise.race([
+      highscoreTracker.flush(finalPlayer),
+      new Promise((resolve) => setTimeout(() => resolve(false), 4_000)),
+    ]).then((saved) => { if (!saved) highscoreStatus = "SERVER SAVE PENDING"; });
+  }
 });
 document.addEventListener("visibilitychange", () => { input.reset(); input.enabled = connectionState === "online" && joined && !document.hidden; network.setActive(!document.hidden); if (!document.hidden) previousFrame = performance.now(); });
 addEventListener("beforeunload", () => { identity.release(); network.close(); });

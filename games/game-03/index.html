@@ -14,9 +14,9 @@
     canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; cursor: crosshair; outline: none; touch-action: none; user-select: none; -webkit-user-select: none; }
     canvas.collision-editing { cursor: grab; }
     .panel { position: fixed; z-index: 2; pointer-events: none; border: 1px solid rgba(117,239,255,.4); border-radius: 11px; background: rgba(18,8,27,.9); box-shadow: 0 12px 35px rgba(10,0,20,.38); backdrop-filter: blur(9px); }
-    .title { top: 12px; left: 12px; display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 9px; padding: 8px; pointer-events: auto; }
+    .title { top: 12px; left: 12px; display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 9px; padding: 8px; pointer-events: auto; }
     .home-link { display: grid; width: 31px; height: 31px; place-items: center; border: 1px solid rgba(255,255,255,.16); border-radius: 8px; color: #fff; text-decoration: none; background: rgba(255,255,255,.06); }
-    .leave-button { min-height:31px; padding:0 9px; border:1px solid rgba(255,183,104,.35); border-radius:8px; color:#ffd18c; background:rgba(255,151,72,.08); font:900 8px ui-monospace,monospace; cursor:pointer; }
+    .leave-button { min-height:31px; padding:0 9px; border:1px solid rgba(255,183,104,.35); border-radius:8px; color:#ffd18c; background:rgba(255,151,72,.08); font:900 8px ui-monospace,monospace; cursor:pointer; pointer-events:auto; }
     .title-copy { min-width: 0; }
     .title strong { display: block; letter-spacing: .14em; font-size: 14px; }
     .title span { display: block; margin-top: 3px; color: #75efff; font: 900 9px ui-monospace, monospace; letter-spacing: .13em; }
@@ -97,8 +97,7 @@
     </div>
   </main>
   <canvas id="world" tabindex="0" aria-label="Dusty Orbit multiplayer arena"></canvas>
-  <header class="panel title"><a id="homeLink" class="home-link" href="/" aria-label="Back to Poopcade">←</a><div class="title-copy"><strong>DUSTY ORBIT</strong><span>LIVE MULTIPLAYER ARENA</span></div></header>
-  <button id="leaveGame" class="panel leave-button" type="button">LOBBY</button>
+  <header class="panel title"><a id="homeLink" class="home-link" href="/" aria-label="Back to Poopcade">←</a><div class="title-copy"><strong>DUSTY ORBIT</strong><span>LIVE MULTIPLAYER ARENA</span></div><button id="leaveGame" class="leave-button" type="button">LOBBY</button></header>
   <div id="connection" class="panel status">LOADING</div>
   <pre id="gameplayHud" class="panel gameplay-hud">HP: ---\nSHIELD: NO\nWEAPON: T1 PEA SHOOTER\nSCORE: 0\nHIGHSCORE: ---\nNUKE: 0/10</pre>
   <pre id="debugHud" class="panel hud">Waiting for server…</pre>
@@ -125,6 +124,6 @@
   </div>
   <div id="loading" class="loading"><div><h1>DUSTY ORBIT</h1><p id="loadingText">LOADING MULTIPLAYER ASSETS…</p><div class="track"><div id="loadingBar" class="bar"></div></div></div></div>
   <a class="dusty-recruitment-toast" data-recruitment-toast href="/games/game-03/" hidden aria-live="polite"><strong>ORBITAL BAD DECISION INCOMING</strong><span data-recruitment-copy></span><b>GO TO THE LOBBY →</b></a>
-  <script type="module" src="./game.js?v=20260814-45"></script>
+  <script type="module" src="./game.js?v=20260814-46"></script>
 </body>
 </html>

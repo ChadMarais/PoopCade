@@ -35,3 +35,17 @@ test("lobby visibly separates waiting players from players already in the arena"
   assert.match(html, /data-lobby-roster/);
   assert.match(html, /FIGHTING RIGHT NOW/);
 });
+
+test("gameplay lobby button is clickable and waits for authoritative leave confirmation", async () => {
+  const [html, game, arena] = await Promise.all([
+    readFile(new URL("../../games/game-03/index.html", import.meta.url), "utf8"),
+    readFile(new URL("../../games/game-03/game.js", import.meta.url), "utf8"),
+    readFile(new URL("../src/dusty-arena.ts", import.meta.url), "utf8"),
+  ]);
+  assert.match(html, /id="leaveGame" class="leave-button"/);
+  assert.doesNotMatch(html, /id="leaveGame" class="panel leave-button"/);
+  assert.match(game, /message\.type === "leave_confirmed"/);
+  assert.match(game, /function completeLeaveToLobby\(\)/);
+  assert.ok(game.indexOf('network.send({ type: "leave" })') < game.indexOf("highscoreTracker.flush(finalPlayer)"));
+  assert.match(arena, /type: "leave_confirmed"/);
+});
