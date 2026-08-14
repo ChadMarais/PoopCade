@@ -242,7 +242,7 @@ test("teleport repeatedly chooses player-radius-safe points inside the world", (
   }
 });
 
-test("mole tunnels through rocks, blocks damage/pickups/fire, filters snapshots, and requires a clean exit press", () => {
+test("mole tunnels through rocks, blocks damage/pickups/fire, filters snapshots, and emerges firing", () => {
   const simulation = fresh(); const mole = add(simulation, A, "Guest-1001"); const viewer = add(simulation, B, "Guest-1002");
   const polygon = DUSTY_POLYGONS[0];
   const inside = polygon.find((point) => pointInPolygon({ x: point.x + 2, y: point.y + 2 }, polygon));
@@ -262,12 +262,13 @@ test("mole tunnels through rocks, blocks damage/pickups/fire, filters snapshots,
   mole.x = 300; mole.y = 300;
   simulation.applyInput(A, intent(3, { fire: false }), 1200); simulation.step(DUSTY_FIXED_DT, 1200);
   simulation.applyInput(A, intent(4, { fire: true }), 1234); simulation.step(DUSTY_FIXED_DT, 1234);
-  assert.equal(mole.moleMode, false); assert.equal(simulation.projectiles.length, 0);
+  assert.equal(mole.moleMode, false); assert.equal(simulation.projectiles.length, 1);
+  const ambushProjectileId = simulation.projectiles[0].id;
   const emerged = eventsOf(simulation, "mole_emerged")[0] as { playerId: string; x: number; y: number };
   assert.deepEqual({ playerId: emerged.playerId, x: emerged.x, y: emerged.y }, { playerId: mole.id, x: 300, y: 300 });
-  simulation.applyInput(A, intent(5, { fire: false }), 1268); simulation.step(DUSTY_FIXED_DT, 1268);
-  simulation.applyInput(A, intent(6, { fire: true }), 1302); simulation.step(DUSTY_FIXED_DT, 1302);
+  simulation.applyInput(A, intent(5, { fire: true }), 2268); simulation.step(DUSTY_FIXED_DT, 2268);
   assert.equal(simulation.projectiles.length, 1);
+  assert.notEqual(simulation.projectiles[0].id, ambushProjectileId, "held fire continues without a release");
 });
 
 test("mole timeout emerges on valid ground and force-resolves invalid camping", () => {

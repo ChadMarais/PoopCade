@@ -351,7 +351,12 @@ export class DustyOrbitSimulation {
     const fire = player.input.fire;
     if (player.moleMode) {
       if (fire && !player.lastFireInput) {
-        if (this.isValidNormalPosition(player)) { this.emerge(player, now, "manual"); player.suppressFireUntilRelease = true; }
+        if (this.isValidNormalPosition(player)) {
+          // The emergence press is also the ambush shot. Process the weapon in
+          // this exact tick and leave held fire active for its normal cadence.
+          this.emerge(player, now, "manual");
+          this.processWeapon(player, now);
+        }
         else { player.emergeBlockedUntil = now + 700; this.events.push({ type: "mole_blocked", playerId: player.id }); }
       }
     } else {
@@ -552,7 +557,7 @@ export class DustyOrbitSimulation {
 
   private emerge(player: DustyPlayer, now: number, reason: string): void {
     player.moleMode = false; player.moleUntil = 0; player.moleForceAt = 0;
-    if (player.input.fire) player.suppressFireUntilRelease = true;
+    player.suppressFireUntilRelease = false;
     this.resetPositionHistory(player, now);
     this.events.push({ type: "mole_emerged", playerId: player.id, x: player.x, y: player.y, reason, at: now });
   }

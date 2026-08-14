@@ -11,6 +11,9 @@ import {
 function clamp(value, min, max) { return Math.max(min, Math.min(max, value)); }
 function mix(a, b, amount) { return a + (b - a) * amount; }
 function smoothstep(amount) { const t = clamp(amount, 0, 1); return t * t * (3 - 2 * t); }
+export function snapshotRenderTime(snapshot, fallback = Date.now()) {
+  return Number.isFinite(snapshot?.t) ? snapshot.t : fallback;
+}
 function seededUnit(seed) {
   const value = Math.sin(seed * 12.9898 + 78.233) * 43758.5453;
   return value - Math.floor(value);
@@ -374,7 +377,10 @@ export class DustyOrbitMultiplayerRenderer {
     this.drawProjectiles(snapshot?.projectiles || []);
     this.drawLocalProjectiles();
     // Smoke must sit in front of combatants to function as visual cover.
-    this.drawFartClouds(snapshot?.fartClouds || []);
+    // Cloud timestamps come from the arena. Using the PC wall clock here can
+    // make every cloud permanently transparent when that clock is ahead or
+    // behind the server, so animate against the authoritative snapshot time.
+    this.drawFartClouds(snapshot?.fartClouds || [], snapshotRenderTime(snapshot));
     this.drawEffects("foreground");
     if (this.debug) {
       this.drawWeaponDebug();
@@ -1283,9 +1289,9 @@ export class DustyOrbitMultiplayerRenderer {
     ctx.restore();
   }
 
-  drawFartClouds(clouds) {
+  drawFartClouds(clouds, serverNow = Date.now()) {
     const ctx = this.ctx;
-    const now = Date.now();
+    const now = Number.isFinite(serverNow) ? serverNow : Date.now();
     for (const cloud of clouds) {
       const x = cloud.x - this.camera.x, y = cloud.y - this.camera.y;
       if (x + cloud.radius < -20 || x - cloud.radius > this.viewport.width + 20 || y + cloud.radius < -20 || y - cloud.radius > this.viewport.height + 20) continue;

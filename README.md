@@ -25,7 +25,7 @@ Poopcade is a static, mobile-first progressive web app containing small arcade g
 
 New games belong in their own directory under `games/`, with an `index.html` entry point. For example, a new game at `games/example/index.html` is available at `/games/example/`. Add its production route to the homepage and to the service worker's core or optional cache list as appropriate.
 
-Game 03 is the Dusty Orbit multiplayer development build at `games/game-03/`. Its separate Cloudflare Worker and Durable Object backend lives in `multiplayer/`; that directory is excluded from the static-assets upload and is deployed independently.
+Game 03 is the Dusty Orbit live multiplayer arena at `games/game-03/`. Its separate Cloudflare Worker and Durable Object backend lives in `multiplayer/`; that directory is excluded from the static-assets upload and is deployed independently.
 
 ## Run locally
 
@@ -83,7 +83,7 @@ The repository is configured for Cloudflare Workers Static Assets:
 - Worker JavaScript entry point: none
 - Static asset directory: repository root (`.`)
 - Upload exclusions: `.assetsignore` (including `android/` and `supabase/` source)
-- Production routes include `/`, `/games/orbit-shift/`, `/games/next/`, `/games/game-03/`, `/leaderboard/orbit-shift/`, `/leaderboard/next/`, `/leaderboard/dusty-orbit/`, and `/account/`. Game 03 is linked from the homepage only when the query contains exactly `devtest=true`.
+- Production routes include `/`, `/games/orbit-shift/`, `/games/next/`, `/games/game-03/`, `/leaderboard/orbit-shift/`, `/leaderboard/next/`, `/leaderboard/dusty-orbit/`, and `/account/`. Dusty Orbit launches directly without a development-mode query parameter.
 - Custom response headers: `_headers`
 
 No Content Security Policy is set yet because the current homepage and game use inline CSS and JavaScript, and the game uses WebAudio. A CSP should be designed and tested separately rather than added in a way that breaks the application.

@@ -17,11 +17,11 @@ In a second terminal, serve the repository root:
 python -m http.server 8080 --bind 127.0.0.1
 ```
 
-Open `http://127.0.0.1:8080/games/game-03/?devtest=true` in two tabs. Each tab opens as a lightweight lobby spectator and only consumes an active arena slot after `JOIN THE CHAOS` is confirmed by the Durable Object.
+Open `http://127.0.0.1:8080/games/game-03/` in two tabs. Each tab opens as a lightweight lobby spectator and only consumes an active arena slot after `JOIN THE CHAOS` is confirmed by the Durable Object.
 
 `npm.cmd run test:wire` starts a package-free protocol/rendering harness on port 8787. It is only a local QA fallback when Wrangler is unavailable; it is not the production server and does not replace validating the Durable Object with `npm.cmd run dev`.
 
-For a phone on the same trusted LAN, run `npm.cmd run dev:lan`, serve the static site with `--bind 0.0.0.0`, and open `http://YOUR-LAN-IP:8080/games/game-03/?devtest=true`. The frontend automatically uses `ws://YOUR-LAN-IP:8787/arena/dusty-orbit-001/ws`. Windows Firewall may require temporary private-network access. This plain-HTTP workflow is local development only.
+For a phone on the same trusted LAN, run `npm.cmd run dev:lan`, serve the static site with `--bind 0.0.0.0`, and open `http://YOUR-LAN-IP:8080/games/game-03/`. The frontend automatically uses `ws://YOUR-LAN-IP:8787/arena/dusty-orbit-001/ws`. Windows Firewall may require temporary private-network access. This plain-HTTP workflow is local development only.
 
 Before production deployment, set the confirmed secure Worker origin in `games/game-03/config.js`. The value must be the `wss://` origin only; the frontend appends `/arena/dusty-orbit-001/ws`.
 

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
-import { DustyOrbitMultiplayerRenderer } from "../../games/game-03/renderer.js";
+import { DustyOrbitMultiplayerRenderer, snapshotRenderTime } from "../../games/game-03/renderer.js";
 import { SHOULDER_SIDE_OFFSET, WEAPON_VISUALS, weaponPose, weaponVisualForTier } from "../../games/game-03/weapon-visuals.js";
 
 function close(actual, expected, tolerance = .001) {
@@ -310,6 +310,12 @@ test("render flushes local confirmations only after drawing the current gun pose
   assert.ok(render.indexOf("this.flushLocalShotConfirmations()") < render.indexOf('this.drawEffects("muzzle")'));
   assert.ok(render.indexOf('this.drawEffects("muzzle")') < render.indexOf("this.drawLocalProjectiles()"));
   assert.ok(render.indexOf("this.drawLocalProjectiles()") < render.indexOf('this.drawEffects("foreground")'));
+});
+
+test("fart clouds animate from server snapshot time despite a skewed PC clock", () => {
+  const serverNow = 1_000_000;
+  assert.equal(snapshotRenderTime({ t: serverNow }, serverNow + 60_000), serverNow);
+  assert.equal(snapshotRenderTime({}, serverNow + 60_000), serverNow + 60_000);
 });
 
 test("local mole burrow dirt uses the currently rendered movement lead instead of the stale pickup position", () => {

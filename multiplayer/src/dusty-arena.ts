@@ -11,6 +11,7 @@ import {
 import { DUSTY_GAMEPLAY, DUSTY_WEAPONS } from "./dusty-gameplay.ts";
 import { submitDustyOrbitFinalScore, type DustyFinalScorePlayer } from "./dusty-score.ts";
 import { validCharacterSkinId } from "../../games/game-03/character-skins.js";
+import { RECRUITMENT_COOLDOWN_MS, RECRUITMENT_HREF, recruitmentMessage } from "../../games/game-03/presence.js";
 
 type Env = { SUPABASE_URL?: string; SUPABASE_PUBLISHABLE_KEY?: string };
 type SessionRole = "lobby" | "active";
@@ -25,6 +26,7 @@ type Session = {
   windowStartedAt: number;
   messageCount: number;
   invalidCount: number;
+  lastRecruitAt: number;
   accessToken?: string;
 };
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -53,6 +55,7 @@ export class DustyOrbitArena extends DurableObject<Env> {
         windowStartedAt: now,
         messageCount: 0,
         invalidCount: 0,
+        lastRecruitAt: Number.isFinite(attachment.lastRecruitAt) ? Number(attachment.lastRecruitAt) : 0,
         ...(typeof attachment.accessToken === "string" ? { accessToken: attachment.accessToken } : {}),
       };
       this.sessions.set(socket, session);
@@ -77,9 +80,11 @@ export class DustyOrbitArena extends DurableObject<Env> {
     if (!UUID_PATTERN.test(playerId)) return new Response("A valid session UUID is required.", { status: 400 });
 
     let resumedAccessToken = this.scoreTokens.get(playerId);
+    let resumedLastRecruitAt = 0;
     for (const [existingSocket, existing] of this.sessions) {
       if (existing.playerId !== playerId) continue;
       resumedAccessToken = existing.accessToken;
+      resumedLastRecruitAt = existing.lastRecruitAt;
       this.sessions.delete(existingSocket);
       if (existing.role === "active") this.simulation.markDisconnected(existing.playerId, Date.now());
       try { existingSocket.close(4001, "Reconnected"); } catch {}
@@ -98,12 +103,13 @@ export class DustyOrbitArena extends DurableObject<Env> {
       windowStartedAt: Date.now(),
       messageCount: 0,
       invalidCount: 0,
+      lastRecruitAt: resumedLastRecruitAt,
       ...(resumedAccessToken ? { accessToken: resumedAccessToken } : {}),
     };
     server.serializeAttachment(session);
     this.ctx.acceptWebSocket(server, [playerId]);
     this.sessions.set(server, session);
-    this.sendLobbyState(server);
+    this.broadcastLobbyState();
     return new Response(null, { status: 101, webSocket: client });
   }
 
@@ -126,7 +132,7 @@ export class DustyOrbitArena extends DurableObject<Env> {
       if (message.sessionId !== session.playerId) { socket.close(1008, "Session mismatch"); return; }
       const existing = this.simulation.players.get(session.playerId);
       if (!existing) {
-        session.name = safeGuestName(message.name);
+        session.name = safePlayerName(message.name);
         socket.serializeAttachment(session);
         this.sendLobbyState(socket);
         return;
@@ -198,6 +204,25 @@ export class DustyOrbitArena extends DurableObject<Env> {
     }
 
     if (message.type === "ping") { socket.send(encode({ type: "pong", nonce: message.nonce, serverTime: now, tick: this.simulation.tick })); return; }
+    if (message.type === "recruit") {
+      const retryAt = session.lastRecruitAt + RECRUITMENT_COOLDOWN_MS;
+      if (now < retryAt) {
+        socket.send(encode({ type: "recruitment_status", accepted: false, retryAt }));
+        return;
+      }
+      session.lastRecruitAt = now;
+      socket.serializeAttachment(session);
+      socket.send(encode({ type: "recruitment_status", accepted: true, retryAt: now + RECRUITMENT_COOLDOWN_MS }));
+      this.broadcastPresence({
+        type: "recruitment",
+        playerId: session.playerId,
+        playerName: session.name,
+        message: recruitmentMessage(session.name),
+        href: RECRUITMENT_HREF,
+        sentAt: now,
+      }, socket);
+      return;
+    }
     if (session.role !== "active") return;
     this.simulation.noteMessage(session.playerId, now);
     if (message.type === "debug_powerup") { if (session.debug) this.simulation.debugGrantPowerup(session.playerId, message.powerup, now); return; }
@@ -266,6 +291,7 @@ export class DustyOrbitArena extends DurableObject<Env> {
     const session = this.sessions.get(socket);
     if (!session) return;
     this.sessions.delete(socket);
+    this.broadcastLobbyState();
     if (session.role !== "active") return;
     for (const current of this.sessions.values()) if (current.playerId === session.playerId && current.role === "active") return;
     this.simulation.markDisconnected(session.playerId, Date.now());
@@ -317,13 +343,28 @@ export class DustyOrbitArena extends DurableObject<Env> {
 
   private sendLobbyState(socket: WebSocket): void {
     if (socket.readyState !== 1) return;
-    try { socket.send(encode(this.simulation.lobbyState())); } catch {}
+    try { socket.send(encode(this.currentLobbyState())); } catch {}
   }
 
   private broadcastLobbyState(): void {
-    const encoded = encode(this.simulation.lobbyState());
+    const encoded = encode(this.currentLobbyState());
     for (const socket of this.sessions.keys()) {
       if (socket.readyState !== 1) continue;
+      try { socket.send(encoded); } catch {}
+    }
+  }
+
+  private currentLobbyState(now = Date.now()): Record<string, unknown> {
+    const onlinePlayers = new Set([...this.sessions.entries()]
+      .filter(([socket]) => socket.readyState === 1)
+      .map(([, session]) => session.playerId)).size;
+    return { ...this.simulation.lobbyState(now), onlinePlayers };
+  }
+
+  private broadcastPresence(message: unknown, excluded?: WebSocket): void {
+    const encoded = encode(message);
+    for (const socket of this.sessions.keys()) {
+      if (socket === excluded || socket.readyState !== 1) continue;
       try { socket.send(encoded); } catch {}
     }
   }

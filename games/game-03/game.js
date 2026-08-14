@@ -2,12 +2,13 @@ import { moveCircleWithSliding } from "./collision-geometry.js?v=20260813-2";
 import { CollisionEditor } from "./collision-editor.js?v=20260813-9";
 import { loadDustyOrbitAssets } from "./assets.js?v=20260813-13";
 import { PRODUCTION_ARENA_WSS } from "./config.js?v=20260812";
-import { DustyOrbitMultiplayerRenderer } from "./renderer.js?v=20260813-25";
+import { DustyOrbitMultiplayerRenderer } from "./renderer.js?v=20260814-26";
 import { InputController } from "./input.js?v=20260813-3";
 import { claimSessionIdentity, resolvePoopcadePlayerIdentity } from "./identity.js?v=20260813-2";
 import { ArenaNetwork } from "./network.js?v=20260813";
 import { consumeFixedStep, convergeVisualPosition } from "./timing.js?v=20260813-2";
-import { DustyLobby } from "./lobby.js?v=20260813-2";
+import { DustyLobby } from "./lobby.js?v=20260814-3";
+import { RECRUITMENT_HREF } from "./presence.js?v=20260814";
 import { DustyOrbitHighscoreTracker } from "./highscore.js?v=20260813-2";
 
 const INPUT_RATE = 30;
@@ -67,11 +68,14 @@ const gameplayHud = document.querySelector("#gameplayHud");
 const mobileFireLabel = document.querySelector("#mobileFireButton .mobile-fire-label");
 const mobileNukeButton = document.querySelector("#mobileNukeButton");
 const leaveGame = document.querySelector("#leaveGame");
-const devtest = parameters.get("devtest") === "true";
-document.querySelector("#homeLink").href = devtest ? "/?devtest=true" : "/";
-document.querySelector("[data-lobby-home]").href = devtest ? "/?devtest=true" : "/";
+if (parameters.has("devtest")) {
+  parameters.delete("devtest");
+  const remaining = parameters.toString();
+  history.replaceState(null, "", `${location.pathname}${remaining ? `?${remaining}` : ""}${location.hash}`);
+}
+document.querySelector("#homeLink").href = "/";
+document.querySelector("[data-lobby-home]").href = "/";
 document.querySelector(".title").append(leaveGame);
-document.querySelector("#devBadge").hidden = !devtest;
 debugHud.hidden = !debugCollision;
 const arenaEndpoint = endpoint();
 if (!arenaEndpoint) {
@@ -143,6 +147,20 @@ let nukeQueuedUntil = 0;
 let localSpeedBoostUntil = 0;
 let network;
 let highscoreStatus = authenticated ? "READY" : "SIGN IN TO SAVE";
+const recruitmentToast = document.querySelector("[data-recruitment-toast]");
+const recruitmentCopy = recruitmentToast.querySelector("[data-recruitment-copy]");
+let recruitmentToastTimer = 0;
+function showRecruitment(message) {
+  if (typeof message?.message !== "string") return;
+  recruitmentToast.href = typeof message.href === "string" ? message.href : RECRUITMENT_HREF;
+  recruitmentCopy.textContent = message.message;
+  recruitmentToast.hidden = false;
+  recruitmentToast.classList.remove("show");
+  void recruitmentToast.offsetWidth;
+  recruitmentToast.classList.add("show");
+  clearTimeout(recruitmentToastTimer);
+  recruitmentToastTimer = setTimeout(() => { recruitmentToast.classList.remove("show"); recruitmentToast.hidden = true; }, 12_000);
+}
 const highscoreTracker = new DustyOrbitHighscoreTracker({
   authenticated,
   submit: scoreApi?.submitDustyOrbitRun,
@@ -162,6 +180,7 @@ const lobby = new DustyLobby(document.querySelector("#lobby"), {
   },
   onRetry() { network.connect(true); },
   onSkinSelected(skinId) { preloadCharacterSkin(skinId); },
+  onRecruit() { return network?.send({ type: "recruit" }) === true; },
 });
 lobby.show();
 loading.classList.add("done");
@@ -217,6 +236,8 @@ network = new ArenaNetwork({
       lobby.show();
       return;
     }
+    if (message.type === "recruitment_status") { lobby.recruitmentStatus(message); return; }
+    if (message.type === "recruitment") { showRecruitment(message); return; }
     if (message.type === "welcome") {
       preloadCharacterSkin(message.player?.skinId);
       localId = message.playerId;

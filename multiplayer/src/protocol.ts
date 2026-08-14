@@ -29,9 +29,10 @@ export type ClientInput = {
 };
 
 export type ClientPing = { type: "ping"; nonce: string };
+export type ClientRecruit = { type: "recruit" };
 export type ClientDebugPowerup = { type: "debug_powerup"; powerup: "spy" | "speed" | "health" | "shield" | "teleport" | "mole" | "fart" };
 export type ClientDebugNuke = { type: "debug_nuke" };
-export type ClientMessage = ClientHello | ClientJoin | ClientLeave | ClientInput | ClientPing | ClientDebugPowerup | ClientDebugNuke;
+export type ClientMessage = ClientHello | ClientJoin | ClientLeave | ClientInput | ClientPing | ClientRecruit | ClientDebugPowerup | ClientDebugNuke;
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const GUEST_NAME_PATTERN = /^Guest-[0-9]{4}$/;
@@ -102,6 +103,8 @@ export function parseClientMessage(raw: string | ArrayBuffer): ClientMessage | n
     if (typeof value.nonce !== "string" || value.nonce.length < 1 || value.nonce.length > 64) return null;
     return { type: "ping", nonce: value.nonce };
   }
+
+  if (value.type === "recruit") return { type: "recruit" };
 
   if (value.type === "debug_powerup") {
     if (!["spy", "speed", "health", "shield", "teleport", "mole", "fart"].includes(String(value.powerup))) return null;

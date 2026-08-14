@@ -90,7 +90,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Game 03 is an active multiplayer development build. Prefer the network
+  // Game 03 is an active live multiplayer arena. Prefer the network
   // for its modules and artwork so a previously cached prototype cannot mix
   // with a newly deployed canonical build. Successful responses remain
   // available as an offline fallback.

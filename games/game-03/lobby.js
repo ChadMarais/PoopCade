@@ -1,6 +1,8 @@
 import { CHARACTER_SKINS, DEFAULT_CHARACTER_SKIN_ID, characterSkinById, enabledCharacterSkins } from "./character-skins.js?v=20260813";
+import { RECRUITMENT_COOLDOWN_MS, normalizedOnlinePlayers, recruitmentCooldownRemaining } from "./presence.js?v=20260814";
 
 const STORAGE_KEY = "poopcade.game03.skin";
+const RECRUIT_STORAGE_KEY = "poopcade.game03.recruit-retry-at";
 
 function score(value) {
   const number = Math.max(0, Number(value) || 0);
@@ -22,11 +24,12 @@ export function initialSkinId(storage = globalThis.localStorage, registry = CHAR
 }
 
 export class DustyLobby {
-  constructor(root, { playerName, authenticated, onJoin, onRetry, onSkinSelected }) {
+  constructor(root, { playerName, authenticated, onJoin, onRetry, onSkinSelected, onRecruit }) {
     this.root = root;
     this.onJoin = onJoin;
     this.onRetry = onRetry;
     this.onSkinSelected = onSkinSelected;
+    this.onRecruit = onRecruit;
     this.selectedSkinId = initialSkinId();
     this.state = "LOBBY";
     this.connectionState = "connecting";
@@ -42,9 +45,21 @@ export class DustyLobby {
     this.previewDescription = root.querySelector("[data-preview-description]");
     this.roster = root.querySelector("[data-lobby-roster]");
     this.count = root.querySelector("[data-player-count]");
+    this.onlineCount = root.querySelector("[data-online-count]");
     this.status = root.querySelector("[data-arena-status]");
     this.statusCopy = root.querySelector("[data-arena-status-copy]");
     this.join = root.querySelector("[data-join-arena]");
+    this.recruit = root.querySelector("[data-recruit-players]");
+    try { this.recruitRetryAt = Number(localStorage.getItem(RECRUIT_STORAGE_KEY)) || 0; } catch { this.recruitRetryAt = 0; }
+    addEventListener("storage", (event) => {
+      if (event.key !== RECRUIT_STORAGE_KEY) return;
+      this.recruitRetryAt = Number(event.newValue) || 0;
+      this.updateRecruitButton();
+    });
+    this.recruit.addEventListener("click", () => {
+      if (this.recruit.disabled || this.onRecruit?.() === false) return;
+      this.setRecruitRetryAt(Date.now() + RECRUITMENT_COOLDOWN_MS);
+    });
     this.join.addEventListener("click", () => {
       if (["lost", "failed"].includes(this.connectionState)) {
         this.setConnectionState("connecting");
@@ -57,7 +72,7 @@ export class DustyLobby {
     });
     this.renderSkinCards();
     this.selectSkin(this.selectedSkinId);
-    this.timer = setInterval(() => this.updateDurations(), 1000);
+    this.timer = setInterval(() => { this.updateDurations(); this.updateRecruitButton(); }, 1000);
   }
 
   renderSkinCards() {
@@ -114,6 +129,7 @@ export class DustyLobby {
     this.lobbyState = state;
     if (Number.isFinite(state.serverTime)) this.clockOffset = Date.now() - state.serverTime;
     this.count.textContent = `${state.activePlayers} / ${state.maxPlayers}`;
+    this.onlineCount.textContent = String(normalizedOnlinePlayers(state.onlinePlayers));
     this.roster.replaceChildren();
     if (!state.players?.length) {
       const empty = document.createElement("p");
@@ -159,6 +175,25 @@ export class DustyLobby {
     });
   }
 
+  setRecruitRetryAt(retryAt) {
+    this.recruitRetryAt = Number(retryAt) || 0;
+    try { localStorage.setItem(RECRUIT_STORAGE_KEY, String(this.recruitRetryAt)); } catch {}
+    this.updateRecruitButton();
+  }
+
+  recruitmentStatus(message) {
+    if (Number.isFinite(message?.retryAt)) this.setRecruitRetryAt(message.retryAt);
+  }
+
+  updateRecruitButton() {
+    const remaining = recruitmentCooldownRemaining(this.recruitRetryAt);
+    const offline = this.connectionState !== "online";
+    this.recruit.disabled = offline || remaining > 0;
+    this.recruit.textContent = remaining > 0
+      ? `AIRLOCK RATTLED · AGAIN IN ${remaining}s`
+      : offline ? "FINDING OTHER BAD INFLUENCES…" : "RATTLE THE AIRLOCK · FIND PLAYERS";
+  }
+
   renderStatus() {
     const full = Boolean(this.lobbyState.full);
     const connecting = this.connectionState === "connecting";
@@ -190,6 +225,7 @@ export class DustyLobby {
       this.join.textContent = "JOIN THE CHAOS";
       this.join.disabled = false;
     }
+    this.updateRecruitButton();
   }
 
   show() { this.root.hidden = false; document.documentElement.classList.add("lobby-visible"); }
