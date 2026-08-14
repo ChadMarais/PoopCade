@@ -2,15 +2,10 @@ import { distanceToPolygon, moveCircleWithSliding, pointInPolygon, sweptCircleIn
 import { weaponPose, weaponVisualForTier } from "../../games/game-03/weapon-visuals.js";
 import { FART_CLOUD_GROW_MS, fartCloudGrowth } from "../../games/game-03/effect-timing.js";
 import {
-  DUSTY_MAP,
+  DUSTY_MAP_RUNTIME,
   DUSTY_PLAYER_HIT_RADIUS,
   DUSTY_PLAYER_RADIUS,
-  DUSTY_POLYGONS,
-  DUSTY_PROJECTILE_POLYGONS,
-  DUSTY_SATELLITES,
-  DUSTY_SATELLITE_CONNECT_TOLERANCE,
-  DUSTY_SATELLITE_DISCONNECT_TOLERANCE,
-  DUSTY_SPAWNS,
+  type MurderballMapRuntime,
   type Point,
 } from "./dusty-map.ts";
 import { DUSTY_GAMEPLAY, DUSTY_WEAPONS, POWERUP_TYPES, weaponForTier, type PowerupType, type WeaponDefinition } from "./dusty-gameplay.ts";
@@ -146,13 +141,17 @@ export class DustyOrbitSimulation {
   private readonly positionHistory = new Map<string, DustyPositionSample[]>();
   private readonly playerCollisionAt = new Map<string, number>();
   private readonly random: () => number;
+  readonly mapRuntime: MurderballMapRuntime;
   private readonly validWorldPoints: Point[];
   threatLeaderId: string | null = null;
   threatLeaderIds: string[] = [];
   tick = 0;
 
-  constructor(random: () => number = Math.random) {
+  get maxPlayers(): number { return this.mapRuntime.map.maxPlayers; }
+
+  constructor(random: () => number = Math.random, mapRuntime: MurderballMapRuntime = DUSTY_MAP_RUNTIME) {
     this.random = random;
+    this.mapRuntime = mapRuntime;
     this.validWorldPoints = this.buildValidWorldPoints();
     this.maintainPickups(0);
   }
@@ -164,7 +163,7 @@ export class DustyOrbitSimulation {
       if (options.skinId) existing.skinId = validCharacterSkinId(options.skinId);
       existing.disconnectedAt = 0; existing.lastMessageAt = now; return existing;
     }
-    if (this.players.size >= DUSTY_MAX_PLAYERS) throw new Error("arena-full");
+    if (this.players.size >= this.maxPlayers) throw new Error("arena-full");
     const spawn = this.chooseInitialSpawn();
     const player: DustyPlayer = {
       id, name, skinId: validCharacterSkinId(options.skinId ?? DEFAULT_CHARACTER_SKIN_ID),
@@ -242,7 +241,7 @@ export class DustyOrbitSimulation {
     const player = this.players.get(id);
     if (!player?.alive || player.moleMode) return false;
     const applied = this.applyPowerup(player, type, now);
-    if (applied) this.events.push({ type: "powerup_collected", playerId: player.id, pickupId: "debug", powerup: type });
+    if (applied) this.events.push({ type: "powerup_collected", playerId: player.id, pickupId: "debug", powerup: type, x: player.x, y: player.y });
     return applied;
   }
 
@@ -292,9 +291,9 @@ export class DustyOrbitSimulation {
       movementStarts.set(player.id, { x: player.x, y: player.y });
       const displacement = { x: player.vx * dt, y: player.vy * dt };
       const moved = player.moleMode ? { x: player.x + displacement.x, y: player.y + displacement.y } :
-        moveCircleWithSliding(player, displacement, DUSTY_PLAYER_RADIUS, DUSTY_POLYGONS);
-      player.x = clamp(moved.x, DUSTY_PLAYER_RADIUS, DUSTY_MAP.width - DUSTY_PLAYER_RADIUS);
-      player.y = clamp(moved.y, DUSTY_PLAYER_RADIUS, DUSTY_MAP.height - DUSTY_PLAYER_RADIUS);
+        moveCircleWithSliding(player, displacement, DUSTY_PLAYER_RADIUS, this.mapRuntime.polygons);
+      player.x = clamp(moved.x, DUSTY_PLAYER_RADIUS, this.mapRuntime.map.width - DUSTY_PLAYER_RADIUS);
+      player.y = clamp(moved.y, DUSTY_PLAYER_RADIUS, this.mapRuntime.map.height - DUSTY_PLAYER_RADIUS);
       this.collectPickups(player, now);
       this.processActions(player, now);
       this.updateSatelliteConnection(player);
@@ -509,8 +508,8 @@ export class DustyOrbitSimulation {
       const start = { x: projectile.x, y: projectile.y };
       const end = { x: projectile.x + projectile.vx * dt, y: projectile.y + projectile.vy * dt };
       let hit: { t: number; kind: "rock" | "player" | "boundary"; id?: string } | null = null;
-      if (end.x < 0 || end.y < 0 || end.x > DUSTY_MAP.width || end.y > DUSTY_MAP.height) hit = { t: 1, kind: "boundary" };
-      for (const polygon of DUSTY_PROJECTILE_POLYGONS) {
+      if (end.x < 0 || end.y < 0 || end.x > this.mapRuntime.map.width || end.y > this.mapRuntime.map.height) hit = { t: 1, kind: "boundary" };
+      for (const polygon of this.mapRuntime.projectilePolygons) {
         const t = sweptPolygonTime(start, end, projectile.radius, polygon);
         if (t !== null && (!hit || t < hit.t)) hit = { t, kind: "rock" };
       }
@@ -563,8 +562,8 @@ export class DustyOrbitSimulation {
     victim.pendingInput = null; victim.lastProcessedInputSeq = victim.lastInputSeq;
     victim.respawnAt = now + DUSTY_RESPAWN_MS; victim.protectedUntil = 0;
     if (killer && killer.id !== victim.id) this.creditKill(killer);
-    this.events.push({ type: "kill", cause, killerId, killerName: killer?.name ?? "DUSTY ORBIT", victimId: victim.id, victimName: victim.name, kills: killer?.kills ?? 0 });
-    this.events.push({ type: "death", cause, victimId: victim.id, victimName: victim.name, killerId, killerName: killer?.name ?? "DUSTY ORBIT", x: deathX, y: deathY, respawnAt: victim.respawnAt });
+    this.events.push({ type: "kill", cause, killerId, killerName: killer?.name ?? "NEBULA MURDERBALL", victimId: victim.id, victimName: victim.name, kills: killer?.kills ?? 0 });
+    this.events.push({ type: "death", cause, victimId: victim.id, victimName: victim.name, killerId, killerName: killer?.name ?? "NEBULA MURDERBALL", x: deathX, y: deathY, respawnAt: victim.respawnAt });
   }
 
   private creditKill(killer: DustyPlayer): void {
@@ -605,7 +604,7 @@ export class DustyOrbitSimulation {
       if (!pickup.active || Math.hypot(player.x - pickup.x, player.y - pickup.y) > distance) continue;
       if (!this.applyPowerup(player, pickup.type, now)) continue;
       pickup.active = false; pickup.respawnAt = now + DUSTY_GAMEPLAY.pickupRespawnMs;
-      this.events.push({ type: "powerup_collected", playerId: player.id, pickupId: pickup.id, powerup: pickup.type });
+      this.events.push({ type: "powerup_collected", playerId: player.id, pickupId: pickup.id, powerup: pickup.type, x: player.x, y: player.y });
     }
   }
 
@@ -646,18 +645,18 @@ export class DustyOrbitSimulation {
       player.connectedSatelliteId = null;
       return;
     }
-    const connected = DUSTY_SATELLITES.find((satellite) => satellite.id === player.connectedSatelliteId);
+    const connected = this.mapRuntime.satellites.find((satellite) => satellite.id === player.connectedSatelliteId);
     if (connected) {
       const edgeGap = Math.max(0, distanceToPolygon(player, connected.polygon) - DUSTY_PLAYER_RADIUS);
-      if (edgeGap <= DUSTY_SATELLITE_DISCONNECT_TOLERANCE) return;
+      if (edgeGap <= this.mapRuntime.satelliteDisconnectTolerance) return;
     }
-    let nearest: (typeof DUSTY_SATELLITES)[number] | null = null;
+    let nearest: MurderballMapRuntime["satellites"][number] | null = null;
     let nearestGap = Number.POSITIVE_INFINITY;
-    for (const satellite of DUSTY_SATELLITES) {
+    for (const satellite of this.mapRuntime.satellites) {
       const edgeGap = Math.max(0, distanceToPolygon(player, satellite.polygon) - DUSTY_PLAYER_RADIUS);
       if (edgeGap < nearestGap) { nearest = satellite; nearestGap = edgeGap; }
     }
-    player.connectedSatelliteId = nearest && nearestGap <= DUSTY_SATELLITE_CONNECT_TOLERANCE ? nearest.id : null;
+    player.connectedSatelliteId = nearest && nearestGap <= this.mapRuntime.satelliteConnectTolerance ? nearest.id : null;
   }
 
   private maintainPickups(now: number): void {
@@ -675,7 +674,7 @@ export class DustyOrbitSimulation {
 
   private buildValidWorldPoints(): Point[] {
     const points: Point[] = [];
-    for (let y = 140; y <= DUSTY_MAP.height - 140; y += 180) for (let x = 140; x <= DUSTY_MAP.width - 140; x += 220) {
+    for (let y = 140; y <= this.mapRuntime.map.height - 140; y += 180) for (let x = 140; x <= this.mapRuntime.map.width - 140; x += 220) {
       const point = { x, y };
       if (this.isValidNormalPosition(point)) points.push(point);
     }
@@ -683,8 +682,8 @@ export class DustyOrbitSimulation {
   }
 
   isValidNormalPosition(point: Point): boolean {
-    if (point.x < DUSTY_PLAYER_RADIUS || point.y < DUSTY_PLAYER_RADIUS || point.x > DUSTY_MAP.width - DUSTY_PLAYER_RADIUS || point.y > DUSTY_MAP.height - DUSTY_PLAYER_RADIUS) return false;
-    return DUSTY_POLYGONS.every((polygon) => !pointInPolygon(point, polygon) && distanceToPolygon(point, polygon) >= DUSTY_PLAYER_RADIUS);
+    if (point.x < DUSTY_PLAYER_RADIUS || point.y < DUSTY_PLAYER_RADIUS || point.x > this.mapRuntime.map.width - DUSTY_PLAYER_RADIUS || point.y > this.mapRuntime.map.height - DUSTY_PLAYER_RADIUS) return false;
+    return this.mapRuntime.polygons.every((polygon) => !pointInPolygon(point, polygon) && distanceToPolygon(point, polygon) >= DUSTY_PLAYER_RADIUS);
   }
 
   private choosePickupPoint(ignorePickupId: number): Point | null {
@@ -710,11 +709,11 @@ export class DustyOrbitSimulation {
   private chooseTeleport(playerId: string): Point {
     const candidates = this.validWorldPoints.filter((point) => [...this.players.values()].every((other) => !other.alive || other.id === playerId || Math.hypot(point.x - other.x, point.y - other.y) >= DUSTY_GAMEPLAY.teleportPlayerClearance));
     const source = candidates.length ? candidates : this.validWorldPoints;
-    return source[Math.floor(this.random() * source.length) % source.length] ?? DUSTY_SPAWNS[0];
+    return source[Math.floor(this.random() * source.length) % source.length] ?? this.mapRuntime.spawns[0];
   }
 
   private nearestValidPoint(point: Point): Point {
-    let best = this.validWorldPoints[0] ?? DUSTY_SPAWNS[0], distance = Number.POSITIVE_INFINITY;
+    let best = this.validWorldPoints[0] ?? this.mapRuntime.spawns[0], distance = Number.POSITIVE_INFINITY;
     for (const candidate of this.validWorldPoints) {
       const next = Math.hypot(point.x - candidate.x, point.y - candidate.y);
       if (next < distance) { best = candidate; distance = next; }
@@ -729,12 +728,12 @@ export class DustyOrbitSimulation {
     this.events.push({ type: "respawn", playerId: player.id, x: player.x, y: player.y, protectedUntil: player.protectedUntil });
   }
 
-  private chooseInitialSpawn(): Point { const spawn = DUSTY_SPAWNS[this.spawnCursor % DUSTY_SPAWNS.length]; this.spawnCursor++; return spawn; }
+  private chooseInitialSpawn(): Point { const spawn = this.mapRuntime.spawns[this.spawnCursor % this.mapRuntime.spawns.length]; this.spawnCursor++; return spawn; }
   private chooseRespawn(ignoreId: string): Point {
     const living = [...this.players.values()].filter((player) => player.alive && player.id !== ignoreId);
     if (!living.length) return this.chooseInitialSpawn();
-    let best = DUSTY_SPAWNS[0], bestDistance = -1;
-    for (const spawn of DUSTY_SPAWNS) {
+    let best = this.mapRuntime.spawns[0], bestDistance = -1;
+    for (const spawn of this.mapRuntime.spawns) {
       let nearest = Number.POSITIVE_INFINITY;
       for (const player of living) nearest = Math.min(nearest, Math.hypot(spawn.x - player.x, spawn.y - player.y));
       if (nearest > bestDistance) { best = spawn; bestDistance = nearest; }
@@ -753,7 +752,7 @@ export class DustyOrbitSimulation {
 
   private radarSource(player: DustyPlayer, now: number): "NONE" | "SPY" | "SATELLITE" | "SPY + SATELLITE" {
     const spy = player.spyUntil > now;
-    const satellite = DUSTY_SATELLITES.some((item) => item.id === player.connectedSatelliteId);
+    const satellite = this.mapRuntime.satellites.some((item) => item.id === player.connectedSatelliteId);
     if (spy && satellite) return "SPY + SATELLITE";
     if (spy) return "SPY";
     if (satellite) return "SATELLITE";
@@ -784,7 +783,7 @@ export class DustyOrbitSimulation {
       speedRemaining: Math.max(0, player.speedUntil - now), moleMode: player.moleMode,
       moleRemaining: player.moleMode ? Math.max(0, player.moleUntil - now) : 0,
       emergeBlocked: player.emergeBlockedUntil > now, concealed: this.isConcealed(player, now), alive: player.alive,
-      satelliteConnected: DUSTY_SATELLITES.some((item) => item.id === player.connectedSatelliteId),
+      satelliteConnected: this.mapRuntime.satellites.some((item) => item.id === player.connectedSatelliteId),
       connectedSatelliteId: player.connectedSatelliteId,
       respawnAt: player.respawnAt, protectedUntil: player.protectedUntil, color: player.color,
     });
@@ -800,8 +799,8 @@ export class DustyOrbitSimulation {
         id: viewerId,
         ack: viewer?.lastProcessedInputSeq ?? 0,
         radarSource: viewer ? this.radarSource(viewer, now) : "NONE",
-        satelliteDistance: viewer ? round(Math.min(...DUSTY_SATELLITES.map((satellite) => Math.max(0, distanceToPolygon(viewer, satellite.polygon) - DUSTY_PLAYER_RADIUS)))) : null,
-        nearestSatelliteId: viewer ? DUSTY_SATELLITES.reduce((nearest, satellite) => {
+        satelliteDistance: viewer && this.mapRuntime.satellites.length ? round(Math.min(...this.mapRuntime.satellites.map((satellite) => Math.max(0, distanceToPolygon(viewer, satellite.polygon) - DUSTY_PLAYER_RADIUS)))) : null,
+        nearestSatelliteId: viewer ? this.mapRuntime.satellites.reduce((nearest, satellite) => {
           const gap = Math.max(0, distanceToPolygon(viewer, satellite.polygon) - DUSTY_PLAYER_RADIUS);
           return gap < nearest.gap ? { id: satellite.id, gap } : nearest;
         }, { id: null as string | null, gap: Number.POSITIVE_INFINITY }).id : null,
@@ -814,7 +813,7 @@ export class DustyOrbitSimulation {
       threatLeaderId: this.threatLeaderId,
       threatLeaderIds: this.threatLeaderIds,
       totalPlayers: this.players.size,
-      activeSatelliteIds: DUSTY_SATELLITES.filter((satellite) => [...this.players.values()].some((player) => player.alive && player.connectedSatelliteId === satellite.id)).map((satellite) => satellite.id),
+      activeSatelliteIds: this.mapRuntime.satellites.filter((satellite) => [...this.players.values()].some((player) => player.alive && player.connectedSatelliteId === satellite.id)).map((satellite) => satellite.id),
       minimapPlayers,
     };
   }
@@ -832,11 +831,13 @@ export class DustyOrbitSimulation {
       }));
     return {
       type: "lobby_state",
-      arenaId: DUSTY_MAP.id,
+      arenaId: this.mapRuntime.map.id,
+      mapId: this.mapRuntime.map.mapId,
+      mapName: this.mapRuntime.map.name,
       serverTime: now,
       activePlayers: players.length,
-      maxPlayers: DUSTY_MAX_PLAYERS,
-      full: players.length >= DUSTY_MAX_PLAYERS,
+      maxPlayers: this.maxPlayers,
+      full: players.length >= this.maxPlayers,
       players,
     };
   }

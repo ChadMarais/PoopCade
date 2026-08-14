@@ -11,7 +11,7 @@ const player = {
 };
 const runId = "10000000-0000-4000-8000-000000000099" as `${string}-${string}-${string}-${string}-${string}`;
 
-test("final Dusty Orbit runs preserve the authoritative leave score, including zero", () => {
+test("final Nebula Murderball runs preserve the authoritative leave score, including zero", () => {
   assert.deepEqual(dustyOrbitFinalRun(player, 11_500, () => runId), {
     clientRunId: runId,
     gameSlug: "dusty-orbit",

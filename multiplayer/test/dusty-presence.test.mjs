@@ -12,7 +12,7 @@ import {
 test("recruitment copy is cheeky, safe to render as text, and links to the production lobby", () => {
   assert.equal(RECRUITMENT_COOLDOWN_MS, 60_000);
   assert.equal(RECRUITMENT_HREF, "/games/game-03/");
-  assert.match(recruitmentMessage("Player XYZ"), /^Player XYZ is banging on the DUSTY ORBIT airlock/);
+  assert.match(recruitmentMessage("Player XYZ"), /^Player XYZ is banging on the NEBULA MURDERBALL airlock/);
   assert.match(recruitmentMessage("Player XYZ"), /recruiting moon rocks\.$/);
 });
 

@@ -1,7 +1,7 @@
 import { PRODUCTION_ARENA_WSS } from "/games/game-03/config.js?v=20260812";
 import { claimSessionIdentity, resolvePoopcadePlayerIdentity } from "/games/game-03/identity.js?v=20260813-2";
 import { ArenaNetwork } from "/games/game-03/network.js?v=20260814-2";
-import { RECRUITMENT_HREF, normalizedOnlinePlayers } from "/games/game-03/presence.js?v=20260814";
+import { RECRUITMENT_HREF, normalizedOnlinePlayers } from "/games/game-03/presence.js?v=20260814-2";
 
 const ARENA_ID = "dusty-orbit-001";
 const counters = [...document.querySelectorAll("[data-dusty-online-value]")];

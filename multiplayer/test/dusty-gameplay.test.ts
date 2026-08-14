@@ -193,6 +193,14 @@ test("health does not consume at full HP and shield absorbs exactly one projecti
   (simulation as any).damagePlayer(player.id, projectile(attacker.id), 1600); assert.equal(player.hp, 2);
 });
 
+test("power-up events include authoritative world coordinates for spatial audio", () => {
+  const simulation = fresh(); const player = add(simulation, A, "Guest-1001");
+  player.x = 742; player.y = 519;
+  collect(simulation, player, "speed", 1000);
+  const event = eventsOf(simulation, "powerup_collected")[0] as { x: number; y: number; powerup: string };
+  assert.deepEqual({ x: event.x, y: event.y, powerup: event.powerup }, { x: 742, y: 519, powerup: "speed" });
+});
+
 test("character crashes block overlap, damage both pilots once per impact window, and share one crash-kill callout", () => {
   const simulation = fresh(); const first = add(simulation, A, "Guest-1001"); const second = add(simulation, B, "Guest-1002");
   first.x = 300; first.y = 300; second.x = 335; second.y = 300;

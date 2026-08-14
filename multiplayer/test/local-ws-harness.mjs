@@ -1,4 +1,4 @@
-// Package-free Dusty Orbit wire-test harness. Production uses the Durable
+// Package-free Nebula Murderball wire-test harness. Production uses the Durable
 // Object in src/dusty-arena.ts.
 import { createHash } from "node:crypto";
 import { createServer } from "node:http";

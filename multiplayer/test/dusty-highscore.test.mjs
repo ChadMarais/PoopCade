@@ -6,7 +6,7 @@ import { DustyOrbitHighscoreTracker, dustyOrbitRunFromPlayer } from "../../games
 
 const cryptoApi = { randomUUID: () => "10000000-0000-4000-8000-000000000099" };
 
-test("Dusty Orbit translates authoritative arena state into the shared run schema", () => {
+test("Nebula Murderball translates authoritative arena state into the shared run schema", () => {
   assert.deepEqual(dustyOrbitRunFromPlayer({ killScore: 4, kills: 7, deaths: 3, joinedAt: 1000 }, 11_500, cryptoApi), {
     clientRunId: "10000000-0000-4000-8000-000000000099",
     score: 4,
@@ -113,4 +113,10 @@ test("Game 3 is registered across submission, database, account, navigation, cac
   for (const source of files) assert.match(source, /dusty-orbit/i);
   assert.match(files[3], /values \('dusty-orbit', 'DUSTY ORBIT', true\)/);
   assert.match(files[7], /data-game-slug="dusty-orbit"/);
+});
+
+test("Nebula Murderball renames the public game without changing its stable slug", async () => {
+  const migration = await readFile(resolve("..", "supabase/migrations/20260814170000_rename_dusty_orbit_to_nebula_murderball.sql"), "utf8");
+  assert.match(migration, /set name = 'NEBULA MURDERBALL'/);
+  assert.match(migration, /where slug = 'dusty-orbit'/);
 });

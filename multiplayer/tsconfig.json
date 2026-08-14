@@ -12,5 +12,5 @@
     "skipLibCheck": true,
     "verbatimModuleSyntax": true
   },
-  "include": ["src/**/*.ts", "../games/game-03/map.js", "../games/game-03/collision-geometry.js", "../games/game-03/**/*.json"]
+  "include": ["src/**/*.ts", "../games/game-03/**/*.js", "../games/game-03/**/*.json"]
 }

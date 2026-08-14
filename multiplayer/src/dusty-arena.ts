@@ -4,7 +4,6 @@ import { MAX_INPUT_MESSAGES_PER_SECOND, parseClientMessage, safeGuestName, safeP
 import {
   DustyOrbitSimulation,
   DUSTY_FIXED_DT,
-  DUSTY_MAX_PLAYERS,
   DUSTY_SNAPSHOT_RATE,
   DUSTY_TICK_RATE,
 } from "./dusty-simulation.ts";
@@ -78,8 +77,22 @@ export class DustyOrbitArena extends DurableObject<Env> {
   }
 
   async fetch(request: Request): Promise<Response> {
+    const requestUrl = new URL(request.url);
+    if (request.method === "GET" && requestUrl.pathname === "/status") {
+      const state = this.currentLobbyState();
+      return Response.json({
+        mapId: DUSTY_MAP.mapId,
+        arenaId: DUSTY_MAP.id,
+        name: DUSTY_MAP.name,
+        description: DUSTY_MAP.description,
+        activePlayers: state.activePlayers,
+        onlinePlayers: state.onlinePlayers,
+        maxPlayers: DUSTY_MAP.maxPlayers,
+        full: state.full,
+      }, { headers: { "Cache-Control": "no-store" } });
+    }
     if (request.method !== "GET" || request.headers.get("Upgrade")?.toLowerCase() !== "websocket") return new Response("Expected a WebSocket upgrade.", { status: 426 });
-    const url = new URL(request.url);
+    const url = requestUrl;
     const playerId = url.searchParams.get("session") ?? "";
     const debug = (url.hostname === "127.0.0.1" || url.hostname === "localhost") && url.searchParams.get("debug") === "1";
     if (!UUID_PATTERN.test(playerId)) return new Response("A valid session UUID is required.", { status: 400 });
@@ -169,7 +182,7 @@ export class DustyOrbitArena extends DurableObject<Env> {
         try {
           player = this.simulation.addPlayer(session.playerId, name, Date.now(), { skinId });
         } catch {
-          socket.send(encode({ type: "join_rejected", reason: "ARENA_FULL", activePlayers: this.simulation.players.size, maxPlayers: DUSTY_MAX_PLAYERS }));
+          socket.send(encode({ type: "join_rejected", reason: "ARENA_FULL", activePlayers: this.simulation.players.size, maxPlayers: this.simulation.maxPlayers }));
           this.sendLobbyState(socket);
           return;
         }
@@ -274,7 +287,7 @@ export class DustyOrbitArena extends DurableObject<Env> {
       weapons: DUSTY_WEAPONS,
       gameplay: DUSTY_GAMEPLAY,
       player: { id: player.id, x: player.x, y: player.y, lastInputSeq: player.lastInputSeq, skinId: player.skinId, joinedAt: player.joinedAt },
-      maxPlayers: DUSTY_MAX_PLAYERS,
+      maxPlayers: this.simulation.maxPlayers,
     }));
   }
 

@@ -10,7 +10,7 @@ export function dustyOrbitRunFromPlayer(player, now = Date.now(), cryptoApi = gl
     clientRunId: cryptoApi.randomUUID(),
     score,
     difficulty: DUSTY_DIFFICULTY,
-    // The shared run schema requires a positive level. For DUSTY ORBIT this
+    // The shared run schema requires a positive level. For NEBULA MURDERBALL this
     // stores total authoritative kills as level - 1 and deaths as gates.
     level: kills + 1,
     gates: deaths,

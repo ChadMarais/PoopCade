@@ -49,7 +49,7 @@ test("refresh continuity is preserved when no other live tab owns the session", 
   identity.release();
 });
 
-test("signed-in Dusty Orbit players use the existing Poopcade profile instead of a guest name", async () => {
+test("signed-in Nebula Murderball players use the existing Poopcade profile instead of a guest name", async () => {
   const identity = await resolvePoopcadePlayerIdentity("Guest-1234", {
     async getSession() { return { user: { id: "profile-1" }, access_token: "verified-access-token" }; },
     async getMyProfile() { return { display_name: "Orbit Veteran" }; },
@@ -57,7 +57,7 @@ test("signed-in Dusty Orbit players use the existing Poopcade profile instead of
   assert.deepEqual(identity, { playerName: "Orbit Veteran", accessToken: "verified-access-token", authenticated: true });
 });
 
-test("Dusty Orbit keeps the guest fallback when no Poopcade session exists", async () => {
+test("Nebula Murderball keeps the guest fallback when no Poopcade session exists", async () => {
   const identity = await resolvePoopcadePlayerIdentity("Guest-4321", {
     async getSession() { return null; },
     async getMyProfile() { throw new Error("should not be called"); },

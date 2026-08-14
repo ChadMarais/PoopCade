@@ -11,7 +11,7 @@ The handoff must:
 3. Stage explicit intended paths. Do not use `git add .` or `git add -A` when unrelated or generated files are present.
 4. Show a concrete commit message appropriate to the outstanding changes.
 5. Rebase safely with `git pull --rebase --autostash` when the current branch has an upstream, then push that exact branch and remote.
-6. Include required non-Git production deployment commands after the push. For DUSTY ORBIT, deploy the `multiplayer` Cloudflare Worker before deploying the root static site.
+6. Include required non-Git production deployment commands after the push. For NEBULA MURDERBALL, deploy the `multiplayer` Cloudflare Worker before deploying the root static site.
 7. Include concise post-deploy health checks when an endpoint is configured.
 8. Clearly separate files intentionally included from unrelated or generated files intentionally left untracked.
 

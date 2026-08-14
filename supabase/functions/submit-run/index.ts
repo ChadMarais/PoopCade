@@ -113,12 +113,12 @@ function validatePayload(value: unknown): { data?: RunPayload; error?: string } 
     }
   } else {
     const kills = level - 1;
-    if (difficulty !== "Arena") return { error: "DUSTY ORBIT difficulty must be Arena." };
+    if (difficulty !== "Arena") return { error: "NEBULA MURDERBALL difficulty must be Arena." };
     if (score > 100_000 || kills > 100_000 || gates > 100_000 || styleBonuses !== 0 || score > kills) {
-      return { error: "DUSTY ORBIT run values are inconsistent." };
+      return { error: "NEBULA MURDERBALL run values are inconsistent." };
     }
     if (durationMs < 1_000 || kills > Math.floor(durationMs / 100) + 5 || gates > Math.floor(durationMs / 250) + 5) {
-      return { error: "DUSTY ORBIT run is not plausible for the submitted duration." };
+      return { error: "NEBULA MURDERBALL run is not plausible for the submitted duration." };
     }
   }
 

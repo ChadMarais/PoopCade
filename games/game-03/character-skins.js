@@ -19,7 +19,7 @@ function freezeSkin(definition) {
 }
 
 /**
- * Canonical Dusty Orbit character registry.
+ * Canonical Nebula Murderball character registry.
  *
  * Character art, lobby copy, render geometry, and weapon docking all live
  * here. Adding a future production character should only require its artwork

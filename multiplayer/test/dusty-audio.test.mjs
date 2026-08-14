@@ -1,21 +1,23 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { DUSTY_AUDIO_FILES, DustyOrbitAudio } from "../../games/game-03/audio.js";
+import { DUSTY_AUDIO_FILES, DUSTY_AUDIO_MAX_VOLUME, DUSTY_AUDIO_MIN_VOLUME, DustyOrbitAudio, spatialSoundVolume } from "../../games/game-03/audio.js";
 import { readFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 
 class FakeAudio {
   static played = [];
-  constructor(src) { this.src = src; this.currentTime = 0; }
+  static volumes = [];
+  constructor(src) { this.src = src; this.currentTime = 0; this.volume = 1; }
   load() {}
   cloneNode() { return new FakeAudio(this.src); }
   addEventListener() {}
-  play() { FakeAudio.played.push(this.src); return Promise.resolve(); }
+  play() { FakeAudio.played.push(this.src); FakeAudio.volumes.push(this.volume); return Promise.resolve(); }
 }
 
-function fresh() {
+function fresh(options = {}) {
   FakeAudio.played = [];
-  return new DustyOrbitAudio({ AudioCtor: FakeAudio });
+  FakeAudio.volumes = [];
+  return new DustyOrbitAudio({ AudioCtor: FakeAudio, ...options });
 }
 
 test("all supplied production audio files are packaged with the game", () => {
@@ -32,6 +34,7 @@ test("every weapon tier uses its supplied production sound", () => {
   const audio = fresh();
   for (let tier = 1; tier <= 6; tier++) audio.weaponFired({ playerId: "pilot", groupKey: `shot:${tier}`, tier });
   assert.deepEqual(FakeAudio.played, Object.values(DUSTY_AUDIO_FILES.weapons));
+  assert.deepEqual(FakeAudio.volumes, Array(6).fill(DUSTY_AUDIO_MAX_VOLUME));
 });
 
 test("three shotgun pellets sharing one authoritative discharge play one sound", () => {
@@ -58,4 +61,23 @@ test("power-ups, teleport, death, and nuke map to their production files", () =>
     DUSTY_AUDIO_FILES.death,
     DUSTY_AUDIO_FILES.nuke,
   ]);
+});
+
+test("all game audio has a 30% ceiling and fades smoothly beyond the visible screen", () => {
+  const view = { x: 0, y: 0, width: 1000, height: 600 };
+  const world = { width: 3200, height: 2000 };
+  const inside = spatialSoundVolume({ x: 500, y: 300 }, view, world);
+  const justOutside = spatialSoundVolume({ x: 1001, y: 300 }, view, world);
+  const farther = spatialSoundVolume({ x: 2000, y: 1000 }, view, world);
+  const oppositeCorner = spatialSoundVolume({ x: 3200, y: 2000 }, view, world);
+  assert.equal(inside, .7);
+  assert.ok(Math.abs(justOutside - DUSTY_AUDIO_MAX_VOLUME * .85) < .002);
+  assert.ok(farther < justOutside && farther > oppositeCorner);
+  assert.ok(Math.abs(oppositeCorner - DUSTY_AUDIO_MIN_VOLUME) < 1e-9);
+
+  const audio = fresh({ getView: () => view, world });
+  audio.weaponFired({ playerId: "near", groupKey: "shot:near", tier: 1, x: 500, y: 300 });
+  audio.death({ x: 3200, y: 2000 });
+  assert.equal(FakeAudio.volumes[0], DUSTY_AUDIO_MAX_VOLUME);
+  assert.ok(Math.abs(FakeAudio.volumes[1] - DUSTY_AUDIO_MIN_VOLUME) < 1e-9);
 });

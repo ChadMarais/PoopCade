@@ -6,7 +6,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 const REPOSITORY_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const MAX_BODY_BYTES = 256 * 1024;
-const MAP_SOURCE_PATH = "games/game-03/map.js";
+const MAP_SOURCE_PATH = "games/game-03/maps/lunar-liability/map.js";
 const MAP_INSTANCE_IDS = new Set([
   "ROCK A", "ROCK B", "ROCK C", "ROCK D", "ROCK E", "ROCK F",
   "SATELLITE RELAY WEST", "SATELLITE RELAY EAST",
@@ -15,13 +15,13 @@ const MAP_INSTANCE_IDS = new Set([
 ]);
 
 export const COLLISION_ASSET_PATHS = Object.freeze({
-  "rock-cluster-01": "games/game-03/assets/dusty-orbit/rocks/rock-cluster-01.json",
-  "satellite-relay-01": "games/game-03/assets/dusty-orbit/satellite/satellite-relay-01.json",
-  "satellite-relay-01-left": "games/game-03/assets/dusty-orbit/satellite/satellite-relay-01-left.json",
-  "outpost-canister-01": "games/game-03/assets/dusty-orbit/outpost/outpost-canister-01.json",
-  "outpost-supply-crate-01": "games/game-03/assets/dusty-orbit/outpost/outpost-supply-crate-01.json",
-  "outpost-wall-corner-01": "games/game-03/assets/dusty-orbit/outpost/outpost-wall-corner-01.json",
-  "outpost-wall-straight-01": "games/game-03/assets/dusty-orbit/outpost/outpost-wall-straight-01.json",
+  "rock-cluster-01": "games/game-03/maps/lunar-liability/objects/rocks/rock-cluster-01.json",
+  "satellite-relay-01": "games/game-03/maps/lunar-liability/objects/satellite/satellite-relay-01.json",
+  "satellite-relay-01-left": "games/game-03/maps/lunar-liability/objects/satellite/satellite-relay-01-left.json",
+  "outpost-canister-01": "games/game-03/maps/lunar-liability/objects/outpost/outpost-canister-01.json",
+  "outpost-supply-crate-01": "games/game-03/maps/lunar-liability/objects/outpost/outpost-supply-crate-01.json",
+  "outpost-wall-corner-01": "games/game-03/maps/lunar-liability/objects/outpost/outpost-wall-corner-01.json",
+  "outpost-wall-straight-01": "games/game-03/maps/lunar-liability/objects/outpost/outpost-wall-straight-01.json",
 });
 
 const MIME_TYPES = Object.freeze({
@@ -115,7 +115,7 @@ export function validateMapPlacement(placement) {
   if (!placement || typeof placement !== "object" || Array.isArray(placement)) throw new Error("Placement must be an object.");
   if (!MAP_INSTANCE_IDS.has(placement.id)) throw new Error("Unknown map instance.");
   if (!Number.isFinite(placement.x) || placement.x < 0 || placement.x > 3200 || !Number.isFinite(placement.y) || placement.y < 0 || placement.y > 2000) {
-    throw new Error("Map placement must stay inside the Dusty Orbit world.");
+    throw new Error("Map placement must stay inside the Nebula Murderball world.");
   }
   if (!Number.isFinite(placement.rotation)) throw new Error("Map rotation must be finite.");
   return { id: placement.id, x: rounded(placement.x), y: rounded(placement.y), rotation: normalizedRotation(placement.rotation) };
@@ -244,7 +244,7 @@ if (isMain) {
   const port = 8081;
   const server = createDustyDevServer();
   server.listen(port, host, () => {
-    console.log(`Dusty Orbit map authoring helper: http://localhost:${port}`);
+    console.log(`Nebula Murderball map authoring helper: http://localhost:${port}`);
     console.log("Save writes collision JSON or instance placement directly to the canonical repository files.");
   });
 }

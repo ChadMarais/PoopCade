@@ -4,9 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#26132f">
-  <meta name="description" content="Dusty Orbit, Poopcade's live multiplayer moon-skirmish.">
-  <title>DUSTY ORBIT — Poopcade Game 03</title>
-  <link rel="stylesheet" href="./lobby.css?v=20260814-3">
+  <meta name="description" content="Nebula Murderball, Poopcade's live multiplayer space free-for-all.">
+  <title>NEBULA MURDERBALL — Poopcade Game 03</title>
+  <link rel="stylesheet" href="./lobby.css?v=20260814-4">
   <style>
     :root { color-scheme: dark; font-family: ui-sans-serif, system-ui, sans-serif; }
     * { box-sizing: border-box; }
@@ -53,7 +53,7 @@
     .loading { position: fixed; z-index: 4; inset: 0; display: grid; place-items: center; background: radial-gradient(circle, #5b276d, #26112f 60%, #120719); transition: opacity .2s; }
     .loading.done { opacity: 0; pointer-events: none; }
     .loading div { width: min(360px, 82vw); text-align: center; }
-    .loading h1 { margin: 0; font-size: 42px; letter-spacing: -.04em; }
+    .loading h1 { margin: 0; font-size: clamp(25px,9vw,42px); letter-spacing: -.04em; }
     .loading p { color: #a9f7ff; font: 900 11px ui-monospace, monospace; }
     .track { height: 5px; border-radius: 9px; background: rgba(255,255,255,.1); overflow: hidden; }
     .bar { height: 100%; width: 0; background: linear-gradient(90deg,#e66dff,#58efff); transition: width .12s; }
@@ -77,12 +77,16 @@
   </style>
 </head>
 <body>
-  <main id="lobby" class="lobby-shell" aria-label="Dusty Orbit multiplayer lobby">
+  <main id="lobby" class="lobby-shell" aria-label="Nebula Murderball multiplayer lobby">
     <header class="lobby-top">
-      <div class="lobby-brand"><a class="lobby-back" href="/" data-lobby-home aria-label="Back to Poopcade">&larr;</a><div><h1>DUSTY ORBIT</h1><p>LIVE MULTIPLAYER ARENA</p></div></div>
+      <div class="lobby-brand"><a class="lobby-back" href="/" data-lobby-home aria-label="Back to Poopcade">&larr;</a><div><h1>NEBULA MURDERBALL</h1><p>LIVE MULTIPLAYER ARENA</p></div></div>
       <div class="lobby-profile"><strong data-lobby-player-name>Guest pilot</strong><p data-lobby-identity>CHECKING PROFILE</p></div>
     </header>
     <div class="lobby-grid">
+      <section class="lobby-panel map-panel" aria-labelledby="mapHeading">
+        <div class="map-panel-heading"><div><span class="eyebrow">MAP SELECT</span><h2 id="mapHeading">PICK YOUR CRIME SCENE</h2></div><button class="quick-join-button" data-quick-join type="button">QUICK JOIN</button></div>
+        <div class="map-rail" data-map-cards aria-label="Available maps"></div>
+      </section>
       <section class="lobby-panel selector-panel" aria-labelledby="characterHeading">
         <div><span class="eyebrow">CHARACTER SELECT</span><h2 id="characterHeading">PICK YOUR PROBLEM</h2></div>
         <div class="character-stage"><i class="character-glow"></i><img data-skin-preview alt=""><div class="preview-copy"><h3 data-preview-name></h3><p data-preview-description></p></div></div>
@@ -98,8 +102,8 @@
       </section>
     </div>
   </main>
-  <canvas id="world" tabindex="0" aria-label="Dusty Orbit multiplayer arena"></canvas>
-  <header class="panel title"><a id="homeLink" class="home-link" href="/" aria-label="Back to Poopcade">←</a><div class="title-copy"><strong>DUSTY ORBIT</strong><span>LIVE MULTIPLAYER ARENA</span></div><button id="leaveGame" class="leave-button" type="button">LOBBY</button></header>
+  <canvas id="world" tabindex="0" aria-label="Nebula Murderball multiplayer arena"></canvas>
+  <header class="panel title"><a id="homeLink" class="home-link" href="/" aria-label="Back to Poopcade">←</a><div class="title-copy"><strong>NEBULA MURDERBALL</strong><span data-current-map-name>LUNAR LIABILITY</span></div><button id="leaveGame" class="leave-button" type="button">LOBBY</button></header>
   <div id="connection" class="panel status">LOADING</div>
   <pre id="gameplayHud" class="panel gameplay-hud">HP: ---\nSHIELD: NO\nWEAPON: T1 PEA SHOOTER\nSCORE: 0\nTOTAL PLAYERS: 0\nHIGHSCORE: ---\nNUKE: 0/10</pre>
   <pre id="debugHud" class="panel hud">Waiting for server…</pre>
@@ -125,8 +129,8 @@
       <button id="mobileFireButton" class="mobile-fire-button" type="button" aria-label="Hold to fire; drag to aim"><i class="mobile-fire-core"></i><span class="mobile-fire-label">FIRE</span></button>
     </div>
   </div>
-  <div id="loading" class="loading"><div><h1>DUSTY ORBIT</h1><p id="loadingText">LOADING MULTIPLAYER ASSETS…</p><div class="track"><div id="loadingBar" class="bar"></div></div></div></div>
+  <div id="loading" class="loading"><div><h1>NEBULA MURDERBALL</h1><p id="loadingText">LOADING MULTIPLAYER ASSETS…</p><div class="track"><div id="loadingBar" class="bar"></div></div></div></div>
   <a class="dusty-recruitment-toast" data-recruitment-toast href="/games/game-03/" hidden aria-live="polite"><strong>ORBITAL BAD DECISION INCOMING</strong><span data-recruitment-copy></span><b>GO TO THE LOBBY →</b></a>
-  <script type="module" src="./game.js?v=20260814-50"></script>
+  <script type="module" src="./game.js?v=20260814-54"></script>
 </body>
 </html>

@@ -154,6 +154,7 @@
     .dusty-card::before { z-index: -1; background: radial-gradient(circle at 82% 48%,rgba(255,43,220,.28),transparent 22%),radial-gradient(circle at 93% 13%,rgba(82,239,255,.18),transparent 25%),linear-gradient(90deg,transparent 54%,rgba(3,5,17,.12)); }
     .dusty-card::after { position: absolute; inset: 0; z-index: -1; content: ""; pointer-events: none; opacity: .24; background-image: radial-gradient(circle,rgba(255,255,255,.85) 0 1px,transparent 1.5px); background-size: 43px 43px; mask-image: linear-gradient(90deg,transparent 20%,#000); }
     .dusty-card .game-label { color: #ffd36a; }
+    .dusty-card .game-title { font-size: clamp(1.85rem,6vw,3.5rem); }
     .dusty-card .game-title i { color: var(--pink); text-shadow: 0 0 28px rgba(255,79,189,.45); }
     .dusty-card .game-description { max-width: 550px; color: #cbc5d8; }
     .dusty-card .button.primary { background: linear-gradient(105deg,var(--acid),#ecff9e); box-shadow: 0 14px 38px rgba(200,255,71,.18); }
@@ -222,6 +223,7 @@
       .games { padding-top: 18px; }
       .game-copy { padding: 20px; }
       .game-title { margin-top: 13px; font-size: clamp(2.1rem,11vw,3rem); }
+      .dusty-card .game-title { font-size: clamp(1.75rem,9vw,2.5rem); }
       .game-description { max-width: 92%; }
       .game-watermark { right: -74px; bottom: -89px; width: 220px; height: 220px; opacity: .27; }
       .game-watermark::after { inset: 43px; border-width: 8px; }
@@ -328,7 +330,7 @@
         <article class="game-card dusty-card" data-game="game-03">
           <div class="game-copy">
             <div class="game-label"><span>Game 03 · Multiplayer</span></div>
-            <h3 class="game-title">DUSTY<i>//</i>ORBIT</h3>
+            <h3 class="game-title">NEBULA<br>MURDERBALL</h3>
             <p class="game-description">Drop into a live moon-skirmish, pick a deeply questionable pilot, and turn total strangers into tasteful space debris.</p>
             <ul class="meta" aria-label="Game attributes"><li>Live multiplayer</li><li>Arena combat</li><li>Instant lobby</li></ul>
             <div class="game-actions">
@@ -360,7 +362,7 @@
 
   <script type="module" src="/js/auth.js"></script>
   <script type="module" src="/js/stats.js"></script>
-  <script type="module" src="/js/dusty-presence.js?v=20260814-2"></script>
+  <script type="module" src="/js/dusty-presence.js?v=20260814-3"></script>
   <script>
     (() => {
       const installButtons = Array.from(document.querySelectorAll('[data-install]'));

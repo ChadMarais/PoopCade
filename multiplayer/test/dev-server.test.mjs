@@ -22,7 +22,8 @@ test("local authoring server saves canonical collision and map placement code", 
   const target = join(root, relativePath);
   await mkdir(dirname(target), { recursive: true });
   await writeFile(target, "{}\n", "utf8");
-  const mapPath = join(root, "games/game-03/map.js");
+  const mapPath = join(root, "games/game-03/maps/lunar-liability/map.js");
+  await mkdir(dirname(mapPath), { recursive: true });
   const mapSource = 'export const ROCK_INSTANCES = Object.freeze([\n  Object.freeze({ id: "ROCK A", assetId: "rock-cluster-01", x: 650, y: 450, width: 240, height: 240 }),\n]);\n';
   await writeFile(mapPath, mapSource, "utf8");
   await writeFile(join(root, "index.html"), "<!doctype html><title>Dusty QA</title>", "utf8");
@@ -89,7 +90,7 @@ test("map placement serialization is bounded and only rewrites the selected inst
 });
 
 test("outpost definitions and placements are writable in debug authoring mode", () => {
-  assert.equal(COLLISION_ASSET_PATHS["outpost-wall-straight-01"], "games/game-03/assets/dusty-orbit/outpost/outpost-wall-straight-01.json");
+  assert.equal(COLLISION_ASSET_PATHS["outpost-wall-straight-01"], "games/game-03/maps/lunar-liability/objects/outpost/outpost-wall-straight-01.json");
   assert.deepEqual(
     validateMapPlacement({ id: "OUTPOST SUPPLY CRATE 01", x: 1600, y: 1000, rotation: 12.25 }),
     { id: "OUTPOST SUPPLY CRATE 01", x: 1600, y: 1000, rotation: 12.3 },

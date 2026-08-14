@@ -24,12 +24,16 @@ export function initialSkinId(storage = globalThis.localStorage, registry = CHAR
 }
 
 export class DustyLobby {
-  constructor(root, { playerName, authenticated, onJoin, onRetry, onSkinSelected, onRecruit }) {
+  constructor(root, { playerName, authenticated, maps = [], selectedMapId = "", onJoin, onRetry, onSkinSelected, onRecruit, onMapSelected, onQuickJoin }) {
     this.root = root;
     this.onJoin = onJoin;
     this.onRetry = onRetry;
     this.onSkinSelected = onSkinSelected;
     this.onRecruit = onRecruit;
+    this.onMapSelected = onMapSelected;
+    this.onQuickJoin = onQuickJoin;
+    this.maps = maps.map((map) => ({ ...map }));
+    this.selectedMapId = selectedMapId || this.maps[0]?.id || "";
     this.selectedSkinId = initialSkinId();
     this.state = "LOBBY";
     this.connectionState = "connecting";
@@ -53,6 +57,8 @@ export class DustyLobby {
     this.statusCopy = root.querySelector("[data-arena-status-copy]");
     this.join = root.querySelector("[data-join-arena]");
     this.recruit = root.querySelector("[data-recruit-players]");
+    this.mapCards = root.querySelector("[data-map-cards]");
+    this.quickJoin = root.querySelector("[data-quick-join]");
     try { this.recruitRetryAt = Number(localStorage.getItem(RECRUIT_STORAGE_KEY)) || 0; } catch { this.recruitRetryAt = 0; }
     addEventListener("storage", (event) => {
       if (event.key !== RECRUIT_STORAGE_KEY) return;
@@ -73,9 +79,60 @@ export class DustyLobby {
       this.setApplicationState("JOINING");
       this.onJoin(this.selectedSkinId);
     });
+    this.quickJoin?.addEventListener("click", () => {
+      const map = [...this.maps]
+        .filter((candidate) => !candidate.full && Number(candidate.activePlayers || 0) < Number(candidate.maxPlayers || 15))
+        .sort((a, b) => Number(b.activePlayers || 0) - Number(a.activePlayers || 0))[0];
+      if (map) this.onQuickJoin?.(map.id, this.selectedSkinId);
+    });
+    this.renderMapCards();
     this.renderSkinCards();
     this.selectSkin(this.selectedSkinId);
     this.timer = setInterval(() => { this.updateDurations(); this.updateRecruitButton(); }, 1000);
+  }
+
+  renderMapCards() {
+    if (!this.mapCards) return;
+    this.mapCards.replaceChildren();
+    for (const map of this.maps) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "map-card";
+      button.dataset.mapId = map.id;
+      const selected = map.id === this.selectedMapId;
+      const activePlayers = Math.max(0, Number(map.activePlayers) || 0);
+      const maxPlayers = Math.max(1, Number(map.maxPlayers) || 15);
+      const full = map.full === true || activePlayers >= maxPlayers;
+      button.classList.toggle("selected", selected);
+      button.classList.toggle("full", full);
+      button.setAttribute("aria-pressed", String(selected));
+      button.setAttribute("aria-label", `${map.name}, ${activePlayers} of ${maxPlayers} players${full ? ", full" : ""}`);
+      button.disabled = full && !selected;
+      if (typeof map.previewUrl === "string") button.style.backgroundImage = `url("${map.previewUrl.replace(/["\\]/g, "")}")`;
+      const copy = document.createElement("span");
+      copy.className = "map-card-copy";
+      const name = document.createElement("strong");
+      name.textContent = map.name;
+      const description = document.createElement("small");
+      description.textContent = map.description;
+      const population = document.createElement("span");
+      population.textContent = full ? `${activePlayers} / ${maxPlayers} · FULL` : `${activePlayers} / ${maxPlayers} · OPEN`;
+      copy.append(name, description, population);
+      button.append(copy);
+      button.addEventListener("click", () => {
+        if (map.id === this.selectedMapId || full) return;
+        this.onMapSelected?.(map.id);
+      });
+      this.mapCards.append(button);
+    }
+    if (this.quickJoin) this.quickJoin.disabled = !this.maps.some((map) => !map.full && Number(map.activePlayers || 0) < Number(map.maxPlayers || 15));
+  }
+
+  updateMaps(maps) {
+    if (!Array.isArray(maps)) return;
+    const statusById = new Map(maps.map((map) => [map.id, map]));
+    this.maps = this.maps.map((map) => ({ ...map, ...(statusById.get(map.id) || {}) }));
+    this.renderMapCards();
   }
 
   renderSkinCards() {
@@ -130,6 +187,7 @@ export class DustyLobby {
 
   update(state) {
     this.lobbyState = state;
+    this.updateMaps([{ id: state.mapId || this.selectedMapId, activePlayers: state.activePlayers, onlinePlayers: state.onlinePlayers, maxPlayers: state.maxPlayers, full: state.full }]);
     if (Number.isFinite(state.serverTime)) this.clockOffset = Date.now() - state.serverTime;
     this.count.textContent = `${state.activePlayers} / ${state.maxPlayers}`;
     this.waitingCount.textContent = String(state.lobbyPlayers?.length || 0);
@@ -247,13 +305,14 @@ export class DustyLobby {
       this.join.textContent = "ARENA FULL";
       this.join.disabled = true;
     } else if (this.state === "JOINING") {
-      this.status.textContent = "DUSTY ORBIT // LIVE";
+      this.status.textContent = "NEBULA MURDERBALL // LIVE";
       this.statusCopy.textContent = "Negotiating one questionable life choice…";
       this.join.textContent = "JOINING…";
       this.join.disabled = true;
     } else {
-      this.status.textContent = "DUSTY ORBIT // LIVE";
-      this.statusCopy.textContent = "One arena. Zero adult supervision.";
+      this.status.textContent = "NEBULA MURDERBALL // LIVE";
+      const selectedMap = this.maps.find((map) => map.id === this.selectedMapId);
+      this.statusCopy.textContent = `${selectedMap?.name || "One arena"}. Zero adult supervision.`;
       this.join.textContent = "JOIN THE CHAOS";
       this.join.disabled = false;
     }

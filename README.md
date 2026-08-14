@@ -25,7 +25,7 @@ Poopcade is a static, mobile-first progressive web app containing small arcade g
 
 New games belong in their own directory under `games/`, with an `index.html` entry point. For example, a new game at `games/example/index.html` is available at `/games/example/`. Add its production route to the homepage and to the service worker's core or optional cache list as appropriate.
 
-Game 03 is the Dusty Orbit live multiplayer arena at `games/game-03/`. Its separate Cloudflare Worker and Durable Object backend lives in `multiplayer/`; that directory is excluded from the static-assets upload and is deployed independently.
+Game 03 is the Nebula Murderball live multiplayer arena at `games/game-03/`. Its separate Cloudflare Worker and Durable Object backend lives in `multiplayer/`; that directory is excluded from the static-assets upload and is deployed independently.
 
 ## Run locally
 
@@ -49,15 +49,17 @@ When testing service-worker changes, use the browser's Application/Storage devel
 
 ## Accounts and leaderboards
 
-Guest play remains the default. Players may optionally sign in with Google, choose a separate public gamer name, save ORBIT//SHIFT, NEXT., and DUSTY ORBIT runs, and sync personal bests across devices. DUSTY ORBIT submits each newly reached positive arena-score high from the server-reported player snapshot, so a later death penalty cannot erase a previously saved best.
+Guest play remains the default. Players may optionally sign in with Google, choose a separate public gamer name, save ORBIT//SHIFT, NEXT., and NEBULA MURDERBALL runs, and sync personal bests across devices. NEBULA MURDERBALL submits each newly reached positive arena-score high from the server-reported player snapshot, so a later death penalty cannot erase a previously saved best.
 
-The DUSTY ORBIT Worker also submits a signed-in player's final authoritative arena score when the player deliberately leaves or is removed after the inactivity timeout. This closes sessions that otherwise have no game-over event; guest sessions remain analytics-only.
+The NEBULA MURDERBALL Worker also submits a signed-in player's final authoritative arena score when the player deliberately leaves or is removed after the inactivity timeout. This closes sessions that otherwise have no game-over event; guest sessions remain analytics-only.
+
+NEBULA MURDERBALL maps are file-backed packages under `games/game-03/maps/`. Each map directory owns its terrain, object definitions, placements, spawn points, metadata, and 15-player arena ID. Characters, weapons, powerups, effects, and audio remain shared under `games/game-03/assets/` and the common game modules. The current map is **LUNAR LIABILITY** (`lunar-liability`); add future maps to `games/game-03/maps/catalog.js` to expose them in the lobby selector and Worker map directory.
 
 The browser uses one Supabase client from `js/supabase-config.js`, with `@supabase/supabase-js` pinned to version `2.111.0`. The publishable browser key in that file is not a secret. Never add a secret key, service-role key, database password, OAuth client secret, or access token to frontend code or source control.
 
 The backend foundation is source-only and has not been deployed. Before accounts work in production:
 
-1. Apply `supabase/migrations/20260808_initial_poocade.sql` and later migrations in timestamp order, including `20260809133000_add_next_game.sql` for NEXT. and `20260813190000_add_dusty_orbit_highscores.sql` for DUSTY ORBIT.
+1. Apply `supabase/migrations/20260808_initial_poocade.sql` and later migrations in timestamp order, including `20260809133000_add_next_game.sql` for NEXT., `20260813190000_add_dusty_orbit_highscores.sql` for NEBULA MURDERBALL's stable `dusty-orbit` game slug, and `20260814170000_rename_dusty_orbit_to_nebula_murderball.sql` for its current display name.
 2. Deploy the `submit-run` Edge Function with JWT verification enabled.
 3. Enable Google under Supabase Authentication providers and configure its real Google OAuth client ID and secret in the dashboard.
 4. Set the Supabase Site URL and redirect allow list to `https://poopcade.com/`.
@@ -83,7 +85,7 @@ The repository is configured for Cloudflare Workers Static Assets:
 - Worker JavaScript entry point: none
 - Static asset directory: repository root (`.`)
 - Upload exclusions: `.assetsignore` (including `android/` and `supabase/` source)
-- Production routes include `/`, `/games/orbit-shift/`, `/games/next/`, `/games/game-03/`, the overall `/leaderboard/`, `/leaderboard/orbit-shift/`, `/leaderboard/next/`, `/leaderboard/dusty-orbit/`, and `/account/`. Dusty Orbit launches directly without a development-mode query parameter.
+- Production routes include `/`, `/games/orbit-shift/`, `/games/next/`, `/games/game-03/`, the overall `/leaderboard/`, `/leaderboard/orbit-shift/`, `/leaderboard/next/`, `/leaderboard/dusty-orbit/`, and `/account/`. Nebula Murderball launches directly without a development-mode query parameter.
 - Custom response headers: `_headers`
 
 No Content Security Policy is set yet because the current homepage and game use inline CSS and JavaScript, and the game uses WebAudio. A CSP should be designed and tested separately rather than added in a way that breaks the application.

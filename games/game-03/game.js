@@ -1,23 +1,26 @@
 import { moveCircleWithSliding } from "./collision-geometry.js?v=20260813-2";
 import { CollisionEditor } from "./collision-editor.js?v=20260813-9";
-import { loadDustyOrbitAssets } from "./assets.js?v=20260814-14";
+import { loadDustyOrbitAssets } from "./assets.js?v=20260814-16";
 import { PRODUCTION_ARENA_WSS } from "./config.js?v=20260812";
+import { MAP_CATALOG, mapCatalogEntry } from "./maps/catalog.js?v=20260814";
 import { DustyOrbitMultiplayerRenderer } from "./renderer.js?v=20260814-27";
 import { InputController } from "./input.js?v=20260813-3";
 import { claimSessionIdentity, resolvePoopcadePlayerIdentity } from "./identity.js?v=20260813-2";
 import { ArenaNetwork } from "./network.js?v=20260814-2";
 import { consumeFixedStep, convergeVisualPosition } from "./timing.js?v=20260813-2";
-import { DustyLobby } from "./lobby.js?v=20260814-5";
-import { RECRUITMENT_HREF } from "./presence.js?v=20260814";
+import { DustyLobby } from "./lobby.js?v=20260814-7";
+import { RECRUITMENT_HREF } from "./presence.js?v=20260814-2";
 import { DustyOrbitHighscoreTracker } from "./highscore.js?v=20260813-2";
-import { DustyOrbitAudio } from "./audio.js?v=20260814-2";
+import { DustyOrbitAudio } from "./audio.js?v=20260814-3";
 
 const INPUT_RATE = 30;
 const INPUT_DT = 1 / INPUT_RATE;
 const PLAYER_RADIUS = 17;
 const FALLBACK_PLAYER_SPEED = 165;
-const ARENA_ID = "dusty-orbit-001";
 const parameters = new URLSearchParams(location.search);
+const selectedMap = mapCatalogEntry(parameters.get("map"));
+const selectedMapDefinition = await import(`${selectedMap.moduleUrl}?v=20260814`);
+const ARENA_ID = selectedMap.arenaId;
 const debugMode = parameters.get("debug") === "1";
 let debugCollision = debugMode;
 document.documentElement.classList.toggle("mobile-preview", parameters.get("mobile") === "1");
@@ -47,7 +50,12 @@ function endpoint() {
   const explicit = parameters.get("server");
   const local = localFrontendHost(location.hostname);
   if (local && explicit) return localServerOverride(explicit);
-  if (local) return `ws://${location.hostname}:8787/arena/${ARENA_ID}/ws${parameters.get("debug") === "1" ? "?debug=1" : ""}`;
+  // A plain static preview should remain playable without requiring Wrangler.
+  // Local Worker development is opt-in so an absent port 8787 cannot strand
+  // the lobby in a permanent retry loop.
+  if (local && parameters.get("local") === "1") {
+    return `ws://${location.hostname}:8787/arena/${ARENA_ID}/ws${parameters.get("debug") === "1" ? "?debug=1" : ""}`;
+  }
   const productionBase = PRODUCTION_ARENA_WSS.trim().replace(/\/$/, "");
   return /^wss:\/\/[^/]+$/i.test(productionBase) ? `${productionBase}/arena/${ARENA_ID}/ws` : "";
 }
@@ -85,15 +93,19 @@ if (!arenaEndpoint) {
   connection.textContent = "CONFIG REQUIRED";
   throw new Error("Set PRODUCTION_ARENA_WSS in games/game-03/config.js before production deployment.");
 }
-const assets = await loadDustyOrbitAssets((message, amount) => { loadingText.textContent = message; loadingBar.style.width = `${amount * 100}%`; });
+document.querySelector("[data-current-map-name]").textContent = selectedMap.name;
+const assets = await loadDustyOrbitAssets(selectedMapDefinition, (message, amount) => { loadingText.textContent = message; loadingBar.style.width = `${amount * 100}%`; });
 function preloadCharacterSkin(skinId) { void assets.ensureCharacterSkin(skinId).catch(() => {}); }
 loadingBar.style.width = "100%";
 const focusSatellite = parameters.get("focus") === "satellite-east" ? assets.satellites[1] : assets.satellites[0];
 const debugFocus = debugCollision && parameters.get("focus")?.startsWith("satellite") ? focusSatellite : null;
 const renderer = new DustyOrbitMultiplayerRenderer(canvas, assets, debugCollision, debugFocus);
-const audio = new DustyOrbitAudio();
+const audio = new DustyOrbitAudio({
+  getView: () => ({ x: renderer.camera.x, y: renderer.camera.y, width: renderer.viewport.width, height: renderer.viewport.height }),
+  world: assets.world,
+});
 canvas.addEventListener("dusty-orbit:weapon-fired", (event) => audio.weaponFired(event.detail));
-canvas.addEventListener("dusty-orbit:nuke-audio-cue", (event) => { if (event.detail?.cue === "detonation") audio.nuke(); });
+canvas.addEventListener("dusty-orbit:nuke-audio-cue", (event) => { if (event.detail?.cue === "detonation") audio.nuke(event.detail); });
 const input = new InputController(canvas, null, null, {
   movementSurface: canvas,
   movementGuide: document.querySelector("#mobileMoveGuide"),
@@ -151,6 +163,7 @@ const eventLines = [];
 let nukeQueuedUntil = 0;
 let localSpeedBoostUntil = 0;
 let network;
+let autoJoinRequested = parameters.get("autojoin") === "1";
 let highscoreStatus = authenticated ? "READY" : "SIGN IN TO SAVE";
 const recruitmentToast = document.querySelector("[data-recruitment-toast]");
 const recruitmentCopy = recruitmentToast.querySelector("[data-recruitment-copy]");
@@ -173,22 +186,56 @@ const highscoreTracker = new DustyOrbitHighscoreTracker({
   onStatus(status) { highscoreStatus = status; },
 });
 
+function joinSelectedMap(skinId) {
+  applicationState = "JOINING";
+  if (!network.send({ type: "join", name: playerName, skinId, ...(accessToken ? { accessToken } : {}) })) {
+    applicationState = "DISCONNECTED";
+    lobby.setApplicationState(applicationState);
+  }
+}
+function navigateToMap(mapId, autoJoin = false) {
+  const destination = new URL(location.href);
+  destination.searchParams.set("map", mapId);
+  if (autoJoin) destination.searchParams.set("autojoin", "1");
+  else destination.searchParams.delete("autojoin");
+  location.assign(destination);
+}
 const lobby = new DustyLobby(document.querySelector("#lobby"), {
   playerName,
   authenticated,
-  onJoin(skinId) {
-    applicationState = "JOINING";
-    if (!network.send({ type: "join", name: playerName, skinId, ...(accessToken ? { accessToken } : {}) })) {
-      applicationState = "DISCONNECTED";
-      lobby.setApplicationState(applicationState);
-    }
-  },
+  maps: MAP_CATALOG,
+  selectedMapId: selectedMap.id,
+  onJoin: joinSelectedMap,
   onRetry() { network.connect(true); },
   onSkinSelected(skinId) { preloadCharacterSkin(skinId); },
   onRecruit() { return network?.send({ type: "recruit" }) === true; },
+  onMapSelected(mapId) { navigateToMap(mapId); },
+  onQuickJoin(mapId, skinId) {
+    if (mapId === selectedMap.id) joinSelectedMap(skinId);
+    else navigateToMap(mapId, true);
+  },
 });
 lobby.show();
 loading.classList.add("done");
+
+function mapDirectoryEndpoint() {
+  const url = new URL(arenaEndpoint);
+  url.protocol = url.protocol === "wss:" ? "https:" : "http:";
+  url.pathname = "/maps";
+  url.search = "";
+  return url.href;
+}
+async function refreshMapDirectory() {
+  try {
+    const response = await fetch(mapDirectoryEndpoint(), { cache: "no-store" });
+    if (!response.ok) return;
+    const directory = await response.json();
+    lobby.updateMaps(directory.maps);
+  } catch {}
+}
+void refreshMapDirectory();
+const mapDirectoryTimer = setInterval(refreshMapDirectory, 10_000);
+addEventListener("pagehide", () => clearInterval(mapDirectoryTimer), { once: true });
 
 function addEvent(text) { eventLines.unshift(text); eventLines.splice(6); events.textContent = eventLines.join("\n"); }
 let arcadeCalloutTimer = 0;
@@ -228,7 +275,7 @@ network = new ArenaNetwork({
     // prevents pre-handshake input from racing the server's restored sequence.
     input.enabled = state === "online" && joined && !document.hidden;
     if (!loading.classList.contains("done")) {
-      if (state === "online") loadingText.textContent = "CONNECTED · JOINING DUSTY ORBIT…";
+      if (state === "online") loadingText.textContent = "CONNECTED · JOINING NEBULA MURDERBALL…";
       else if (state === "connecting") loadingText.textContent = "CONNECTING TO LOCAL MULTIPLAYER…";
       else loadingText.textContent = `${state === "failed" ? "MULTIPLAYER UNAVAILABLE" : "CONNECTION LOST · RETRYING"}${detail ? ` · ${detail}` : ""}`;
     }
@@ -236,6 +283,13 @@ network = new ArenaNetwork({
   onMessage(message) {
     if (message.type === "lobby_state") {
       lobby.update(message);
+      if (autoJoinRequested && !joined && !message.full && applicationState !== "JOINING") {
+        autoJoinRequested = false;
+        const cleanUrl = new URL(location.href);
+        cleanUrl.searchParams.delete("autojoin");
+        history.replaceState(null, "", cleanUrl);
+        joinSelectedMap(lobby.selectedSkinId);
+      }
       if (!joined && applicationState !== "JOINING") {
         applicationState = message.full ? "FULL" : "LOBBY";
         lobby.setApplicationState(applicationState);
@@ -292,17 +346,19 @@ network = new ArenaNetwork({
     if (message.type === "shield_hit") { renderer.shieldHit(message); addEvent(message.playerId === localId ? "SHIELD ABSORBED A HIT" : "SHIELD HIT"); }
     if (message.type === "teleport") {
       renderer.teleport(message);
-      audio.teleport();
+      audio.teleport(message);
       if (message.playerId === localId && finitePoint(message)) resetPredictionTo(message);
     }
     if (message.type === "mole_burrowed") renderer.moleBurrowed(message);
     if (message.type === "mole_emerged") renderer.moleEmerged(message);
     if (message.type === "fart_cloud") renderer.fartCloud(message, message.ownerId === localId);
     if (message.type === "mole_blocked" && message.playerId === localId) { renderer.blocked(); addEvent("EMERGENCE BLOCKED · MOVE OFF THE ROCK"); }
-    if (message.type === "powerup_collected" && message.playerId === localId) {
-      if (message.powerup === "speed") localSpeedBoostUntil = performance.now() + Math.max(0, Number(gameplay.speedDurationMs) || 0);
-      audio.powerupCollected(message.powerup);
-      addEvent(`PICKED UP ${String(message.powerup).toUpperCase()}`);
+    if (message.type === "powerup_collected") {
+      audio.powerupCollected(message.powerup, message);
+      if (message.playerId === localId) {
+        if (message.powerup === "speed") localSpeedBoostUntil = performance.now() + Math.max(0, Number(gameplay.speedDurationMs) || 0);
+        addEvent(`PICKED UP ${String(message.powerup).toUpperCase()}`);
+      }
     }
     if (message.type === "nuke_warning") { renderer.nukeWarning(message); if (message.ownerId === localId) nukeQueuedUntil = 0; addEvent("NUKE INCOMING"); }
     if (message.type === "nuke_detonated") renderer.nukeDetonated(message);
@@ -315,7 +371,7 @@ network = new ArenaNetwork({
     }
     if (message.type === "death") {
       renderer.death(message);
-      audio.death();
+      audio.death(message);
       if (message.victimId === localId) { localSpeedBoostUntil = 0; addEvent("YOU ARE DOWN · RESPAWNING IN 2s"); }
     }
     if (message.type === "respawn") {

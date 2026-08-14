@@ -1,19 +1,22 @@
-import rockDefinition from "../../games/game-03/assets/dusty-orbit/rocks/rock-cluster-01.json" with { type: "json" };
-import satelliteDefinition from "../../games/game-03/assets/dusty-orbit/satellite/satellite-relay-01.json" with { type: "json" };
-import satelliteLeftDefinition from "../../games/game-03/assets/dusty-orbit/satellite/satellite-relay-01-left.json" with { type: "json" };
-import outpostCanisterDefinition from "../../games/game-03/assets/dusty-orbit/outpost/outpost-canister-01.json" with { type: "json" };
-import outpostSupplyCrateDefinition from "../../games/game-03/assets/dusty-orbit/outpost/outpost-supply-crate-01.json" with { type: "json" };
-import outpostWallCornerDefinition from "../../games/game-03/assets/dusty-orbit/outpost/outpost-wall-corner-01.json" with { type: "json" };
-import outpostWallStraightDefinition from "../../games/game-03/assets/dusty-orbit/outpost/outpost-wall-straight-01.json" with { type: "json" };
-import { ENVIRONMENT_INSTANCES, SATELLITE_CONNECTION, SATELLITE_INSTANCES, WORLD } from "../../games/game-03/map.js";
+import rockDefinition from "../../games/game-03/maps/lunar-liability/objects/rocks/rock-cluster-01.json" with { type: "json" };
+import satelliteDefinition from "../../games/game-03/maps/lunar-liability/objects/satellite/satellite-relay-01.json" with { type: "json" };
+import satelliteLeftDefinition from "../../games/game-03/maps/lunar-liability/objects/satellite/satellite-relay-01-left.json" with { type: "json" };
+import outpostCanisterDefinition from "../../games/game-03/maps/lunar-liability/objects/outpost/outpost-canister-01.json" with { type: "json" };
+import outpostSupplyCrateDefinition from "../../games/game-03/maps/lunar-liability/objects/outpost/outpost-supply-crate-01.json" with { type: "json" };
+import outpostWallCornerDefinition from "../../games/game-03/maps/lunar-liability/objects/outpost/outpost-wall-corner-01.json" with { type: "json" };
+import outpostWallStraightDefinition from "../../games/game-03/maps/lunar-liability/objects/outpost/outpost-wall-straight-01.json" with { type: "json" };
+import { ENVIRONMENT_INSTANCES, MAP_METADATA, PLAYER_SPAWNS, SATELLITE_CONNECTION, SATELLITE_INSTANCES, WORLD } from "../../games/game-03/maps/lunar-liability/map.js";
 import { collisionBlocksMovement, collisionBlocksProjectiles, transformNormalizedPolygon } from "../../games/game-03/collision-geometry.js";
 
 export type Point = { x: number; y: number };
 export type Polygon = Point[];
 
 export const DUSTY_MAP = Object.freeze({
-  id: "dusty-orbit-001",
-  name: "DUSTY ORBIT",
+  id: MAP_METADATA.arenaId,
+  mapId: MAP_METADATA.id,
+  name: MAP_METADATA.name,
+  description: MAP_METADATA.description,
+  maxPlayers: MAP_METADATA.maxPlayers,
   width: WORLD.width,
   height: WORLD.height,
 });
@@ -64,28 +67,39 @@ export const DUSTY_SATELLITE_CONNECT_TOLERANCE = SATELLITE_CONNECTION.connectTol
 export const DUSTY_SATELLITE_DISCONNECT_TOLERANCE = SATELLITE_CONNECTION.disconnectTolerance;
 
 // The first pair is deliberately near enough for a quick two-client combat test.
-export const DUSTY_SPAWNS: readonly Point[] = Object.freeze([
-  Object.freeze({ x: 1450, y: 900 }),
-  Object.freeze({ x: 1650, y: 900 }),
-  Object.freeze({ x: 300, y: 300 }),
-  Object.freeze({ x: 2900, y: 300 }),
-  Object.freeze({ x: 300, y: 1700 }),
-  Object.freeze({ x: 2900, y: 1700 }),
-  Object.freeze({ x: 1150, y: 900 }),
-  Object.freeze({ x: 2200, y: 1050 }),
-]);
+export const DUSTY_SPAWNS: readonly Point[] = PLAYER_SPAWNS;
 
 export const DUSTY_CANONICAL_COLLISION = Object.freeze({
   definitionId: rockDefinition.id,
   normalizedPointCount: rockDefinition.collision.points.length,
   definitions: Object.freeze([
-    Object.freeze({ definitionId: rockDefinition.id, normalizedPointCount: rockDefinition.collision.points.length, source: "games/game-03/assets/dusty-orbit/rocks/rock-cluster-01.json" }),
-    Object.freeze({ definitionId: satelliteDefinition.id, normalizedPointCount: satelliteDefinition.collisionPolygon.length, source: "games/game-03/assets/dusty-orbit/satellite/satellite-relay-01.json" }),
-    Object.freeze({ definitionId: satelliteLeftDefinition.id, normalizedPointCount: satelliteLeftDefinition.collisionPolygon.length, source: "games/game-03/assets/dusty-orbit/satellite/satellite-relay-01-left.json" }),
-    Object.freeze({ definitionId: outpostCanisterDefinition.id, normalizedPointCount: outpostCanisterDefinition.collisionPolygon.length, source: "games/game-03/assets/dusty-orbit/outpost/outpost-canister-01.json" }),
-    Object.freeze({ definitionId: outpostSupplyCrateDefinition.id, normalizedPointCount: outpostSupplyCrateDefinition.collisionPolygon.length, source: "games/game-03/assets/dusty-orbit/outpost/outpost-supply-crate-01.json" }),
-    Object.freeze({ definitionId: outpostWallCornerDefinition.id, normalizedPointCount: outpostWallCornerDefinition.collisionPolygon.length, source: "games/game-03/assets/dusty-orbit/outpost/outpost-wall-corner-01.json" }),
-    Object.freeze({ definitionId: outpostWallStraightDefinition.id, normalizedPointCount: outpostWallStraightDefinition.collisionPolygon.length, source: "games/game-03/assets/dusty-orbit/outpost/outpost-wall-straight-01.json" }),
+    Object.freeze({ definitionId: rockDefinition.id, normalizedPointCount: rockDefinition.collision.points.length, source: "games/game-03/maps/lunar-liability/objects/rocks/rock-cluster-01.json" }),
+    Object.freeze({ definitionId: satelliteDefinition.id, normalizedPointCount: satelliteDefinition.collisionPolygon.length, source: "games/game-03/maps/lunar-liability/objects/satellite/satellite-relay-01.json" }),
+    Object.freeze({ definitionId: satelliteLeftDefinition.id, normalizedPointCount: satelliteLeftDefinition.collisionPolygon.length, source: "games/game-03/maps/lunar-liability/objects/satellite/satellite-relay-01-left.json" }),
+    Object.freeze({ definitionId: outpostCanisterDefinition.id, normalizedPointCount: outpostCanisterDefinition.collisionPolygon.length, source: "games/game-03/maps/lunar-liability/objects/outpost/outpost-canister-01.json" }),
+    Object.freeze({ definitionId: outpostSupplyCrateDefinition.id, normalizedPointCount: outpostSupplyCrateDefinition.collisionPolygon.length, source: "games/game-03/maps/lunar-liability/objects/outpost/outpost-supply-crate-01.json" }),
+    Object.freeze({ definitionId: outpostWallCornerDefinition.id, normalizedPointCount: outpostWallCornerDefinition.collisionPolygon.length, source: "games/game-03/maps/lunar-liability/objects/outpost/outpost-wall-corner-01.json" }),
+    Object.freeze({ definitionId: outpostWallStraightDefinition.id, normalizedPointCount: outpostWallStraightDefinition.collisionPolygon.length, source: "games/game-03/maps/lunar-liability/objects/outpost/outpost-wall-straight-01.json" }),
   ]),
   instanceCount: DUSTY_ENVIRONMENT_COLLIDERS.length,
+});
+
+export type MurderballMapRuntime = Readonly<{
+  map: typeof DUSTY_MAP;
+  polygons: typeof DUSTY_POLYGONS;
+  projectilePolygons: typeof DUSTY_PROJECTILE_POLYGONS;
+  satellites: typeof DUSTY_SATELLITES;
+  satelliteConnectTolerance: number;
+  satelliteDisconnectTolerance: number;
+  spawns: readonly Point[];
+}>;
+
+export const DUSTY_MAP_RUNTIME: MurderballMapRuntime = Object.freeze({
+  map: DUSTY_MAP,
+  polygons: DUSTY_POLYGONS,
+  projectilePolygons: DUSTY_PROJECTILE_POLYGONS,
+  satellites: DUSTY_SATELLITES,
+  satelliteConnectTolerance: DUSTY_SATELLITE_CONNECT_TOLERANCE,
+  satelliteDisconnectTolerance: DUSTY_SATELLITE_DISCONNECT_TOLERANCE,
+  spawns: DUSTY_SPAWNS,
 });

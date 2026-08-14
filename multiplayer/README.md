@@ -1,6 +1,6 @@
-# Poopcade Arena — Dusty Orbit multiplayer
+# Poopcade Arena — Nebula Murderball multiplayer
 
-This is the logically separate Cloudflare Worker for Poopcade Game 03. It owns the authoritative `dusty-orbit-001` arena through the `DustyOrbitArena` Durable Object. It has not been deployed yet and does not yet have a confirmed production hostname.
+This is the logically separate Cloudflare Worker for Poopcade Game 03. It owns one Durable Object arena per registered map. The first map is **LUNAR LIABILITY** (`lunar-liability`), backed by the stable `dusty-orbit-001` arena ID.
 
 ## Local launch
 
@@ -17,15 +17,17 @@ In a second terminal, serve the repository root:
 python -m http.server 8080 --bind 127.0.0.1
 ```
 
-Open `http://127.0.0.1:8080/games/game-03/` in two tabs. Each tab opens as a lightweight lobby spectator and only consumes an active arena slot after `JOIN THE CHAOS` is confirmed by the Durable Object.
+Open `http://127.0.0.1:8080/games/game-03/?local=1` in two tabs. The `local=1` flag explicitly selects the Worker on port 8787. Without it, a static local preview uses the production Worker and remains playable even when Wrangler is not running. Each tab opens as a lightweight lobby spectator and only consumes an active arena slot after `JOIN THE CHAOS` is confirmed by the Durable Object.
 
 `npm.cmd run test:wire` starts a package-free protocol/rendering harness on port 8787. It is only a local QA fallback when Wrangler is unavailable; it is not the production server and does not replace validating the Durable Object with `npm.cmd run dev`.
 
-For a phone on the same trusted LAN, run `npm.cmd run dev:lan`, serve the static site with `--bind 0.0.0.0`, and open `http://YOUR-LAN-IP:8080/games/game-03/`. The frontend automatically uses `ws://YOUR-LAN-IP:8787/arena/dusty-orbit-001/ws`. Windows Firewall may require temporary private-network access. This plain-HTTP workflow is local development only.
+For a phone on the same trusted LAN, run `npm.cmd run dev:lan`, serve the static site with `--bind 0.0.0.0`, and open `http://YOUR-LAN-IP:8080/games/game-03/?local=1`. The frontend then uses `ws://YOUR-LAN-IP:8787/arena/dusty-orbit-001/ws`. Windows Firewall may require temporary private-network access. This plain-HTTP workflow is local development only.
 
-Before production deployment, set the confirmed secure Worker origin in `games/game-03/config.js`. The value must be the `wss://` origin only; the frontend appends `/arena/dusty-orbit-001/ws`.
+Before production deployment, set the confirmed secure Worker origin in `games/game-03/config.js`. The value must be the `wss://` origin only; the frontend appends the selected map's `/arena/{arenaId}/ws` path.
 
-The health check is `GET /health` and returns JSON shaped as `{ "ok": true, "worker": "poopcade-arena", "map": "dusty-orbit-001" }` with `Cache-Control: no-store`.
+The health check is `GET /health`. `GET /maps` returns the file catalog merged with live occupancy from each map's Durable Object. Both responses use `Cache-Control: no-store`.
+
+Map packages live in `games/game-03/maps/{map-id}/`. A package owns its terrain, map-object definitions and images, placements, world bounds, spawn points, metadata, 15-player limit, and arena ID. Shared characters, weapons, powerups, effects, and sounds stay outside map packages. Register each new package in `games/game-03/maps/catalog.js`, then add its authoritative runtime to `src/dusty-map.ts` when the new map is built.
 
 ## Runtime behavior
 

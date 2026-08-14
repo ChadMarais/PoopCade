@@ -31,7 +31,7 @@ test("join protocol accepts profile identities and cosmetic choice but rejects m
   assert.equal(parseClientMessage(JSON.stringify({ type: "join", name: "Orbit Pilot", skinId: "../../bad" })), null);
 });
 
-test("hello distinguishes homepage presence from players genuinely waiting in Dusty Orbit", () => {
+test("hello distinguishes homepage presence from players genuinely waiting in Nebula Murderball", () => {
   const sessionId = id(1);
   assert.deepEqual(parseClientMessage(JSON.stringify({ type: "hello", name: "Guest-0001", sessionId })), { type: "hello", name: "Guest-0001", sessionId, presence: "unknown" });
   assert.deepEqual(parseClientMessage(JSON.stringify({ type: "hello", name: "Guest-0001", sessionId, presence: "home" })), { type: "hello", name: "Guest-0001", sessionId, presence: "home" });

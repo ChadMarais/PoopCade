@@ -81,7 +81,7 @@ function validate(value: unknown): { data?: GuestEvent; error?: string } {
   } else if (gameSlug === "next" && (durationMs < 400 || score > 10_000 || score > Math.floor(durationMs / 250) + 2)) {
     return { error: "NEXT. run values are outside the accepted range." };
   } else if (gameSlug === "dusty-orbit" && (durationMs < 1_000 || score > 100_000 || score > Math.floor(durationMs / 100) + 5)) {
-    return { error: "DUSTY ORBIT run values are outside the accepted range." };
+    return { error: "NEBULA MURDERBALL run values are outside the accepted range." };
   }
 
   return { data: { event, sessionId, clientRunId, gameSlug, score, durationMs } };

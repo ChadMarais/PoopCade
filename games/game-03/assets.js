@@ -1,4 +1,4 @@
-import { ASSET_DEFINITION_URLS, ENVIRONMENT_INSTANCES, SATELLITE_CONNECTION, TERRAIN_URL, WORLD } from "./map.js?v=20260813-5";
+import * as DEFAULT_MAP from "./maps/lunar-liability/map.js?v=20260814";
 import { collisionBlocksMovement, depthSortY, transformNormalizedPolygon } from "./collision-geometry.js?v=20260813-2";
 import { DEFAULT_CHARACTER_SKIN_ID, characterSkinById } from "./character-skins.js?v=20260814-2";
 
@@ -48,13 +48,19 @@ async function loadCharacterAsset(skin) {
   };
 }
 
-export async function loadDustyOrbitAssets(onProgress = () => {}) {
+export async function loadDustyOrbitAssets(mapDefinition = DEFAULT_MAP, onProgress = () => {}) {
+  if (typeof mapDefinition === "function") {
+    onProgress = mapDefinition;
+    mapDefinition = DEFAULT_MAP;
+  }
+  const { ASSET_DEFINITION_URLS, ENVIRONMENT_INSTANCES, MAP_METADATA, SATELLITE_CONNECTION, TERRAIN_URL, WORLD } = mapDefinition;
+  if (!MAP_METADATA || !Array.isArray(ASSET_DEFINITION_URLS) || !WORLD) throw new Error("Invalid Nebula Murderball map definition.");
   onProgress("Loading canonical collision geometry…", 0.12);
   const environmentDefinitions = await Promise.all(ASSET_DEFINITION_URLS.map((url) => loadJson(versioned(url))));
-  onProgress("Loading Dusty Orbit artwork…", 0.34);
+  onProgress("Loading Nebula Murderball artwork…", 0.34);
   const defaultSkin = characterSkinById(DEFAULT_CHARACTER_SKIN_ID);
-  if (!defaultSkin) throw new Error("Dusty Orbit requires one enabled default character skin.");
-  const powerupRoot = "./assets/dusty-orbit/powerups/";
+  if (!defaultSkin) throw new Error("Nebula Murderball requires one enabled default character skin.");
+  const powerupRoot = "./assets/powerups/";
   const weaponRoot = "./assets/weapons/";
   const definitionById = new Map(environmentDefinitions.map((definition) => [definition.id, definition]));
   const definitionRoot = new Map(ASSET_DEFINITION_URLS.map((url, index) => [environmentDefinitions[index].id, url.slice(0, url.lastIndexOf("/") + 1)]));
@@ -105,6 +111,7 @@ export async function loadDustyOrbitAssets(onProgress = () => {}) {
     return characterLoads.get(skin.id);
   };
   return {
+    map: MAP_METADATA,
     world: WORLD,
     terrain,
     rock: rocks[0]?.image,

@@ -1,4 +1,5 @@
 import type { DustyOrbitArena } from "./dusty-arena.ts";
+import { MAP_CATALOG, mapCatalogEntryForArena } from "../../games/game-03/maps/catalog.js";
 
 export { DustyOrbitArena } from "./dusty-arena.ts";
 
@@ -24,9 +25,26 @@ export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
     if (url.pathname === "/health") {
-      return Response.json({ ok: true, worker: "poopcade-arena", map: "dusty-orbit-001" }, {
+      return Response.json({ ok: true, worker: "poopcade-arena", game: "nebula-murderball", maps: MAP_CATALOG.map((map) => map.id) }, {
         headers: { "Cache-Control": "no-store" },
       });
+    }
+
+    if (url.pathname === "/maps") {
+      const origin = request.headers.get("Origin");
+      if (!originAllowed(origin)) return new Response("Origin not allowed.", { status: 403 });
+      const maps = await Promise.all(MAP_CATALOG.map(async (map) => {
+        try {
+          const response = await env.DUSTY_ARENAS.getByName(map.arenaId).fetch(new Request("https://arena.internal/status"));
+          if (!response.ok) throw new Error("status-unavailable");
+          return { ...map, ...(await response.json() as Record<string, unknown>) };
+        } catch {
+          return { ...map, activePlayers: 0, onlinePlayers: 0, full: false };
+        }
+      }));
+      const headers: Record<string, string> = { "Cache-Control": "no-store" };
+      if (origin) headers["Access-Control-Allow-Origin"] = origin;
+      return Response.json({ maps }, { headers });
     }
 
     const match = url.pathname.match(/^\/arena\/([a-z0-9-]{1,48})\/ws$/);
@@ -36,7 +54,7 @@ export default {
       return new Response("Expected a WebSocket upgrade.", { status: 426 });
     }
 
-    if (match[1] !== "dusty-orbit-001") return new Response("Unknown arena.", { status: 404 });
+    if (!mapCatalogEntryForArena(match[1])) return new Response("Unknown arena.", { status: 404 });
     return env.DUSTY_ARENAS.getByName(match[1]).fetch(request);
   },
 };
