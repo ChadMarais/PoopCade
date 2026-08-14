@@ -90,6 +90,38 @@ export const CHARACTER_SKINS = Object.freeze([
     },
     weaponMount: { forwardOffset: 0, sideOffset: 4 },
   }),
+  freezeSkin({
+    id: "guac-norris-01",
+    displayName: "GUAC NORRIS",
+    description: "A war crime with a charging dock.",
+    enabled: true,
+    sprite: "./assets/characters/guac-norris-01/guac-norris-01.png",
+    shadow: SHARED_SHADOW,
+    visual: {
+      bodyPivot: { x: 0.5, y: 0.5 },
+      sourceForwardAngleDegrees: 90,
+      drawSize: { width: 98, height: 98 },
+      shadowDrawSize: { width: 74, height: 50 },
+      lobbyScale: 1.3,
+    },
+    weaponMount: { forwardOffset: 0, sideOffset: 5 },
+  }),
+  freezeSkin({
+    id: "boopert-einstein-01",
+    displayName: "BOOPERT EINSTEIN",
+    description: "One brain cell. It has a tiny helmet.",
+    enabled: true,
+    sprite: "./assets/characters/boopert-einstein-01/boopert-einstein-01.png",
+    shadow: SHARED_SHADOW,
+    visual: {
+      bodyPivot: { x: 0.5, y: 0.5 },
+      sourceForwardAngleDegrees: 90,
+      drawSize: { width: 90, height: 90 },
+      shadowDrawSize: { width: 66, height: 45 },
+      lobbyScale: 1.16,
+    },
+    weaponMount: { forwardOffset: 0, sideOffset: 3 },
+  }),
 ]);
 
 export const DEFAULT_CHARACTER_SKIN_ID = CHARACTER_SKINS.find((skin) => skin.enabled)?.id ?? "moon-blob-01";

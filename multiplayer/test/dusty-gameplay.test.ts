@@ -193,6 +193,37 @@ test("health does not consume at full HP and shield absorbs exactly one projecti
   (simulation as any).damagePlayer(player.id, projectile(attacker.id), 1600); assert.equal(player.hp, 2);
 });
 
+test("character crashes block overlap, damage both pilots once per impact window, and share one crash-kill callout", () => {
+  const simulation = fresh(); const first = add(simulation, A, "Guest-1001"); const second = add(simulation, B, "Guest-1002");
+  first.x = 300; first.y = 300; second.x = 335; second.y = 300;
+  const crash = (seq: number, now: number) => {
+    simulation.applyInput(A, intent(seq, { moveX: 1 }), now);
+    simulation.applyInput(B, intent(seq, { moveX: -1 }), now);
+    simulation.step(DUSTY_FIXED_DT, now);
+  };
+
+  crash(1, 1000);
+  assert.deepEqual([first.hp, second.hp], [2, 2]);
+  assert.deepEqual([first.x, second.x], [300, 335]);
+  assert.equal(eventsOf(simulation, "player_hit").filter((event) => event.cause === "collision").length, 2);
+
+  crash(2, 1100);
+  assert.deepEqual([first.hp, second.hp], [2, 2], "continued contact cannot drain health every server tick");
+  simulation.drainEvents();
+
+  crash(3, 1800); simulation.drainEvents();
+  assert.deepEqual([first.hp, second.hp], [1, 1]);
+  crash(4, 2600);
+  assert.equal(first.alive, false); assert.equal(second.alive, false);
+  assert.deepEqual([first.deaths, second.deaths], [1, 1]);
+  assert.deepEqual([first.kills, second.kills], [1, 1]);
+  const callouts = eventsOf(simulation, "collision_kill") as Array<{ playerIds: string[]; killedIds: string[]; callout: string }>;
+  assert.equal(callouts.length, 1);
+  assert.deepEqual(callouts[0].playerIds, [first.id, second.id]);
+  assert.deepEqual(callouts[0].killedIds, [first.id, second.id]);
+  assert.match(callouts[0].callout, /DEMOLITION|BUMPER|ROAD RAGE|DRIVING TEST/);
+});
+
 test("speed doubles authoritative movement, refreshes without stacking, and expires", () => {
   const simulation = fresh(); const player = add(simulation, A, "Guest-1001");
   collect(simulation, player, "speed", 1000); const firstUntil = player.speedUntil;
@@ -398,7 +429,7 @@ test("satellite footprint blocks player circles and swept projectiles", () => {
   }
 });
 
-test("ten kills arm one nuke; detonation bypasses shield, mole, and concealment and charges again", () => {
+test("ten kills arm one nuke; detonation bypasses shield and concealment but Mole stays safely underground", () => {
   const simulation = fresh(); const owner = add(simulation, A, "Guest-1001"); const shielded = add(simulation, B, "Guest-1002"); const mole = add(simulation, C, "Guest-1003"); const outside = add(simulation, D, "Guest-1004");
   owner.kills = 9; owner.nukeProgress = 9; owner.weaponTier = 6;
   const dummy = { ...shielded, id: "dummy", alive: true } as DustyPlayer;
@@ -410,9 +441,9 @@ test("ten kills arm one nuke; detonation bypasses shield, mole, and concealment 
   simulation.applyInput(A, intent(1, { nuke: true }), 2000); simulation.step(DUSTY_FIXED_DT, 2000);
   assert.equal(owner.nukeReady, false); assert.equal(owner.nukeProgress, 0); assert.equal(simulation.nukes.length, 1);
   simulation.applyInput(A, intent(2, { nuke: false }), 3000); simulation.step(DUSTY_FIXED_DT, 3000);
-  assert.equal(owner.alive, true); assert.equal(shielded.alive, false); assert.equal(mole.alive, false);
+  assert.equal(owner.alive, true); assert.equal(shielded.alive, false); assert.equal(mole.alive, true);
   assert.equal(outside.alive, true);
-  assert.equal(owner.nukeProgress, 2); assert.equal(owner.kills, 12); assert.equal(shielded.shieldHits, 0);
+  assert.equal(owner.nukeProgress, 1); assert.equal(owner.kills, 11); assert.equal(shielded.shieldHits, 0);
   assert.equal(dummy.alive, true);
 });
 
@@ -435,7 +466,7 @@ test("threat leader ranking is deterministic and its marker obeys stealth", () =
   snapshot = simulation.snapshot(viewer.id, 1200) as any; assert.equal(snapshot.minimapPlayers.some((player: any) => player.id === first.id), false);
 });
 
-test("pickup population is six and collected items replenish with thirty percent less downtime", () => {
+test("pickup population is six and collected items replenish thirty percent more frequently", () => {
   const simulation = new DustyOrbitSimulation(() => .2); const active = simulation.pickups.filter((pickup) => pickup.active); assert.equal(active.length, 6);
   for (let first = 0; first < active.length; first++) for (let second = first + 1; second < active.length; second++) {
     const distance = Math.hypot(active[first].x - active[second].x, active[first].y - active[second].y);
@@ -445,7 +476,7 @@ test("pickup population is six and collected items replenish with thirty percent
   const pickup = simulation.pickups[0]; pickup.active = false; pickup.respawnAt = 6600;
   simulation.step(DUSTY_FIXED_DT, 6599); assert.equal(pickup.active, false);
   simulation.step(DUSTY_FIXED_DT, 6600); assert.equal(pickup.active, true);
-  assert.equal(DUSTY_GAMEPLAY.pickupRespawnMs, 5600);
+  assert.equal(DUSTY_GAMEPLAY.pickupRespawnMs, 4300);
   assert.equal(DUSTY_GAMEPLAY.pickupMinimumSpacing, 960);
 });
 

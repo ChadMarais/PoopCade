@@ -25,6 +25,8 @@
     .hud { left: 12px; bottom: 12px; min-width: 310px; padding: 10px 12px; font: 700 10px/1.46 ui-monospace, Consolas, monospace; white-space: pre; }
     .gameplay-hud { left: 12px; top: 68px; min-width: 188px; padding: 9px 11px; color: #effcff; font: 900 10px/1.5 ui-monospace, Consolas, monospace; white-space: pre; }
     .events { right: 12px; top: 56px; width: min(330px, calc(100vw - 24px)); padding: 8px 10px; font: 800 10px/1.45 ui-monospace, monospace; color: #f7dcff; white-space: pre-line; }
+    .arcade-callout { position:fixed; z-index:6; left:50%; top:22%; width:min(680px,calc(100vw - 32px)); padding:16px 22px; border:2px solid #c8ff47; border-radius:16px; color:#fff; background:linear-gradient(135deg,rgba(53,12,69,.96),rgba(5,41,54,.96)); box-shadow:0 20px 80px rgba(0,0,0,.7),0 0 34px rgba(200,255,71,.3); font:1000 clamp(18px,4vw,40px)/1 ui-monospace,monospace; letter-spacing:.04em; text-align:center; text-shadow:3px 3px 0 #7c24a1; pointer-events:none; opacity:0; transform:translate(-50%,-35%) scale(.72) rotate(-2deg); transition:opacity .18s ease,transform .24s cubic-bezier(.2,1.5,.4,1); }
+    .arcade-callout.show { opacity:1; transform:translate(-50%,0) scale(1) rotate(-1deg); }
     .controls { right: 12px; bottom: 12px; padding: 8px 10px; color: rgba(255,255,255,.82); font: 800 10px system-ui; }
     .collision-editor { left: 12px; top: 182px; width: min(340px,calc(100vw - 24px)); padding: 10px; pointer-events: auto; font: 800 10px/1.4 ui-monospace,Consolas,monospace; }
     .collision-editor-header { display: flex; align-items: center; justify-content: space-between; gap: 9px; margin-bottom: 8px; color: #75efff; letter-spacing: .1em; }
@@ -102,6 +104,7 @@
   <pre id="gameplayHud" class="panel gameplay-hud">HP: ---\nSHIELD: NO\nWEAPON: T1 PEA SHOOTER\nSCORE: 0\nHIGHSCORE: ---\nNUKE: 0/10</pre>
   <pre id="debugHud" class="panel hud">Waiting for server…</pre>
   <div id="events" class="panel events">Open this URL in a second tab to join the same arena.</div>
+  <div id="arcadeCallout" class="arcade-callout" role="status" aria-live="assertive" aria-atomic="true"></div>
   <section id="collisionEditor" class="panel collision-editor" hidden aria-label="Static map editor">
     <div class="collision-editor-header"><strong>STATIC MAP EDITOR</strong><div class="collision-editor-header-actions"><span id="collisionEditorPersistence" class="collision-editor-persistence offline">SAVE OFFLINE</span><button id="collisionEditorToggle" type="button">EDIT: OFF</button></div></div>
     <label>OBJECT<select id="collisionEditorObject" aria-label="Static object"></select></label>
@@ -124,6 +127,6 @@
   </div>
   <div id="loading" class="loading"><div><h1>DUSTY ORBIT</h1><p id="loadingText">LOADING MULTIPLAYER ASSETS…</p><div class="track"><div id="loadingBar" class="bar"></div></div></div></div>
   <a class="dusty-recruitment-toast" data-recruitment-toast href="/games/game-03/" hidden aria-live="polite"><strong>ORBITAL BAD DECISION INCOMING</strong><span data-recruitment-copy></span><b>GO TO THE LOBBY →</b></a>
-  <script type="module" src="./game.js?v=20260814-46"></script>
+  <script type="module" src="./game.js?v=20260814-47"></script>
 </body>
 </html>

@@ -38,9 +38,9 @@ export const DUSTY_GAMEPLAY = Object.freeze({
   fartCloudDurationMs: 5_000,
   fartCloudRadius: 360,
   pickupActiveCount: 6,
-  // Thirty percent less downtime after collection keeps the six-item field
-  // replenished more consistently without weakening its spacing guarantees.
-  pickupRespawnMs: 5_600,
+  // A 4.3s interval is thirty percent more frequent than the previous 5.6s
+  // cadence (5.6 / 1.3), without weakening the spacing guarantees.
+  pickupRespawnMs: 4_300,
   pickupRadius: 18,
   // Three quarters of the 1280px reference gameplay viewport. This is a world
   // distance so every client sees the same authoritative pickup distribution.

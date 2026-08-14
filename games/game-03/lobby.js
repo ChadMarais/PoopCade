@@ -1,4 +1,4 @@
-import { CHARACTER_SKINS, DEFAULT_CHARACTER_SKIN_ID, characterSkinById, enabledCharacterSkins } from "./character-skins.js?v=20260813";
+import { CHARACTER_SKINS, DEFAULT_CHARACTER_SKIN_ID, characterSkinById, enabledCharacterSkins } from "./character-skins.js?v=20260814-2";
 import { RECRUITMENT_COOLDOWN_MS, normalizedOnlinePlayers, recruitmentCooldownRemaining } from "./presence.js?v=20260814";
 
 const STORAGE_KEY = "poopcade.game03.skin";

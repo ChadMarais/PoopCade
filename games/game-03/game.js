@@ -1,13 +1,13 @@
 import { moveCircleWithSliding } from "./collision-geometry.js?v=20260813-2";
 import { CollisionEditor } from "./collision-editor.js?v=20260813-9";
-import { loadDustyOrbitAssets } from "./assets.js?v=20260813-13";
+import { loadDustyOrbitAssets } from "./assets.js?v=20260814-14";
 import { PRODUCTION_ARENA_WSS } from "./config.js?v=20260812";
 import { DustyOrbitMultiplayerRenderer } from "./renderer.js?v=20260814-26";
 import { InputController } from "./input.js?v=20260813-3";
 import { claimSessionIdentity, resolvePoopcadePlayerIdentity } from "./identity.js?v=20260813-2";
 import { ArenaNetwork } from "./network.js?v=20260814-2";
 import { consumeFixedStep, convergeVisualPosition } from "./timing.js?v=20260813-2";
-import { DustyLobby } from "./lobby.js?v=20260814-4";
+import { DustyLobby } from "./lobby.js?v=20260814-5";
 import { RECRUITMENT_HREF } from "./presence.js?v=20260814";
 import { DustyOrbitHighscoreTracker } from "./highscore.js?v=20260813-2";
 
@@ -64,6 +64,7 @@ const loadingText = document.querySelector("#loadingText");
 const connection = document.querySelector("#connection");
 const debugHud = document.querySelector("#debugHud");
 const events = document.querySelector("#events");
+const arcadeCallout = document.querySelector("#arcadeCallout");
 const gameplayHud = document.querySelector("#gameplayHud");
 const mobileFireLabel = document.querySelector("#mobileFireButton .mobile-fire-label");
 const mobileNukeButton = document.querySelector("#mobileNukeButton");
@@ -186,6 +187,14 @@ lobby.show();
 loading.classList.add("done");
 
 function addEvent(text) { eventLines.unshift(text); eventLines.splice(6); events.textContent = eventLines.join("\n"); }
+let arcadeCalloutTimer = 0;
+function showArcadeCallout(text) {
+  clearTimeout(arcadeCalloutTimer);
+  arcadeCallout.textContent = text;
+  arcadeCallout.classList.remove("show");
+  requestAnimationFrame(() => arcadeCallout.classList.add("show"));
+  arcadeCalloutTimer = setTimeout(() => arcadeCallout.classList.remove("show"), 2400);
+}
 
 network = new ArenaNetwork({
   url: arenaEndpoint, sessionId, name: playerName,
@@ -293,6 +302,11 @@ network = new ArenaNetwork({
     if (message.type === "nuke_detonated") renderer.nukeDetonated(message);
     if (message.type === "player_hit") { renderer.playerHit(message.playerId); addEvent(`${message.playerId === localId ? "YOU" : "PLAYER"} HIT · ${message.hp} HP`); }
     if (message.type === "kill") addEvent(`${message.killerName} ELIMINATED ${message.victimName}`);
+    if (message.type === "collision_kill" && Array.isArray(message.playerIds) && message.playerIds.includes(localId)) {
+      const callout = String(message.callout || "DEMOLITION DERBY · INSURANCE DENIED");
+      showArcadeCallout(callout);
+      addEvent(callout);
+    }
     if (message.type === "death") {
       renderer.death(message);
       if (message.victimId === localId) { localSpeedBoostUntil = 0; addEvent("YOU ARE DOWN · RESPAWNING IN 2s"); }
@@ -526,6 +540,8 @@ function completeLeaveToLobby() {
   predicted = null;
   visualPredicted = null;
   latestSnapshot = null;
+  clearTimeout(arcadeCalloutTimer);
+  arcadeCallout.classList.remove("show");
   lobby.setApplicationState(applicationState);
   lobby.show();
   leavePending = false;

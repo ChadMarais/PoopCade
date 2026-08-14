@@ -41,7 +41,7 @@ try {
   await Promise.all(clients.map((item) => item.waitFor((message) => message.type === "lobby_state")));
   assert.ok(clients.every((item) => item.messages.some((message) => message.type === "lobby_state")));
 
-  const productionSkins = ["moon-blob-01", "ivory-dart-01", "mint-tank-01", "void-orb-01"];
+  const productionSkins = ["moon-blob-01", "ivory-dart-01", "mint-tank-01", "void-orb-01", "guac-norris-01", "boopert-einstein-01"];
   for (const [index, item] of clients.slice(0, 14).entries()) {
     item.socket.send(JSON.stringify({ type: "join", name: item.name, skinId: productionSkins[index % productionSkins.length] }));
     await item.waitFor((message) => message.type === "welcome");

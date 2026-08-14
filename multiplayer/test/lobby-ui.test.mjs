@@ -49,3 +49,16 @@ test("gameplay lobby button is clickable and waits for authoritative leave confi
   assert.ok(game.indexOf('network.send({ type: "leave" })') < game.indexOf("highscoreTracker.flush(finalPlayer)"));
   assert.match(arena, /type: "leave_confirmed"/);
 });
+
+test("crash kills expose a prominent arcade callout to both involved pilots", async () => {
+  const [html, game, arena] = await Promise.all([
+    readFile(new URL("../../games/game-03/index.html", import.meta.url), "utf8"),
+    readFile(new URL("../../games/game-03/game.js", import.meta.url), "utf8"),
+    readFile(new URL("../src/dusty-simulation.ts", import.meta.url), "utf8"),
+  ]);
+  assert.match(html, /id="arcadeCallout" class="arcade-callout"/);
+  assert.match(game, /message\.type === "collision_kill"/);
+  assert.match(game, /message\.playerIds\.includes\(localId\)/);
+  assert.match(arena, /type: "collision_kill"/);
+  assert.match(arena, /!player\.moleMode/);
+});

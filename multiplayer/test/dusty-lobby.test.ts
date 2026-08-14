@@ -11,15 +11,17 @@ function id(index: number): string {
   return `10000000-0000-4000-8000-${String(index).padStart(12, "0")}`;
 }
 
-test("canonical registry exposes all four production skins and accepts future definitions without UI-specific code", () => {
+test("canonical registry exposes all six production skins and accepts future definitions without UI-specific code", () => {
   assert.equal(DEFAULT_CHARACTER_SKIN_ID, "moon-blob-01");
   assert.equal(characterSkinById("moon-blob-01")?.displayName, "PURPLE NURPLE");
   assert.equal(characterSkinById("ivory-dart-01")?.displayName, "SIR PRICKS-A-LOT");
   assert.equal(characterSkinById("mint-tank-01")?.displayName, "MAJOR DISAPPOINTMENT");
   assert.equal(characterSkinById("void-orb-01")?.displayName, "THE PROBE-LEM");
+  assert.equal(characterSkinById("guac-norris-01")?.displayName, "GUAC NORRIS");
+  assert.equal(characterSkinById("boopert-einstein-01")?.displayName, "BOOPERT EINSTEIN");
   assert.equal(validCharacterSkinId("invented-by-client"), "moon-blob-01");
   const future = { ...CHARACTER_SKINS[0], id: "future-skin-02", displayName: "FUTURE TEST", enabled: true };
-  assert.deepEqual(enabledCharacterSkins([...CHARACTER_SKINS, future]).map((skin) => skin.id), ["moon-blob-01", "ivory-dart-01", "mint-tank-01", "void-orb-01", "future-skin-02"]);
+  assert.deepEqual(enabledCharacterSkins([...CHARACTER_SKINS, future]).map((skin) => skin.id), ["moon-blob-01", "ivory-dart-01", "mint-tank-01", "void-orb-01", "guac-norris-01", "boopert-einstein-01", "future-skin-02"]);
   for (const skin of CHARACTER_SKINS) assert.equal(existsSync(resolve("..", "games", "game-03", skin.sprite.replace(/^\.\//, ""))), true, `${skin.id} sprite is missing`);
 });
 
@@ -140,10 +142,11 @@ test("lobby roster carries live non-negative scores, skin IDs, join times, and d
 
 test("each new production skin survives authoritative admission, lobby state, and gameplay snapshots", () => {
   const simulation = new DustyOrbitSimulation(() => .5);
-  for (const [index, skinId] of ["ivory-dart-01", "mint-tank-01", "void-orb-01"].entries()) {
+  const skinIds = ["ivory-dart-01", "mint-tank-01", "void-orb-01", "guac-norris-01", "boopert-einstein-01"];
+  for (const [index, skinId] of skinIds.entries()) {
     const player = simulation.addPlayer(id(index + 1), `Guest-${String(index + 1).padStart(4, "0")}`, 1000 + index, { skinId });
     assert.equal(player.skinId, skinId);
     assert.equal((simulation.snapshot(player.id, 2000) as any).players.find((item: any) => item.id === player.id).skinId, skinId);
   }
-  assert.deepEqual((simulation.lobbyState(2000) as any).players.map((player: any) => player.skinId), ["ivory-dart-01", "mint-tank-01", "void-orb-01"]);
+  assert.deepEqual((simulation.lobbyState(2000) as any).players.map((player: any) => player.skinId), skinIds);
 });

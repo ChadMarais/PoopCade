@@ -27,6 +27,14 @@ export const DUSTY_STALE_PLAYER_MS = 15000;
 export const DUSTY_DISCONNECT_GRACE_MS = 5000;
 export const DUSTY_MAX_PLAYERS = 15;
 export const DUSTY_MAX_HIT_REWIND_MS = 250;
+export const DUSTY_PLAYER_COLLISION_COOLDOWN_MS = 750;
+
+const COLLISION_KILL_CALLOUTS = Object.freeze([
+  "DEMOLITION DERBY · INSURANCE DENIED",
+  "BUMPER CARS · MAXIMUM POOR JUDGEMENT",
+  "ROAD RAGE · NOW IN SPACE",
+  "BOTH PILOTS FAILED THE DRIVING TEST",
+]);
 
 // Backwards-compatible exports for the arena welcome packet and older tests.
 export const DUSTY_WEAPON = DUSTY_WEAPONS[0];
@@ -136,6 +144,7 @@ export class DustyOrbitSimulation {
   private spawnCursor = 0;
   private joinCursor = 0;
   private readonly positionHistory = new Map<string, DustyPositionSample[]>();
+  private readonly playerCollisionAt = new Map<string, number>();
   private readonly random: () => number;
   private readonly validWorldPoints: Point[];
   threatLeaderId: string | null = null;
@@ -190,6 +199,7 @@ export class DustyOrbitSimulation {
     if (!player) return;
     this.players.delete(id);
     this.positionHistory.delete(id);
+    for (const key of this.playerCollisionAt.keys()) if (key.split("|").includes(id)) this.playerCollisionAt.delete(key);
     for (let index = this.projectiles.length - 1; index >= 0; index--) if (this.projectiles[index].ownerId === id) this.projectiles.splice(index, 1);
     for (let index = this.nukes.length - 1; index >= 0; index--) if (this.nukes[index].ownerId === id) this.nukes.splice(index, 1);
     this.updateThreatLeader();
@@ -243,10 +253,11 @@ export class DustyOrbitSimulation {
   }
 
   /** Tick order: input/effect expiry, movement, pickup collection, actions/bursts,
-   * nukes, projectile simulation/damage, cloud expiry, threat selection, snapshot. */
+   * player crashes, nukes, projectile damage, cloud expiry, threat selection, snapshot. */
   step(dt = DUSTY_FIXED_DT, now = Date.now()): void {
     this.tick++;
     this.maintainPickups(now);
+    const movementStarts = new Map<string, Point>();
     for (const player of [...this.players.values()]) {
       if ((player.disconnectedAt && now - player.disconnectedAt >= DUSTY_DISCONNECT_GRACE_MS) || now - player.lastMessageAt >= DUSTY_STALE_PLAYER_MS) {
         this.events.push({
@@ -277,6 +288,7 @@ export class DustyOrbitSimulation {
       const move = normalized(player.input.moveX, player.input.moveY);
       const speed = DUSTY_GAMEPLAY.baseMovementSpeed * (player.speedUntil > now ? DUSTY_GAMEPLAY.speedMultiplier : 1);
       player.vx = move.x * speed; player.vy = move.y * speed;
+      movementStarts.set(player.id, { x: player.x, y: player.y });
       const displacement = { x: player.vx * dt, y: player.vy * dt };
       const moved = player.moleMode ? { x: player.x + displacement.x, y: player.y + displacement.y } :
         moveCircleWithSliding(player, displacement, DUSTY_PLAYER_RADIUS, DUSTY_POLYGONS);
@@ -287,10 +299,58 @@ export class DustyOrbitSimulation {
       this.updateSatelliteConnection(player);
       this.recordPosition(player, now);
     }
+    this.resolvePlayerCollisions(movementStarts, now);
     this.updateNukes(now);
     this.updateProjectiles(dt, now);
     for (let index = this.fartClouds.length - 1; index >= 0; index--) if (now >= this.fartClouds[index].expiresAt) this.fartClouds.splice(index, 1);
     this.updateThreatLeader();
+  }
+
+  private resolvePlayerCollisions(starts: Map<string, Point>, now: number): void {
+    const players = [...this.players.values()]
+      .filter((player) => player.alive && !player.moleMode && starts.has(player.id))
+      .sort((a, b) => a.joinOrder - b.joinOrder || a.id.localeCompare(b.id));
+    const collisionDistance = DUSTY_PLAYER_RADIUS * 2;
+    for (let first = 0; first < players.length; first++) {
+      for (let second = first + 1; second < players.length; second++) {
+        const a = players[first], b = players[second];
+        if (!a.alive || !b.alive) continue;
+        const startA = starts.get(a.id)!, startB = starts.get(b.id)!;
+        const startDistance = Math.hypot(startB.x - startA.x, startB.y - startA.y);
+        const distance = Math.hypot(b.x - a.x, b.y - a.y);
+        if (distance >= collisionDistance || distance >= startDistance - .001) continue;
+
+        // Rewind both pilots to their last server-safe positions. This blocks
+        // character overlap without introducing a push that could put either
+        // player inside nearby static collision geometry.
+        a.x = startA.x; a.y = startA.y; a.vx = 0; a.vy = 0;
+        b.x = startB.x; b.y = startB.y; b.vx = 0; b.vy = 0;
+        this.resetPositionHistory(a, now); this.resetPositionHistory(b, now);
+
+        const pairKey = a.id < b.id ? `${a.id}|${b.id}` : `${b.id}|${a.id}`;
+        const previousImpact = this.playerCollisionAt.get(pairKey) ?? Number.NEGATIVE_INFINITY;
+        if (now - previousImpact < DUSTY_PLAYER_COLLISION_COOLDOWN_MS) continue;
+        this.playerCollisionAt.set(pairKey, now);
+        if (a.protectedUntil > now || b.protectedUntil > now) continue;
+
+        a.hp--; b.hp--;
+        this.events.push({ type: "player_hit", cause: "collision", playerId: a.id, ownerId: b.id, hp: Math.max(0, a.hp), damage: 1 });
+        this.events.push({ type: "player_hit", cause: "collision", playerId: b.id, ownerId: a.id, hp: Math.max(0, b.hp), damage: 1 });
+        const killedIds = [a.hp <= 0 ? a.id : null, b.hp <= 0 ? b.id : null].filter((id): id is string => Boolean(id));
+        if (a.hp <= 0) this.killPlayer(a, b.id, now, "collision");
+        if (b.hp <= 0) this.killPlayer(b, a.id, now, "collision");
+        if (killedIds.length) {
+          const calloutIndex = (a.joinOrder + b.joinOrder + this.tick) % COLLISION_KILL_CALLOUTS.length;
+          this.events.push({
+            type: "collision_kill",
+            playerIds: [a.id, b.id],
+            playerNames: [a.name, b.name],
+            killedIds,
+            callout: COLLISION_KILL_CALLOUTS[calloutIndex],
+          });
+        }
+      }
+    }
   }
 
   private resetPositionHistory(player: DustyPlayer, now: number): void {
@@ -470,7 +530,7 @@ export class DustyOrbitSimulation {
     if (player.hp <= 0) this.killPlayer(player, projectile.ownerId, now, "projectile");
   }
 
-  private killPlayer(victim: DustyPlayer, killerId: string, now: number, cause: "projectile" | "nuke"): void {
+  private killPlayer(victim: DustyPlayer, killerId: string, now: number, cause: "projectile" | "nuke" | "collision"): void {
     if (!victim.alive) return;
     const killer = this.players.get(killerId);
     const deathX = victim.x, deathY = victim.y;
@@ -511,7 +571,7 @@ export class DustyOrbitSimulation {
     for (let index = this.nukes.length - 1; index >= 0; index--) {
       const nuke = this.nukes[index];
       if (now < nuke.detonateAt) continue;
-      const victims = [...this.players.values()].filter((player) => player.alive && player.id !== nuke.ownerId && Math.hypot(player.x - nuke.x, player.y - nuke.y) <= nuke.radius);
+      const victims = [...this.players.values()].filter((player) => player.alive && !player.moleMode && player.id !== nuke.ownerId && Math.hypot(player.x - nuke.x, player.y - nuke.y) <= nuke.radius);
       victims.sort((a, b) => a.joinOrder - b.joinOrder || a.id.localeCompare(b.id));
       for (const victim of victims) this.killPlayer(victim, nuke.ownerId, now, "nuke");
       this.events.push({ type: "nuke_detonated", id: nuke.id, ownerId: nuke.ownerId, x: nuke.x, y: nuke.y, radius: nuke.radius, victims: victims.map((player) => player.id) });
