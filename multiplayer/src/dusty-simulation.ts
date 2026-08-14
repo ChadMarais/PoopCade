@@ -148,6 +148,7 @@ export class DustyOrbitSimulation {
   private readonly random: () => number;
   private readonly validWorldPoints: Point[];
   threatLeaderId: string | null = null;
+  threatLeaderIds: string[] = [];
   tick = 0;
 
   constructor(random: () => number = Math.random) {
@@ -310,15 +311,25 @@ export class DustyOrbitSimulation {
     const players = [...this.players.values()]
       .filter((player) => player.alive && !player.moleMode && starts.has(player.id))
       .sort((a, b) => a.joinOrder - b.joinOrder || a.id.localeCompare(b.id));
-    const collisionDistance = DUSTY_PLAYER_RADIUS * 2;
+    // Player art is considerably wider than the compact navigation circle.
+    // Use the same opaque-body footprint as projectile combat so two visible
+    // characters crash as soon as their bodies touch.
+    const collisionDistance = DUSTY_PLAYER_HIT_RADIUS * 2;
     for (let first = 0; first < players.length; first++) {
       for (let second = first + 1; second < players.length; second++) {
         const a = players[first], b = players[second];
         if (!a.alive || !b.alive) continue;
         const startA = starts.get(a.id)!, startB = starts.get(b.id)!;
-        const startDistance = Math.hypot(startB.x - startA.x, startB.y - startA.y);
-        const distance = Math.hypot(b.x - a.x, b.y - a.y);
-        if (distance >= collisionDistance || distance >= startDistance - .001) continue;
+        const maximumMovement = DUSTY_GAMEPLAY.baseMovementSpeed * DUSTY_GAMEPLAY.speedMultiplier * DUSTY_FIXED_DT + .01;
+        // Teleports are discontinuities, not high-speed travel through every
+        // player between the pickup and the destination.
+        if (Math.hypot(a.x - startA.x, a.y - startA.y) > maximumMovement || Math.hypot(b.x - startB.x, b.y - startB.y) > maximumMovement) continue;
+        const relativeStart = { x: startA.x - startB.x, y: startA.y - startB.y };
+        const relativeTravel = { x: (a.x - startA.x) - (b.x - startB.x), y: (a.y - startA.y) - (b.y - startB.y) };
+        const startDistance = Math.hypot(relativeStart.x, relativeStart.y);
+        const closingAtStart = relativeStart.x * relativeTravel.x + relativeStart.y * relativeTravel.y < -.001;
+        const impactAt = movingCircleTime(startA, a, startB, b, collisionDistance);
+        if (impactAt === null || (startDistance <= collisionDistance + .001 && !closingAtStart)) continue;
 
         // Rewind both pilots to their last server-safe positions. This blocks
         // character overlap without introducing a push that could put either
@@ -333,9 +344,8 @@ export class DustyOrbitSimulation {
         this.playerCollisionAt.set(pairKey, now);
         if (a.protectedUntil > now || b.protectedUntil > now) continue;
 
-        a.hp--; b.hp--;
-        this.events.push({ type: "player_hit", cause: "collision", playerId: a.id, ownerId: b.id, hp: Math.max(0, a.hp), damage: 1 });
-        this.events.push({ type: "player_hit", cause: "collision", playerId: b.id, ownerId: a.id, hp: Math.max(0, b.hp), damage: 1 });
+        this.damagePlayerFromCollision(a, b.id);
+        this.damagePlayerFromCollision(b, a.id);
         const killedIds = [a.hp <= 0 ? a.id : null, b.hp <= 0 ? b.id : null].filter((id): id is string => Boolean(id));
         if (a.hp <= 0) this.killPlayer(a, b.id, now, "collision");
         if (b.hp <= 0) this.killPlayer(b, a.id, now, "collision");
@@ -351,6 +361,12 @@ export class DustyOrbitSimulation {
         }
       }
     }
+  }
+
+  private damagePlayerFromCollision(player: DustyPlayer, ownerId: string): void {
+    if (this.absorbShieldHit(player, ownerId, "collision")) return;
+    player.hp--;
+    this.events.push({ type: "player_hit", cause: "collision", playerId: player.id, ownerId, hp: Math.max(0, player.hp), damage: 1 });
   }
 
   private resetPositionHistory(player: DustyPlayer, now: number): void {
@@ -520,14 +536,17 @@ export class DustyOrbitSimulation {
   private damagePlayer(id: string, projectile: DustyProjectile, now: number): void {
     const player = this.players.get(id);
     if (!player?.alive || player.moleMode || player.protectedUntil > now) return;
-    if (player.shieldHits > 0) {
-      player.shieldHits = 0;
-      this.events.push({ type: "shield_hit", playerId: id, ownerId: projectile.ownerId, x: player.x, y: player.y });
-      return;
-    }
+    if (this.absorbShieldHit(player, projectile.ownerId, "projectile")) return;
     player.hp -= projectile.damage;
     this.events.push({ type: "player_hit", playerId: id, ownerId: projectile.ownerId, hp: Math.max(0, player.hp), damage: projectile.damage });
     if (player.hp <= 0) this.killPlayer(player, projectile.ownerId, now, "projectile");
+  }
+
+  private absorbShieldHit(player: DustyPlayer, ownerId: string, cause: "projectile" | "collision"): boolean {
+    if (player.shieldHits <= 0) return false;
+    player.shieldHits = 0;
+    this.events.push({ type: "shield_hit", cause, playerId: player.id, ownerId, x: player.x, y: player.y });
+    return true;
   }
 
   private killPlayer(victim: DustyPlayer, killerId: string, now: number, cause: "projectile" | "nuke" | "collision"): void {
@@ -742,14 +761,14 @@ export class DustyOrbitSimulation {
   }
 
   private updateThreatLeader(): void {
-    let leader: DustyPlayer | null = null;
-    for (const player of this.players.values()) {
-      if (!leader || player.killScore > leader.killScore ||
-          (player.killScore === leader.killScore && player.weaponTier > leader.weaponTier) ||
-          (player.killScore === leader.killScore && player.weaponTier === leader.weaponTier && player.kills > leader.kills) ||
-          (player.killScore === leader.killScore && player.weaponTier === leader.weaponTier && player.kills === leader.kills && (player.joinOrder < leader.joinOrder || (player.joinOrder === leader.joinOrder && player.id < leader.id)))) leader = player;
-    }
-    this.threatLeaderId = leader?.id ?? null;
+    const living = [...this.players.values()].filter((player) => player.alive);
+    const highestWeaponTier = living.reduce((highest, player) => Math.max(highest, player.weaponTier), 0);
+    this.threatLeaderIds = living
+      .filter((player) => player.weaponTier === highestWeaponTier)
+      .sort((a, b) => a.joinOrder - b.joinOrder || a.id.localeCompare(b.id))
+      .map((player) => player.id);
+    // Retain the singular field for wire compatibility with older clients.
+    this.threatLeaderId = this.threatLeaderIds[0] ?? null;
   }
 
   drainEvents(): Array<Record<string, unknown>> { const output = this.events; this.events = []; return output; }
@@ -773,7 +792,7 @@ export class DustyOrbitSimulation {
     const minimapPlayers: Array<Record<string, unknown>> = [];
     if (viewer) for (const player of visiblePlayers) {
       if (!player.alive || player.id === viewerId) continue;
-      const threat = player.id === this.threatLeaderId;
+      const threat = this.threatLeaderIds.includes(player.id);
       if (threat || this.radarSource(viewer, now) !== "NONE") minimapPlayers.push({ id: player.id, x: round(player.x), y: round(player.y), color: player.color, threat });
     }
     return {
@@ -793,6 +812,8 @@ export class DustyOrbitSimulation {
       fartClouds: this.fartClouds.map((cloud) => ({ ...cloud })),
       nukes: this.nukes.map((nuke) => ({ ...nuke })),
       threatLeaderId: this.threatLeaderId,
+      threatLeaderIds: this.threatLeaderIds,
+      totalPlayers: this.players.size,
       activeSatelliteIds: DUSTY_SATELLITES.filter((satellite) => [...this.players.values()].some((player) => player.alive && player.connectedSatelliteId === satellite.id)).map((satellite) => satellite.id),
       minimapPlayers,
     };

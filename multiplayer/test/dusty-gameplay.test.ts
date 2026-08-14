@@ -224,6 +224,25 @@ test("character crashes block overlap, damage both pilots once per impact window
   assert.match(callouts[0].callout, /DEMOLITION|BUMPER|ROAD RAGE|DRIVING TEST/);
 });
 
+test("character crashes trigger at visible body contact and consume shields before health", () => {
+  const simulation = fresh(); const shielded = add(simulation, A, "Guest-1001"); const other = add(simulation, B, "Guest-1002");
+  shielded.x = 300; shielded.y = 300; other.x = 368; other.y = 300;
+  shielded.shieldHits = 1;
+  simulation.applyInput(A, intent(1, { moveX: 1 }), 1000);
+  simulation.applyInput(B, intent(1, { moveX: -1 }), 1000);
+  simulation.step(DUSTY_FIXED_DT, 1000);
+  assert.equal(shielded.shieldHits, 0);
+  assert.equal(shielded.hp, 3, "the shield takes the first crash hit");
+  assert.equal(other.hp, 2);
+  const shieldHit = eventsOf(simulation, "shield_hit")[0] as { cause: string; playerId: string };
+  assert.deepEqual({ cause: shieldHit.cause, playerId: shieldHit.playerId }, { cause: "collision", playerId: shielded.id });
+
+  simulation.applyInput(A, intent(2, { moveX: 1 }), 1800);
+  simulation.applyInput(B, intent(2, { moveX: -1 }), 1800);
+  simulation.step(DUSTY_FIXED_DT, 1800);
+  assert.equal(shielded.hp, 2, "health is damaged by the next crash after the shield is gone");
+});
+
 test("speed doubles authoritative movement, refreshes without stacking, and expires", () => {
   const simulation = fresh(); const player = add(simulation, A, "Guest-1001");
   collect(simulation, player, "speed", 1000); const firstUntil = player.speedUntil;
@@ -346,6 +365,7 @@ test("satellite contact is authoritative, hysteretic, immediate on exit, and com
   const viewer = add(simulation, A, "Guest-1001");
   const visible = add(simulation, B, "Guest-1002");
   const hidden = add(simulation, C, "Guest-1003");
+  viewer.weaponTier = 2;
   hidden.moleMode = true; hidden.moleUntil = 9999;
 
   placeAtSatelliteGap(viewer, 5);
@@ -454,13 +474,15 @@ test("death never removes nuke progress or a ready nuke", () => {
   (simulation as any).killPlayer(victim, killer.id, 1100, "projectile"); assert.equal(victim.nukeReady, true); assert.equal(victim.nukeProgress, 10);
 });
 
-test("threat leader ranking is deterministic and its marker obeys stealth", () => {
+test("highest weapon tier marks every tied threat and its markers obey stealth", () => {
   const simulation = fresh(); const viewer = add(simulation, A, "Guest-1001"); const first = add(simulation, B, "Guest-1002"); const second = add(simulation, C, "Guest-1003");
   viewer.killScore = 0; first.killScore = 4; first.weaponTier = 3; second.killScore = 3; second.weaponTier = 6;
-  (simulation as any).updateThreatLeader(); assert.equal(simulation.threatLeaderId, first.id);
-  second.killScore = 4; (simulation as any).updateThreatLeader(); assert.equal(simulation.threatLeaderId, second.id);
-  second.weaponTier = 3; first.kills = second.kills = 2; (simulation as any).updateThreatLeader(); assert.equal(simulation.threatLeaderId, first.id);
-  let snapshot = simulation.snapshot(viewer.id, 1000) as any; assert.equal(snapshot.minimapPlayers.some((player: any) => player.id === first.id && player.threat), true);
+  (simulation as any).updateThreatLeader(); assert.deepEqual(simulation.threatLeaderIds, [second.id]);
+  second.killScore = 0; (simulation as any).updateThreatLeader(); assert.deepEqual(simulation.threatLeaderIds, [second.id], "score does not affect the marker");
+  first.weaponTier = 6; (simulation as any).updateThreatLeader(); assert.deepEqual(simulation.threatLeaderIds, [first.id, second.id]);
+  let snapshot = simulation.snapshot(viewer.id, 1000) as any;
+  assert.deepEqual(snapshot.minimapPlayers.filter((player: any) => player.threat).map((player: any) => player.id), [first.id, second.id]);
+  assert.equal(snapshot.totalPlayers, 3);
   first.moleMode = true; first.moleUntil = 9999; snapshot = simulation.snapshot(viewer.id, 1100) as any; assert.equal(snapshot.minimapPlayers.some((player: any) => player.id === first.id), false);
   first.moleMode = false; simulation.fartClouds.push({ id: 1, ownerId: first.id, x: first.x, y: first.y, radius: 180, createdAt: 1000, expiresAt: 5000 });
   snapshot = simulation.snapshot(viewer.id, 1200) as any; assert.equal(snapshot.minimapPlayers.some((player: any) => player.id === first.id), false);

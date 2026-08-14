@@ -22,9 +22,13 @@ test("stored skin selection persists when enabled and safely falls back when rem
 
 test("game header omits the redundant scores link while the gameplay HUD retains score", async () => {
   const html = await readFile(new URL("../../games/game-03/index.html", import.meta.url), "utf8");
+  const game = await readFile(new URL("../../games/game-03/game.js", import.meta.url), "utf8");
   const header = html.match(/<header class="panel title">[\s\S]*?<\/header>/)?.[0] || "";
   assert.doesNotMatch(header, /SCORES|leaderboard\/dusty-orbit/);
   assert.match(html, /id="gameplayHud"[^>]*>[\s\S]*?SCORE: 0/);
+  assert.match(html, /TOTAL PLAYERS: 0/);
+  assert.match(game, /snapshot\?\.totalPlayers/);
+  assert.match(html, /\.gameplay-hud[^}]*background:\s*rgba\(18,8,27,\.48\)/);
 });
 
 test("lobby visibly separates waiting players from players already in the arena", async () => {

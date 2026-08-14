@@ -196,6 +196,7 @@ export class DustyOrbitMultiplayerRenderer {
       angle: Math.atan2(directionY, directionX), size: visual.flashSize, born,
       life: projectile.tier === 6 ? 175 : projectile.tier === 1 ? 85 : 115,
     });
+    this.emitWeaponAudioCue(event, visualOrigin);
     if (!local) return;
     this.localProjectiles.set(projectile.id, {
       ...projectile,
@@ -215,6 +216,20 @@ export class DustyOrbitMultiplayerRenderer {
       direction: { x: directionX, y: directionY },
       firstRenderError: null,
     };
+  }
+
+  emitWeaponAudioCue(event, muzzle) {
+    if (typeof globalThis.CustomEvent !== "function") return;
+    this.canvas?.dispatchEvent?.(new CustomEvent("dusty-orbit:weapon-fired", {
+      detail: {
+        playerId: event.playerId,
+        groupKey: this.shotGroupKey(event),
+        shotId: event.shotId,
+        tier: event.projectile?.tier,
+        x: muzzle.x,
+        y: muzzle.y,
+      },
+    }));
   }
 
   flushLocalShotConfirmations() {

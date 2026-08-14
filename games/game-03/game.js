@@ -2,7 +2,7 @@ import { moveCircleWithSliding } from "./collision-geometry.js?v=20260813-2";
 import { CollisionEditor } from "./collision-editor.js?v=20260813-9";
 import { loadDustyOrbitAssets } from "./assets.js?v=20260814-14";
 import { PRODUCTION_ARENA_WSS } from "./config.js?v=20260812";
-import { DustyOrbitMultiplayerRenderer } from "./renderer.js?v=20260814-26";
+import { DustyOrbitMultiplayerRenderer } from "./renderer.js?v=20260814-27";
 import { InputController } from "./input.js?v=20260813-3";
 import { claimSessionIdentity, resolvePoopcadePlayerIdentity } from "./identity.js?v=20260813-2";
 import { ArenaNetwork } from "./network.js?v=20260814-2";
@@ -10,6 +10,7 @@ import { consumeFixedStep, convergeVisualPosition } from "./timing.js?v=20260813
 import { DustyLobby } from "./lobby.js?v=20260814-5";
 import { RECRUITMENT_HREF } from "./presence.js?v=20260814";
 import { DustyOrbitHighscoreTracker } from "./highscore.js?v=20260813-2";
+import { DustyOrbitAudio } from "./audio.js?v=20260814-2";
 
 const INPUT_RATE = 30;
 const INPUT_DT = 1 / INPUT_RATE;
@@ -90,6 +91,9 @@ loadingBar.style.width = "100%";
 const focusSatellite = parameters.get("focus") === "satellite-east" ? assets.satellites[1] : assets.satellites[0];
 const debugFocus = debugCollision && parameters.get("focus")?.startsWith("satellite") ? focusSatellite : null;
 const renderer = new DustyOrbitMultiplayerRenderer(canvas, assets, debugCollision, debugFocus);
+const audio = new DustyOrbitAudio();
+canvas.addEventListener("dusty-orbit:weapon-fired", (event) => audio.weaponFired(event.detail));
+canvas.addEventListener("dusty-orbit:nuke-audio-cue", (event) => { if (event.detail?.cue === "detonation") audio.nuke(); });
 const input = new InputController(canvas, null, null, {
   movementSurface: canvas,
   movementGuide: document.querySelector("#mobileMoveGuide"),
@@ -288,6 +292,7 @@ network = new ArenaNetwork({
     if (message.type === "shield_hit") { renderer.shieldHit(message); addEvent(message.playerId === localId ? "SHIELD ABSORBED A HIT" : "SHIELD HIT"); }
     if (message.type === "teleport") {
       renderer.teleport(message);
+      audio.teleport();
       if (message.playerId === localId && finitePoint(message)) resetPredictionTo(message);
     }
     if (message.type === "mole_burrowed") renderer.moleBurrowed(message);
@@ -296,6 +301,7 @@ network = new ArenaNetwork({
     if (message.type === "mole_blocked" && message.playerId === localId) { renderer.blocked(); addEvent("EMERGENCE BLOCKED · MOVE OFF THE ROCK"); }
     if (message.type === "powerup_collected" && message.playerId === localId) {
       if (message.powerup === "speed") localSpeedBoostUntil = performance.now() + Math.max(0, Number(gameplay.speedDurationMs) || 0);
+      audio.powerupCollected(message.powerup);
       addEvent(`PICKED UP ${String(message.powerup).toUpperCase()}`);
     }
     if (message.type === "nuke_warning") { renderer.nukeWarning(message); if (message.ownerId === localId) nukeQueuedUntil = 0; addEvent("NUKE INCOMING"); }
@@ -309,6 +315,7 @@ network = new ArenaNetwork({
     }
     if (message.type === "death") {
       renderer.death(message);
+      audio.death();
       if (message.victimId === localId) { localSpeedBoostUntil = 0; addEvent("YOU ARE DOWN · RESPAWNING IN 2s"); }
     }
     if (message.type === "respawn") {
@@ -435,6 +442,7 @@ function updateHud(snapshot) {
     `SHIELD: ${player?.shieldHits ? "YES" : "NO"}`,
     `WEAPON: T${player?.weaponTier || 1} ${weapon?.name || "PEA SHOOTER"}`,
     `SCORE: ${player?.killScore ?? 0}`,
+    `TOTAL PLAYERS: ${snapshot?.totalPlayers ?? snapshot?.players?.length ?? 0}`,
     `HIGHSCORE: ${highscoreStatus}`,
     `NUKE: ${player?.nukeReady ? "READY" : `${player?.nukeProgress ?? 0}/${gameplay.nukeRequirement}`}`,
     ...effects,
