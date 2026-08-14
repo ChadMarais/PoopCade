@@ -5,9 +5,9 @@ import { PRODUCTION_ARENA_WSS } from "./config.js?v=20260812";
 import { DustyOrbitMultiplayerRenderer } from "./renderer.js?v=20260814-26";
 import { InputController } from "./input.js?v=20260813-3";
 import { claimSessionIdentity, resolvePoopcadePlayerIdentity } from "./identity.js?v=20260813-2";
-import { ArenaNetwork } from "./network.js?v=20260813";
+import { ArenaNetwork } from "./network.js?v=20260814-2";
 import { consumeFixedStep, convergeVisualPosition } from "./timing.js?v=20260813-2";
-import { DustyLobby } from "./lobby.js?v=20260814-3";
+import { DustyLobby } from "./lobby.js?v=20260814-4";
 import { RECRUITMENT_HREF } from "./presence.js?v=20260814";
 import { DustyOrbitHighscoreTracker } from "./highscore.js?v=20260813-2";
 

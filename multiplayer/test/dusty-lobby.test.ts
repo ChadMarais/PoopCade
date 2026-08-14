@@ -5,6 +5,7 @@ import { resolve } from "node:path";
 import { CHARACTER_SKINS, DEFAULT_CHARACTER_SKIN_ID, characterSkinById, enabledCharacterSkins, validCharacterSkinId } from "../../games/game-03/character-skins.js";
 import { DustyOrbitSimulation, DUSTY_MAX_PLAYERS, DUSTY_RESPAWN_MS } from "../src/dusty-simulation.ts";
 import { parseClientMessage } from "../src/protocol.ts";
+import { summarizeDustyPresence } from "../src/dusty-presence.ts";
 
 function id(index: number): string {
   return `10000000-0000-4000-8000-${String(index).padStart(12, "0")}`;
@@ -26,6 +27,27 @@ test("join protocol accepts profile identities and cosmetic choice but rejects m
   const message = parseClientMessage(JSON.stringify({ type: "join", name: "Orbit Pilot", skinId: "moon-blob-01", accessToken: "x".repeat(40) }));
   assert.deepEqual(message, { type: "join", name: "Orbit Pilot", skinId: "moon-blob-01", accessToken: "x".repeat(40) });
   assert.equal(parseClientMessage(JSON.stringify({ type: "join", name: "Orbit Pilot", skinId: "../../bad" })), null);
+});
+
+test("hello distinguishes homepage presence from players genuinely waiting in Dusty Orbit", () => {
+  const sessionId = id(1);
+  assert.deepEqual(parseClientMessage(JSON.stringify({ type: "hello", name: "Guest-0001", sessionId })), { type: "hello", name: "Guest-0001", sessionId, presence: "unknown" });
+  assert.deepEqual(parseClientMessage(JSON.stringify({ type: "hello", name: "Guest-0001", sessionId, presence: "home" })), { type: "hello", name: "Guest-0001", sessionId, presence: "home" });
+  assert.equal(parseClientMessage(JSON.stringify({ type: "hello", name: "Guest-0001", sessionId, presence: "moon" })), null);
+});
+
+test("presence summary separates waiting lobby players from homepage and active sessions", () => {
+  const summary = summarizeDustyPresence([
+    { playerId: id(1), name: "Homepage", role: "lobby", surface: "home", connectedAt: 900 },
+    { playerId: id(2), name: "Waiting Two", role: "lobby", surface: "dusty", connectedAt: 1200 },
+    { playerId: id(3), name: "In Game", role: "active", surface: "dusty", connectedAt: 1000 },
+    { playerId: id(4), name: "Waiting One", role: "lobby", surface: "dusty", connectedAt: 1100 },
+  ] as const);
+  assert.equal(summary.onlinePlayers, 4);
+  assert.deepEqual(summary.lobbyPlayers, [
+    { id: id(4), name: "Waiting One", waitingSince: 1100 },
+    { id: id(2), name: "Waiting Two", waitingSince: 1200 },
+  ]);
 });
 
 test("lobby spectators can request one non-intrusive recruitment broadcast", () => {

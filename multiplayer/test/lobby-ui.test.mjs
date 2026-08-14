@@ -26,3 +26,12 @@ test("game header omits the redundant scores link while the gameplay HUD retains
   assert.doesNotMatch(header, /SCORES|leaderboard\/dusty-orbit/);
   assert.match(html, /id="gameplayHud"[^>]*>[\s\S]*?SCORE: 0/);
 });
+
+test("lobby visibly separates waiting players from players already in the arena", async () => {
+  const html = await readFile(new URL("../../games/game-03/index.html", import.meta.url), "utf8");
+  assert.match(html, /data-lobby-waiting-roster/);
+  assert.match(html, /data-lobby-player-count/);
+  assert.match(html, /WAITING IN LOBBY/);
+  assert.match(html, /data-lobby-roster/);
+  assert.match(html, /FIGHTING RIGHT NOW/);
+});

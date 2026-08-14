@@ -12,6 +12,7 @@ import { DUSTY_GAMEPLAY, DUSTY_WEAPONS } from "./dusty-gameplay.ts";
 import { submitDustyOrbitFinalScore, type DustyFinalScorePlayer } from "./dusty-score.ts";
 import { validCharacterSkinId } from "../../games/game-03/character-skins.js";
 import { RECRUITMENT_COOLDOWN_MS, RECRUITMENT_HREF, recruitmentMessage } from "../../games/game-03/presence.js";
+import { summarizeDustyPresence, type DustyPresenceSurface } from "./dusty-presence.ts";
 
 type Env = { SUPABASE_URL?: string; SUPABASE_PUBLISHABLE_KEY?: string };
 type SessionRole = "lobby" | "active";
@@ -27,6 +28,8 @@ type Session = {
   messageCount: number;
   invalidCount: number;
   lastRecruitAt: number;
+  surface: DustyPresenceSurface;
+  connectedAt: number;
   accessToken?: string;
 };
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -56,6 +59,8 @@ export class DustyOrbitArena extends DurableObject<Env> {
         messageCount: 0,
         invalidCount: 0,
         lastRecruitAt: Number.isFinite(attachment.lastRecruitAt) ? Number(attachment.lastRecruitAt) : 0,
+        surface: attachment.surface === "home" || attachment.surface === "dusty" ? attachment.surface : "unknown",
+        connectedAt: Number.isFinite(attachment.connectedAt) ? Number(attachment.connectedAt) : now,
         ...(typeof attachment.accessToken === "string" ? { accessToken: attachment.accessToken } : {}),
       };
       this.sessions.set(socket, session);
@@ -104,6 +109,8 @@ export class DustyOrbitArena extends DurableObject<Env> {
       messageCount: 0,
       invalidCount: 0,
       lastRecruitAt: resumedLastRecruitAt,
+      surface: "unknown",
+      connectedAt: Date.now(),
       ...(resumedAccessToken ? { accessToken: resumedAccessToken } : {}),
     };
     server.serializeAttachment(session);
@@ -130,11 +137,12 @@ export class DustyOrbitArena extends DurableObject<Env> {
 
     if (message.type === "hello") {
       if (message.sessionId !== session.playerId) { socket.close(1008, "Session mismatch"); return; }
+      session.surface = message.presence;
       const existing = this.simulation.players.get(session.playerId);
       if (!existing) {
         session.name = safePlayerName(message.name);
         socket.serializeAttachment(session);
-        this.sendLobbyState(socket);
+        this.broadcastLobbyState();
         return;
       }
       session.name = existing.name;
@@ -194,6 +202,8 @@ export class DustyOrbitArena extends DurableObject<Env> {
       this.scoreTokens.delete(session.playerId);
       session.role = "lobby";
       session.joinedAt = 0;
+      session.surface = "dusty";
+      session.connectedAt = now;
       session.joinPending = false;
       session.accessToken = undefined;
       socket.serializeAttachment(session);
@@ -355,10 +365,10 @@ export class DustyOrbitArena extends DurableObject<Env> {
   }
 
   private currentLobbyState(now = Date.now()): Record<string, unknown> {
-    const onlinePlayers = new Set([...this.sessions.entries()]
+    const presence = summarizeDustyPresence([...this.sessions.entries()]
       .filter(([socket]) => socket.readyState === 1)
-      .map(([, session]) => session.playerId)).size;
-    return { ...this.simulation.lobbyState(now), onlinePlayers };
+      .map(([, session]) => session));
+    return { ...this.simulation.lobbyState(now), ...presence, lobbyPlayerCount: presence.lobbyPlayers.length };
   }
 
   private broadcastPresence(message: unknown, excluded?: WebSocket): void {

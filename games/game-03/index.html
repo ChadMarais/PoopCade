@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#26132f">
   <meta name="description" content="Dusty Orbit, Poopcade's live multiplayer moon-skirmish.">
   <title>DUSTY ORBIT — Poopcade Game 03</title>
-  <link rel="stylesheet" href="./lobby.css?v=20260814-2">
+  <link rel="stylesheet" href="./lobby.css?v=20260814-3">
   <style>
     :root { color-scheme: dark; font-family: ui-sans-serif, system-ui, sans-serif; }
     * { box-sizing: border-box; }
@@ -88,7 +88,10 @@
       </section>
       <section class="lobby-panel roster-panel" aria-labelledby="rosterHeading">
         <div class="roster-heading"><div><span class="eyebrow">CURRENTLY CAUSING TROUBLE</span><h2 id="rosterHeading">WHO'S IN ORBIT?</h2></div><div class="lobby-counts"><div class="player-count"><span>IN ARENA</span><strong data-player-count>0 / 15</strong></div><div class="player-count"><span>ONLINE</span><strong data-online-count>0</strong></div></div></div>
-        <div class="live-roster" data-lobby-roster aria-live="polite"><p class="roster-empty">Contacting the arena…</p></div>
+        <div class="roster-groups" aria-live="polite">
+          <section class="roster-group waiting-group" aria-labelledby="waitingHeading"><div class="roster-group-heading"><div><span class="roster-kicker">WAITING IN LOBBY</span><h3 id="waitingHeading">READY TO JOIN</h3></div><strong data-lobby-player-count>0</strong></div><div class="live-roster waiting-roster" data-lobby-waiting-roster><p class="roster-empty">Checking the airlock…</p></div></section>
+          <section class="roster-group arena-group" aria-labelledby="arenaHeading"><div class="roster-group-heading"><div><span class="roster-kicker">FIGHTING RIGHT NOW</span><h3 id="arenaHeading">IN THE ARENA</h3></div><strong data-arena-player-count>0</strong></div><div class="live-roster" data-lobby-roster><p class="roster-empty">Contacting the arena…</p></div></section>
+        </div>
         <div class="join-zone"><button class="recruit-button" data-recruit-players type="button" disabled>RATTLE THE AIRLOCK · FIND PLAYERS</button><div class="arena-status"><strong data-arena-status>CONNECTING</strong><small data-arena-status-copy>Finding the bad decisions…</small></div><button class="join-button" data-join-arena type="button" disabled>CONNECTING…</button></div>
       </section>
     </div>
@@ -122,6 +125,6 @@
   </div>
   <div id="loading" class="loading"><div><h1>DUSTY ORBIT</h1><p id="loadingText">LOADING MULTIPLAYER ASSETS…</p><div class="track"><div id="loadingBar" class="bar"></div></div></div></div>
   <a class="dusty-recruitment-toast" data-recruitment-toast href="/games/game-03/" hidden aria-live="polite"><strong>ORBITAL BAD DECISION INCOMING</strong><span data-recruitment-copy></span><b>GO TO THE LOBBY →</b></a>
-  <script type="module" src="./game.js?v=20260814-44"></script>
+  <script type="module" src="./game.js?v=20260814-45"></script>
 </body>
 </html>

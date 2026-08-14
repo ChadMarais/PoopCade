@@ -12,10 +12,11 @@ function mixAngle(before, after, amount) {
 }
 
 export class ArenaNetwork {
-  constructor({ url, sessionId, name, onState, onMessage }) {
+  constructor({ url, sessionId, name, presence = "dusty", onState, onMessage }) {
     this.url = url;
     this.sessionId = sessionId;
     this.name = name;
+    this.presence = presence === "home" ? "home" : "dusty";
     this.onState = onState;
     this.onMessage = onMessage;
     this.socket = null;
@@ -49,7 +50,7 @@ export class ArenaNetwork {
       if (socket !== this.socket) return;
       this.retry = 0;
       this.onState("online");
-      this.send({ type: "hello", sessionId: this.sessionId, name: this.name });
+      this.send({ type: "hello", sessionId: this.sessionId, name: this.name, presence: this.presence });
       this.startPing();
     });
     socket.addEventListener("message", (event) => {

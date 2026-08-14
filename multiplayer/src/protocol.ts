@@ -5,6 +5,7 @@ export type ClientHello = {
   type: "hello";
   name: string;
   sessionId: string;
+  presence: "unknown" | "home" | "dusty";
 };
 
 export type ClientJoin = {
@@ -70,7 +71,9 @@ export function parseClientMessage(raw: string | ArrayBuffer): ClientMessage | n
   if (value.type === "hello") {
     if (typeof value.name !== "string" || safePlayerName(value.name, "") !== value.name.trim()) return null;
     if (typeof value.sessionId !== "string" || !UUID_PATTERN.test(value.sessionId)) return null;
-    return { type: "hello", name: value.name.trim(), sessionId: value.sessionId };
+    if (value.presence !== undefined && value.presence !== "home" && value.presence !== "dusty") return null;
+    const presence = value.presence === "home" || value.presence === "dusty" ? value.presence : "unknown";
+    return { type: "hello", name: value.name.trim(), sessionId: value.sessionId, presence };
   }
 
   if (value.type === "join") {

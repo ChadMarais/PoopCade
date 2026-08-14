@@ -35,6 +35,7 @@ test("production launch links omit devtest and both pages expose live presence U
   assert.match(home, /data-dusty-online-value/);
   assert.match(home, /data-dusty-recruitment-toast/);
   assert.match(lobby, /data-online-count/);
+  assert.match(lobby, /data-lobby-waiting-roster/);
   assert.match(lobby, /data-recruit-players/);
   assert.match(game, /parameters\.delete\("devtest"\)/);
 });

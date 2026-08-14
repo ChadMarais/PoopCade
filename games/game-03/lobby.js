@@ -34,7 +34,7 @@ export class DustyLobby {
     this.state = "LOBBY";
     this.connectionState = "connecting";
     this.connectionDetail = "";
-    this.lobbyState = { players: [], activePlayers: 0, maxPlayers: 15, full: false, serverTime: Date.now() };
+    this.lobbyState = { players: [], lobbyPlayers: [], activePlayers: 0, maxPlayers: 15, full: false, serverTime: Date.now() };
     this.clockOffset = 0;
     this.name = root.querySelector("[data-lobby-player-name]");
     this.name.textContent = playerName;
@@ -44,6 +44,9 @@ export class DustyLobby {
     this.previewName = root.querySelector("[data-preview-name]");
     this.previewDescription = root.querySelector("[data-preview-description]");
     this.roster = root.querySelector("[data-lobby-roster]");
+    this.waitingRoster = root.querySelector("[data-lobby-waiting-roster]");
+    this.waitingCount = root.querySelector("[data-lobby-player-count]");
+    this.arenaCount = root.querySelector("[data-arena-player-count]");
     this.count = root.querySelector("[data-player-count]");
     this.onlineCount = root.querySelector("[data-online-count]");
     this.status = root.querySelector("[data-arena-status]");
@@ -129,17 +132,42 @@ export class DustyLobby {
     this.lobbyState = state;
     if (Number.isFinite(state.serverTime)) this.clockOffset = Date.now() - state.serverTime;
     this.count.textContent = `${state.activePlayers} / ${state.maxPlayers}`;
+    this.waitingCount.textContent = String(state.lobbyPlayers?.length || 0);
+    this.arenaCount.textContent = String(state.activePlayers || 0);
     this.onlineCount.textContent = String(normalizedOnlinePlayers(state.onlinePlayers));
+    this.waitingRoster.replaceChildren();
+    if (!state.lobbyPlayers?.length) {
+      this.waitingRoster.append(this.emptyRoster("No one waiting yet. Be the bait."));
+    } else {
+      for (const player of state.lobbyPlayers) this.waitingRoster.append(this.waitingPlayerCard(player));
+    }
     this.roster.replaceChildren();
     if (!state.players?.length) {
-      const empty = document.createElement("p");
-      empty.className = "roster-empty";
-      empty.textContent = "Nobody yet. Suspiciously sensible.";
-      this.roster.append(empty);
+      this.roster.append(this.emptyRoster("Arena empty. Start something regrettable."));
     } else {
       for (const player of state.players) this.roster.append(this.playerCard(player));
     }
     this.renderStatus();
+  }
+
+  emptyRoster(message) {
+    const empty = document.createElement("p");
+    empty.className = "roster-empty";
+    empty.textContent = message;
+    return empty;
+  }
+
+  waitingPlayerCard(player) {
+    const article = document.createElement("article");
+    article.className = "waiting-player";
+    article.dataset.waitingSince = String(player.waitingSince || 0);
+    const name = document.createElement("strong");
+    name.textContent = player.name;
+    const time = document.createElement("span");
+    time.dataset.waitingTime = "";
+    time.textContent = `READY ${formatSessionDuration(player.waitingSince, Date.now() - this.clockOffset)}`;
+    article.append(name, time);
+    return article;
   }
 
   playerCard(player) {
@@ -172,6 +200,10 @@ export class DustyLobby {
     this.roster.querySelectorAll("[data-joined-at]").forEach((row) => {
       const output = row.querySelector("[data-session-time]");
       if (output) output.textContent = formatSessionDuration(Number(row.dataset.joinedAt), serverNow);
+    });
+    this.waitingRoster.querySelectorAll("[data-waiting-since]").forEach((row) => {
+      const output = row.querySelector("[data-waiting-time]");
+      if (output) output.textContent = `READY ${formatSessionDuration(Number(row.dataset.waitingSince), serverNow)}`;
     });
   }
 
