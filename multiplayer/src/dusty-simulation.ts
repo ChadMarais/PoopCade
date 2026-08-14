@@ -33,7 +33,7 @@ export const DUSTY_WEAPON = DUSTY_WEAPONS[0];
 
 export type DustyPlayer = {
   id: string; name: string; skinId: string; joinedAt: number; joinOrder: number; x: number; y: number; vx: number; vy: number;
-  aimX: number; aimY: number; hp: number; kills: number; deaths: number; killScore: number;
+  aimX: number; aimY: number; hp: number; kills: number; deaths: number; killScore: number; highScore: number;
   weaponTier: number; nukeProgress: number; nukeReady: boolean; shieldHits: number;
   spyUntil: number; speedUntil: number; moleMode: boolean; moleUntil: number; moleForceAt: number;
   connectedSatelliteId: string | null;
@@ -129,6 +129,7 @@ export class DustyOrbitSimulation {
   readonly nukes: DustyNuke[] = [];
   private events: Array<Record<string, unknown>> = [];
   private projectileId = 0;
+  private shotId = 0;
   private pickupId = 0;
   private cloudId = 0;
   private nukeId = 0;
@@ -159,7 +160,7 @@ export class DustyOrbitSimulation {
       id, name, skinId: validCharacterSkinId(options.skinId ?? DEFAULT_CHARACTER_SKIN_ID),
       joinedAt: Number.isFinite(options.joinedAt) ? Math.min(now, Number(options.joinedAt)) : now,
       joinOrder: ++this.joinCursor, x: spawn.x, y: spawn.y, vx: 0, vy: 0, aimX: 1, aimY: 0,
-      hp: DUSTY_GAMEPLAY.maxHp, kills: 0, deaths: 0, killScore: 0, weaponTier: 1, nukeProgress: 0,
+      hp: DUSTY_GAMEPLAY.maxHp, kills: 0, deaths: 0, killScore: 0, highScore: 0, weaponTier: 1, nukeProgress: 0,
       nukeReady: false, shieldHits: 0, spyUntil: 0, speedUntil: 0, moleMode: false, moleUntil: 0,
       connectedSatelliteId: null,
       moleForceAt: 0, emergeBlockedUntil: 0, alive: true, respawnAt: 0,
@@ -254,7 +255,7 @@ export class DustyOrbitSimulation {
           endedAt: now,
           player: {
             id: player.id,
-            killScore: player.killScore,
+            killScore: Math.max(player.highScore, player.killScore),
             kills: player.kills,
             deaths: player.deaths,
             joinedAt: player.joinedAt,
@@ -370,7 +371,7 @@ export class DustyOrbitSimulation {
     const aimX = liveAim.length ? liveAim.x : player.aimX;
     const aimY = liveAim.length ? liveAim.y : player.aimY;
     while (player.burstRemaining > 0 && now >= player.nextBurstAt && this.projectiles.length < DUSTY_GAMEPLAY.maxProjectiles) {
-      this.spawnProjectile(player, weapon, aimX, aimY, now);
+      this.spawnProjectile(player, weapon, aimX, aimY, now, ++this.shotId);
       player.burstRemaining--; player.burstIndex++; player.nextBurstAt += weapon.burstSpacingMs;
     }
     if (!player.input.fire || player.burstRemaining > 0 || now - player.lastFireAt < weapon.cooldownMs || this.projectiles.length >= DUSTY_GAMEPLAY.maxProjectiles) return;
@@ -382,13 +383,14 @@ export class DustyOrbitSimulation {
       return;
     }
     if (weapon.tier === 5) {
-      for (const spreadDegrees of weapon.spreadDegrees) this.spawnProjectile(player, weapon, aimX, aimY, now, spreadDegrees);
+      const shotId = ++this.shotId;
+      for (const spreadDegrees of weapon.spreadDegrees) this.spawnProjectile(player, weapon, aimX, aimY, now, shotId, spreadDegrees);
       return;
     }
-    this.spawnProjectile(player, weapon, aimX, aimY, now);
+    this.spawnProjectile(player, weapon, aimX, aimY, now, ++this.shotId);
   }
 
-  private spawnProjectile(player: DustyPlayer, weapon: WeaponDefinition, aimX: number, aimY: number, now: number, spreadDegrees = 0): void {
+  private spawnProjectile(player: DustyPlayer, weapon: WeaponDefinition, aimX: number, aimY: number, now: number, shotId: number, spreadDegrees = 0): void {
     if (this.projectiles.length >= DUSTY_GAMEPLAY.maxProjectiles) return;
     const liveAim = normalized(aimX, aimY);
     if (!liveAim.length) return;
@@ -413,7 +415,10 @@ export class DustyOrbitSimulation {
       expiresAt: now + weapon.lifetimeMs * weapon.speed / projectileSpeed,
     };
     this.projectiles.push(projectile);
-    this.events.push({ type: "shot", playerId: player.id, x, y, projectile: { ...projectile } });
+    // A shot event carries the exact barrel direction separately from pellet
+    // spread. The client uses this immutable launch pose instead of attaching
+    // a delayed confirmation to whichever way the gun points on arrival.
+    this.events.push({ type: "shot", shotId, playerId: player.id, x, y, aimX: liveAim.x, aimY: liveAim.y, projectile: { ...projectile } });
   }
 
   private updateProjectiles(dt: number, now: number): void {
@@ -465,6 +470,7 @@ export class DustyOrbitSimulation {
     const killer = this.players.get(killerId);
     const deathX = victim.x, deathY = victim.y;
     victim.alive = false; victim.hp = 0; victim.vx = victim.vy = 0; victim.deaths++;
+    victim.highScore = Math.max(victim.highScore, victim.killScore);
     victim.killScore = Math.max(0, victim.killScore - 1);
     victim.weaponTier = Math.max(DUSTY_GAMEPLAY.minWeaponTier, victim.weaponTier - 1);
     victim.spyUntil = 0; victim.speedUntil = 0; victim.shieldHits = 0; victim.moleMode = false; victim.connectedSatelliteId = null;
@@ -479,6 +485,7 @@ export class DustyOrbitSimulation {
 
   private creditKill(killer: DustyPlayer): void {
     killer.kills++; killer.killScore++;
+    killer.highScore = Math.max(killer.highScore, killer.killScore);
     killer.weaponTier = Math.min(DUSTY_GAMEPLAY.maxWeaponTier, killer.weaponTier + 1);
     if (!killer.nukeReady) {
       killer.nukeProgress = Math.min(DUSTY_GAMEPLAY.nukeRequirement, killer.nukeProgress + 1);
@@ -687,7 +694,7 @@ export class DustyOrbitSimulation {
     const serializePlayer = (player: DustyPlayer) => ({
       id: player.id, name: player.name, x: round(player.x), y: round(player.y), vx: Math.round(player.vx), vy: Math.round(player.vy),
       aimX: round(player.aimX, 1000), aimY: round(player.aimY, 1000), hp: player.hp, kills: player.kills,
-      deaths: player.deaths, killScore: Math.max(0, player.killScore), skinId: player.skinId, joinedAt: player.joinedAt,
+      deaths: player.deaths, killScore: Math.max(0, player.killScore), highScore: Math.max(0, player.highScore, player.killScore), skinId: player.skinId, joinedAt: player.joinedAt,
       weaponTier: player.weaponTier, nukeProgress: player.nukeProgress,
       nukeReady: player.nukeReady, shieldHits: player.shieldHits, spyRemaining: Math.max(0, player.spyUntil - now),
       speedRemaining: Math.max(0, player.speedUntil - now), moleMode: player.moleMode,

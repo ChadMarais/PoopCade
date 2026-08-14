@@ -75,9 +75,11 @@ test("server schedules Burst rounds, enforces SMG cooldown, and emits three spla
 
   simulation.projectiles.length = 0; player.weaponTier = 5; player.lastFireAt = -Infinity;
   simulation.applyInput(A, intent(7, { fire: true }), 1600); simulation.step(DUSTY_FIXED_DT, 1600);
-  const shots = eventsOf(simulation, "shot") as Array<{ projectile: DustyProjectile }>;
+  const shots = eventsOf(simulation, "shot") as Array<{ shotId: number; aimX: number; aimY: number; projectile: DustyProjectile }>;
   assert.equal(shots.length, 3);
   assert.deepEqual(shots.map((shot) => Math.round(Math.atan2(shot.projectile.vy, shot.projectile.vx) * 180 / Math.PI)), [-8, 0, 8]);
+  assert.equal(new Set(shots.map((shot) => shot.shotId)).size, 1, "one trigger pull groups every pellet into one launch pose");
+  assert.ok(shots.every((shot) => shot.aimX === 1 && shot.aimY === 0));
 });
 
 test("projectile rewind is derived from client view time and capped by the server", () => {
@@ -133,10 +135,11 @@ test("every tier spawns every round at its exact muzzle and along its barrel", (
     player.weaponTier = tier;
     simulation.applyInput(A, intent(1, { aimX: aim.x, aimY: aim.y, fire: true }), 1000);
     simulation.step(DUSTY_FIXED_DT, 1000);
-    const shots = eventsOf(simulation, "shot") as Array<{ projectile: DustyProjectile }>;
+    const shots = eventsOf(simulation, "shot") as Array<{ shotId: number; aimX: number; aimY: number; projectile: DustyProjectile }>;
     const expectedMuzzle = weaponPose({ ...player, aimX: aim.x, aimY: aim.y }, weaponVisualForTier(tier)).muzzleWorld;
     assert.equal(shots.length, tier === 5 ? 3 : 1, `tier ${tier} round count`);
-    for (const [shotIndex, { projectile: shot }] of shots.entries()) {
+    assert.equal(new Set(shots.map((shot) => shot.shotId)).size, 1, `tier ${tier} launch group`);
+    for (const [shotIndex, { aimX, aimY, projectile: shot }] of shots.entries()) {
       const speed = Math.hypot(shot.vx, shot.vy);
       assert.ok(Math.abs(shot.x - expectedMuzzle.x) < 1e-9, `tier ${tier} muzzle X`);
       assert.ok(Math.abs(shot.y - expectedMuzzle.y) < 1e-9, `tier ${tier} muzzle Y`);
@@ -145,6 +148,8 @@ test("every tier spawns every round at its exact muzzle and along its barrel", (
       const expectedY = aim.x * Math.sin(spread) + aim.y * Math.cos(spread);
       assert.ok(Math.abs(shot.vx / speed - expectedX) < 1e-12, `tier ${tier} barrel X`);
       assert.ok(Math.abs(shot.vy / speed - expectedY) < 1e-12, `tier ${tier} barrel Y`);
+      assert.ok(Math.abs(aimX - aim.x) < 1e-12, `tier ${tier} launch aim X`);
+      assert.ok(Math.abs(aimY - aim.y) < 1e-12, `tier ${tier} launch aim Y`);
       assert.equal(shot.inputSeq, 1);
     }
   }
@@ -162,12 +167,14 @@ test("kills add one, deaths stop at zero, and weapon tiers remain bounded", () =
   const simulation = fresh(); const killer = add(simulation, A, "Guest-1001"); const victim = add(simulation, B, "Guest-1002");
   (simulation as any).killPlayer(victim, killer.id, 1000, "projectile");
   assert.equal(killer.kills, 1); assert.equal(killer.killScore, 1); assert.equal(killer.weaponTier, 2);
+  assert.equal(killer.highScore, 1);
   assert.equal(victim.deaths, 1); assert.equal(victim.killScore, 0); assert.equal(victim.weaponTier, 1);
   const death = eventsOf(simulation, "death")[0] as { x: number; y: number };
   assert.deepEqual({ x: death.x, y: death.y }, { x: 600, y: 300 });
   victim.alive = true; victim.hp = 3; victim.weaponTier = 5; victim.killScore = 2;
   (simulation as any).killPlayer(victim, killer.id, 1100, "projectile");
   assert.equal(victim.weaponTier, 4); assert.equal(victim.killScore, 1);
+  assert.equal(victim.highScore, 2, "death lowers the live score without erasing the session high");
   killer.weaponTier = 6; victim.alive = true; victim.hp = 3;
   (simulation as any).killPlayer(victim, killer.id, 1200, "projectile");
   assert.equal(victim.killScore, 0); assert.equal(killer.weaponTier, 6);
@@ -427,17 +434,17 @@ test("threat leader ranking is deterministic and its marker obeys stealth", () =
   snapshot = simulation.snapshot(viewer.id, 1200) as any; assert.equal(snapshot.minimapPlayers.some((player: any) => player.id === first.id), false);
 });
 
-test("pickup population is six, includes fart artwork type, and inactive pickups wait eight seconds", () => {
+test("pickup population is six and collected items replenish with thirty percent less downtime", () => {
   const simulation = new DustyOrbitSimulation(() => .2); const active = simulation.pickups.filter((pickup) => pickup.active); assert.equal(active.length, 6);
   for (let first = 0; first < active.length; first++) for (let second = first + 1; second < active.length; second++) {
     const distance = Math.hypot(active[first].x - active[second].x, active[first].y - active[second].y);
     assert.ok(distance >= DUSTY_GAMEPLAY.pickupMinimumSpacing, `pickups ${active[first].id}/${active[second].id} were only ${distance.toFixed(1)} apart`);
   }
   assert.ok(POWERUP_TYPES.includes("fart"));
-  const pickup = simulation.pickups[0]; pickup.active = false; pickup.respawnAt = 9000;
-  simulation.step(DUSTY_FIXED_DT, 8999); assert.equal(pickup.active, false);
-  simulation.step(DUSTY_FIXED_DT, 9000); assert.equal(pickup.active, true);
-  assert.equal(DUSTY_GAMEPLAY.pickupRespawnMs, 8000);
+  const pickup = simulation.pickups[0]; pickup.active = false; pickup.respawnAt = 6600;
+  simulation.step(DUSTY_FIXED_DT, 6599); assert.equal(pickup.active, false);
+  simulation.step(DUSTY_FIXED_DT, 6600); assert.equal(pickup.active, true);
+  assert.equal(DUSTY_GAMEPLAY.pickupRespawnMs, 5600);
   assert.equal(DUSTY_GAMEPLAY.pickupMinimumSpacing, 960);
 });
 

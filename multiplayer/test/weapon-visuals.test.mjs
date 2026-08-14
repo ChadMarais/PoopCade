@@ -133,6 +133,26 @@ test("local Shotgun pellets preserve all three authoritative spread directions",
   assert.ok([...renderer.localProjectiles.values()].every((shot) => shot.startX === 411 && shot.startY === 277));
 });
 
+test("Shotgun spread rotates around the gun's current muzzle direction", () => {
+  const renderer = Object.create(DustyOrbitMultiplayerRenderer.prototype);
+  renderer.localPlayerId = "local";
+  renderer.pendingLocalShotConfirmations = [];
+  renderer.weaponPoses = new Map([["local", { muzzleWorld: { x: 500, y: 350 }, forward: { x: 0, y: 1 } }]]);
+  renderer.weaponRecoil = new Map();
+  renderer.effects = [];
+  renderer.localProjectiles = new Map();
+  for (const [index, degrees] of [-8, 0, 8].entries()) {
+    const angle = degrees * Math.PI / 180;
+    renderer.confirmShot({
+      playerId: "local", shotId: 90, aimX: 1, aimY: 0,
+      projectile: { id: 90 + index, tier: 5, vx: Math.cos(angle) * 700, vy: Math.sin(angle) * 700, spawnedAt: 1000, expiresAt: 1550 },
+    }, true);
+  }
+  renderer.flushLocalShotConfirmations();
+  assert.deepEqual([...renderer.localProjectiles.values()].map((shot) => Math.round(Math.atan2(shot.vy, shot.vx) * 180 / Math.PI)), [82, 90, 98]);
+  assert.ok([...renderer.localProjectiles.values()].every((shot) => shot.startX === 500 && shot.startY === 350));
+});
+
 test("network transit never fast-forwards a bullet away from its muzzle", () => {
   const renderer = Object.create(DustyOrbitMultiplayerRenderer.prototype);
   renderer.localPlayerId = "local";
@@ -214,7 +234,7 @@ test("movement during confirmation delay still launches from the currently visib
   assert.deepEqual({ vx: shot.vx, vy: shot.vy }, { vx: 500, vy: 0 });
 });
 
-test("a delayed confirmation keeps the authoritative trajectory after the rendered aim changes", () => {
+test("the current gun muzzle corrects a delayed confirmation immediately before launch", () => {
   const renderer = Object.create(DustyOrbitMultiplayerRenderer.prototype);
   renderer.localPlayerId = "local";
   renderer.pendingLocalShotConfirmations = [];
@@ -224,12 +244,38 @@ test("a delayed confirmation keeps the authoritative trajectory after the render
   renderer.localProjectiles = new Map();
   renderer.confirmShot({
     playerId: "local",
+    shotId: 8,
+    aimX: 1,
+    aimY: 0,
     projectile: { id: 8, tier: 2, x: 395, y: 266, vx: 600, vy: 0, spawnedAt: 1000, expiresAt: 1750 },
   }, true);
   renderer.flushLocalShotConfirmations();
   const shot = renderer.localProjectiles.get(8);
   assert.deepEqual({ x: shot.startX, y: shot.startY }, { x: 411, y: 277 });
-  assert.deepEqual({ vx: shot.vx, vy: shot.vy }, { vx: 600, vy: 0 });
+  assert.ok(Math.abs(shot.vx) < 1e-9);
+  assert.equal(shot.vy, -600, "the bullet must be redirected onto the gun's current north-facing barrel");
+  assert.equal(renderer.pendingLocalShotConfirmations.length, 0);
+});
+
+test("queued launch groups each receive their own aligned gun frame", () => {
+  const renderer = Object.create(DustyOrbitMultiplayerRenderer.prototype);
+  renderer.localPlayerId = "local";
+  renderer.pendingLocalShotConfirmations = [];
+  renderer.weaponPoses = new Map([["local", { muzzleWorld: { x: 410, y: 270 }, forward: { x: 1, y: 0 } }]]);
+  renderer.weaponRecoil = new Map();
+  renderer.effects = [];
+  renderer.localProjectiles = new Map();
+  renderer.confirmShot({ playerId: "local", shotId: 20, aimX: 1, aimY: 0, projectile: { id: 20, tier: 4, vx: 700, vy: 0, spawnedAt: 1000, expiresAt: 1900 } }, true);
+  renderer.confirmShot({ playerId: "local", shotId: 21, aimX: 0, aimY: 1, projectile: { id: 21, tier: 4, vx: 0, vy: 700, spawnedAt: 1020, expiresAt: 1920 } }, true);
+
+  renderer.flushLocalShotConfirmations();
+  assert.deepEqual([...renderer.localProjectiles.keys()], [20]);
+  assert.equal(renderer.pendingLocalShotConfirmations.length, 1);
+
+  renderer.weaponPoses.set("local", { muzzleWorld: { x: 420, y: 290 }, forward: { x: 0, y: 1 } });
+  renderer.flushLocalShotConfirmations();
+  assert.deepEqual([...renderer.localProjectiles.keys()], [20, 21]);
+  assert.deepEqual({ x: renderer.localProjectiles.get(21).startX, y: renderer.localProjectiles.get(21).startY }, { x: 420, y: 290 });
 });
 
 test("a confirmed local bullet uses the exact nozzle produced in its render frame", () => {

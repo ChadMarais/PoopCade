@@ -2,13 +2,13 @@ import { moveCircleWithSliding } from "./collision-geometry.js?v=20260813-2";
 import { CollisionEditor } from "./collision-editor.js?v=20260813-9";
 import { loadDustyOrbitAssets } from "./assets.js?v=20260813-13";
 import { PRODUCTION_ARENA_WSS } from "./config.js?v=20260812";
-import { DustyOrbitMultiplayerRenderer } from "./renderer.js?v=20260813-24";
+import { DustyOrbitMultiplayerRenderer } from "./renderer.js?v=20260813-25";
 import { InputController } from "./input.js?v=20260813-3";
 import { claimSessionIdentity, resolvePoopcadePlayerIdentity } from "./identity.js?v=20260813-2";
 import { ArenaNetwork } from "./network.js?v=20260813";
 import { consumeFixedStep, convergeVisualPosition } from "./timing.js?v=20260813-2";
 import { DustyLobby } from "./lobby.js?v=20260813-2";
-import { DustyOrbitHighscoreTracker } from "./highscore.js?v=20260813";
+import { DustyOrbitHighscoreTracker } from "./highscore.js?v=20260813-2";
 
 const INPUT_RATE = 30;
 const INPUT_DT = 1 / INPUT_RATE;
@@ -492,8 +492,21 @@ mobileNukeButton.addEventListener("pointerdown", (event) => {
   event.preventDefault(); event.stopPropagation();
   if (!mobileNukeButton.disabled) nukeQueuedUntil = performance.now() + 800;
 });
-leaveGame.addEventListener("click", () => {
+let leavePending = false;
+leaveGame.addEventListener("click", async () => {
   if (!joined || !confirm("Leave the arena and return to the lobby?")) return;
+  if (leavePending) return;
+  leavePending = true;
+  leaveGame.disabled = true;
+  const finalPlayer = latestSnapshot?.players?.find((item) => item.id === localId);
+  if (authenticated && finalPlayer) {
+    highscoreStatus = "FINAL SAVE...";
+    const saved = await Promise.race([
+      highscoreTracker.flush(finalPlayer),
+      new Promise((resolve) => setTimeout(() => resolve(false), 4_000)),
+    ]);
+    if (!saved) highscoreStatus = "SERVER SAVE PENDING";
+  }
   network.send({ type: "leave" });
   joined = false;
   applicationState = "LOBBY";
@@ -506,6 +519,8 @@ leaveGame.addEventListener("click", () => {
   latestSnapshot = null;
   lobby.setApplicationState(applicationState);
   lobby.show();
+  leavePending = false;
+  leaveGame.disabled = false;
 });
 document.addEventListener("visibilitychange", () => { input.reset(); input.enabled = connectionState === "online" && joined && !document.hidden; network.setActive(!document.hidden); if (!document.hidden) previousFrame = performance.now(); });
 addEventListener("beforeunload", () => { identity.release(); network.close(); });

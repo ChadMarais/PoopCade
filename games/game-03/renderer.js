@@ -119,19 +119,65 @@ export class DustyOrbitMultiplayerRenderer {
     this.materializeShot(event, false, this.weaponPoses.get(event.playerId));
   }
 
-  materializeShot(event, local, shotPose) {
+  shotLaunchDirection(event) {
+    const projectile = event?.projectile || {};
+    const rawX = Number.isFinite(event?.aimX) ? event.aimX : projectile.vx;
+    const rawY = Number.isFinite(event?.aimY) ? event.aimY : projectile.vy;
+    const length = Math.hypot(rawX || 0, rawY || 0);
+    return length > .001 ? { x: rawX / length, y: rawY / length } : null;
+  }
+
+  shotGroupKey(event) {
+    if (Number.isSafeInteger(event?.shotId)) return `shot:${event.shotId}`;
+    const projectile = event?.projectile || {};
+    return `legacy:${event?.playerId}:${projectile.inputSeq}:${projectile.spawnedAt}`;
+  }
+
+  pendingLocalLaunchGroup() {
+    if (!this.pendingLocalShotConfirmations.length) return [];
+    const groupKey = this.shotGroupKey(this.pendingLocalShotConfirmations[0]);
+    let count = 1;
+    while (count < this.pendingLocalShotConfirmations.length &&
+           this.shotGroupKey(this.pendingLocalShotConfirmations[count]) === groupKey) count++;
+    return this.pendingLocalShotConfirmations.slice(0, count);
+  }
+
+  shotGroupDirection(group) {
+    const explicit = group.find((event) => Number.isFinite(event?.aimX) && Number.isFinite(event?.aimY));
+    if (explicit) return this.shotLaunchDirection(explicit);
+    let x = 0, y = 0;
+    for (const event of group) {
+      const direction = this.shotLaunchDirection(event);
+      if (direction) { x += direction.x; y += direction.y; }
+    }
+    const length = Math.hypot(x, y);
+    return length > .001 ? { x: x / length, y: y / length } : null;
+  }
+
+  materializeShot(event, local, shotPose, shotGroupDirection = null) {
     const projectile = event.projectile;
     const speed = Math.hypot(projectile.vx, projectile.vy);
     const authoritativeDirection = { x: projectile.vx / speed, y: projectile.vy / speed };
-    // Local presentation begins at the barrel calculated for this render
-    // frame, keeping its first sample and muzzle flash on the visible nozzle.
-    // Confirmation can arrive after the player has already changed aim. The
-    // muzzle may use the newest visible pose, but the trajectory must remain
-    // the server-authored direction for the input sequence that actually
-    // fired. Redirecting it to the newer barrel made local bullets visibly
-    // cross targets along paths the server never simulated.
-    const directionX = authoritativeDirection.x;
-    const directionY = authoritativeDirection.y;
+    let directionX = authoritativeDirection.x;
+    let directionY = authoritativeDirection.y;
+    if (local && shotPose?.forward) {
+      const barrelLength = Math.hypot(shotPose.forward.x || 0, shotPose.forward.y || 0);
+      if (barrelLength > .001) {
+        const barrel = { x: shotPose.forward.x / barrelLength, y: shotPose.forward.y / barrelLength };
+        const authoredAim = shotGroupDirection || this.shotLaunchDirection(event) || authoritativeDirection;
+        // The visible gun is the final source of truth immediately before a
+        // local bullet is materialized. Preserve only the authored pellet
+        // spread relative to the trigger aim, then rotate that spread onto the
+        // barrel that is actually on screen now.
+        const spread = Math.atan2(
+          authoredAim.x * authoritativeDirection.y - authoredAim.y * authoritativeDirection.x,
+          authoredAim.x * authoritativeDirection.x + authoredAim.y * authoritativeDirection.y,
+        );
+        const cosine = Math.cos(spread), sine = Math.sin(spread);
+        directionX = barrel.x * cosine - barrel.y * sine;
+        directionY = barrel.x * sine + barrel.y * cosine;
+      }
+    }
     const life = clamp((projectile.expiresAt || 0) - (projectile.spawnedAt || 0), 100, 3000);
     // Never fast-forward a newly confirmed local projectile. Backdating by
     // network transit time made its first visible frame appear downrange
@@ -170,10 +216,15 @@ export class DustyOrbitMultiplayerRenderer {
 
   flushLocalShotConfirmations() {
     if (!this.pendingLocalShotConfirmations.length) return;
-    const confirmations = this.pendingLocalShotConfirmations.splice(0);
     const currentPose = this.weaponPoses.get(this.localPlayerId);
     if (!currentPose) return;
-    for (const event of confirmations) this.materializeShot(event, true, currentPose);
+    // Only one barrel discharge is materialized per render frame. If several
+    // confirmations arrive between frames, sample the current rendered muzzle
+    // independently for each discharge rather than reusing an older pose.
+    const group = this.pendingLocalLaunchGroup();
+    const groupDirection = this.shotGroupDirection(group);
+    const confirmations = this.pendingLocalShotConfirmations.splice(0, group.length);
+    for (const event of confirmations) this.materializeShot(event, true, currentPose, groupDirection);
   }
 
   playerHit(id) { this.hitUntil.set(id, performance.now() + 180); }
@@ -291,9 +342,14 @@ export class DustyOrbitMultiplayerRenderer {
     this.drawNukes(snapshot?.nukes || [], Date.now());
     this.drawEffects("underlay", now);
 
-    const players = (snapshot?.players || []).map((player) => player.id === localId && predicted
-      ? { ...player, x: predicted.x, y: predicted.y, aimX: inputVisual?.aimX ?? player.aimX, aimY: inputVisual?.aimY ?? player.aimY }
-      : player);
+    const players = (snapshot?.players || []).map((player) => {
+      if (player.id !== localId) return player;
+      const aimX = inputVisual?.aimX ?? player.aimX;
+      const aimY = inputVisual?.aimY ?? player.aimY;
+      return predicted
+        ? { ...player, x: predicted.x, y: predicted.y, aimX, aimY }
+        : { ...player, aimX, aimY };
+    });
     this.renderedPlayers = new Map(players.map((player) => [player.id, { x: player.x, y: player.y, vx: player.vx || 0, vy: player.vy || 0 }]));
     const layers = [
       ...this.assets.environment.map((item) => ({ type: "environment", depth: item.depthY, value: item })),

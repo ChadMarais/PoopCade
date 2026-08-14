@@ -24,6 +24,12 @@ test("final Dusty Orbit runs preserve the authoritative leave score, including z
   });
 });
 
+test("final submission preserves the session high after the live score drops", () => {
+  const run = dustyOrbitFinalRun({ ...player, killScore: 1, highScore: 4, kills: 6 }, 11_500, () => runId);
+  assert.equal(run.score, 4);
+  assert.equal(run.level, 7);
+});
+
 test("authenticated final scores are submitted through the existing leaderboard function", async () => {
   const requests: Array<{ url: string; init?: RequestInit }> = [];
   const result = await submitDustyOrbitFinalScore({
@@ -34,11 +40,11 @@ test("authenticated final scores are submitted through the existing leaderboard 
     randomUUID: () => runId,
     fetchApi: async (input, init) => {
       requests.push({ url: String(input), init });
-      return new Response("{}", { status: 200 });
+      return Response.json({ accepted: true, personalBest: 5 }, { status: 200 });
     },
   });
 
-  assert.deepEqual(result, { submitted: true, status: 200 });
+  assert.deepEqual(result, { submitted: true, status: 200, personalBest: 5 });
   assert.equal(requests[0].url, "https://scores.example/functions/v1/submit-run");
   assert.equal((requests[0].init?.headers as Record<string, string>).authorization, "Bearer validated-player-token");
   assert.deepEqual(JSON.parse(String(requests[0].init?.body)), {
@@ -62,4 +68,14 @@ test("guest final scores skip the public leaderboard", async () => {
   });
   assert.deepEqual(result, { submitted: false, skipped: "guest" });
   assert.equal(requested, false);
+});
+
+test("a successful HTTP response is not enough without persistence confirmation", async () => {
+  const result = await submitDustyOrbitFinalScore({
+    env: { SUPABASE_URL: "https://scores.example", SUPABASE_PUBLISHABLE_KEY: "publishable" },
+    accessToken: "validated-player-token",
+    player: { ...player, killScore: 4 },
+    fetchApi: async () => Response.json({ accepted: false, personalBest: 0 }, { status: 200 }),
+  });
+  assert.deepEqual(result, { submitted: false, status: 200, personalBest: 0 });
 });

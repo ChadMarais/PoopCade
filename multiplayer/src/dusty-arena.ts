@@ -182,7 +182,7 @@ export class DustyOrbitArena extends DurableObject<Env> {
     if (message.type === "leave") {
       const player = session.role === "active" ? this.simulation.players.get(session.playerId) : null;
       if (player) {
-        this.persistFinalScore(this.scoreTokens.get(session.playerId) ?? session.accessToken, player, now);
+        await this.persistFinalScore(this.scoreTokens.get(session.playerId) ?? session.accessToken, player, now);
         this.simulation.removePlayer(session.playerId);
       }
       this.scoreTokens.delete(session.playerId);
@@ -244,21 +244,22 @@ export class DustyOrbitArena extends DurableObject<Env> {
     }));
   }
 
-  private persistFinalScore(accessToken: string | undefined, player: DustyFinalScorePlayer, endedAt: number): void {
-    if (!accessToken) return;
+  private persistFinalScore(accessToken: string | undefined, player: DustyFinalScorePlayer, endedAt: number): Promise<{ submitted: boolean; skipped?: string; status?: number }> {
+    if (!accessToken) return Promise.resolve({ submitted: false, skipped: "guest" });
     const finalPlayer = {
       id: player.id,
-      killScore: player.killScore,
+      killScore: Math.max(player.highScore ?? 0, player.killScore),
+      highScore: Math.max(player.highScore ?? 0, player.killScore),
       kills: player.kills,
       deaths: player.deaths,
       joinedAt: player.joinedAt,
     };
-    this.ctx.waitUntil(submitDustyOrbitFinalScore({
+    return submitDustyOrbitFinalScore({
       env: this.env,
       accessToken,
       player: finalPlayer,
       endedAt,
-    }).catch(() => ({ submitted: false })));
+    }).catch(() => ({ submitted: false }));
   }
 
   private disconnectSocket(socket: WebSocket): void {
@@ -296,7 +297,7 @@ export class DustyOrbitArena extends DurableObject<Env> {
       if (["player_joined", "player_left", "kill", "death"].includes(String(event.type))) rosterChanged = true;
       if (event.type === "stale" && typeof event.playerId === "string") {
         if (event.player && typeof event.player === "object") {
-          this.persistFinalScore(this.scoreTokens.get(event.playerId), event.player as DustyFinalScorePlayer, Number(event.endedAt) || Date.now());
+          this.ctx.waitUntil(this.persistFinalScore(this.scoreTokens.get(event.playerId), event.player as DustyFinalScorePlayer, Number(event.endedAt) || Date.now()));
         }
         this.scoreTokens.delete(event.playerId);
         for (const [socket, session] of this.sessions) {

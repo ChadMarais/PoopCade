@@ -12,3 +12,4 @@ AGENTS.md
 wrangler.jsonc
 .assetsignore
 games/game-03/assets/dusty-orbit/terrain/dusty-orbit-ground-base.png
+*.log
