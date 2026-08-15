@@ -14,8 +14,8 @@ test("homepage promotes Nebula Murderball as Game 01 ahead of Orbit Shift and NE
   const homepage = await read("index.html");
   ordered(homepage, [
     "Game 01 · Multiplayer",
-    "Game 02 · Live",
-    "Game 03 · Live",
+    "Game 02 · Single player",
+    "Game 03 · Single player",
   ]);
   ordered(homepage, [
     "NEBULA<br>MURDERBALL",
