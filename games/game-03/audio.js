@@ -1,7 +1,7 @@
 const AUDIO_ASSET_VERSION = "20260815-1";
 const WEAPON_VOICE_LIMIT = 5;
 const EFFECT_VOICE_LIMIT = 2;
-export const DUSTY_AUDIO_MAX_VOLUME = .7;
+export const DUSTY_AUDIO_MAX_VOLUME = .35;
 export const DUSTY_AUDIO_MIN_VOLUME = 0;
 const audioUrl = (file) => {
   const url = new URL(`./assets/audio/${file}`, import.meta.url);

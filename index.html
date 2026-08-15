@@ -157,6 +157,10 @@
     .dusty-card .game-title { font-size: clamp(1.85rem,6vw,3.5rem); }
     .dusty-card .game-title i { color: var(--pink); text-shadow: 0 0 28px rgba(255,79,189,.45); }
     .dusty-card .game-description { max-width: 550px; color: #cbc5d8; }
+    .murderball-progression { display:grid; gap:4px; width:min(100%,520px); margin:-4px 0 14px; padding:10px 12px; border:1px solid rgba(200,255,71,.28); border-radius:10px; background:rgba(200,255,71,.055); }
+    .murderball-progression strong { color:#e7ffb0; font:950 .67rem/1.1 ui-monospace,monospace; letter-spacing:.07em; }
+    .murderball-progression span { color:#b9afc5; font:800 .57rem/1.45 ui-monospace,monospace; letter-spacing:.045em; }
+    .murderball-progression b { color:#78ecff; }
     .dusty-card .button.primary { background: linear-gradient(105deg,var(--acid),#ecff9e); box-shadow: 0 14px 38px rgba(200,255,71,.18); }
     .dusty-visual { position: absolute; right: -45px; bottom: -62px; z-index: 1; width: 245px; aspect-ratio: 1; pointer-events: none; opacity: .3; }
     .dusty-visual::before, .dusty-visual::after { position: absolute; inset: 10%; content: ""; border: 1px solid rgba(82,239,255,.35); border-radius: 50%; box-shadow: 0 0 34px rgba(82,239,255,.14),inset 0 0 34px rgba(255,79,189,.09); }
@@ -306,6 +310,7 @@
             <div class="game-label"><span>Game 01 · Multiplayer</span></div>
             <h3 class="game-title">NEBULA<br>MURDERBALL</h3>
             <p class="game-description">Drop into a live moon-skirmish, pick a deeply questionable pilot, and turn total strangers into tasteful space debris.</p>
+            <div class="murderball-progression"><strong>START WITH A PATHETIC PEA SHOOTER.</strong><span><b>EVERY KILL</b> upgrades it one level · <b>EVERY DEATH</b> drops it one level</span></div>
             <ul class="meta" aria-label="Game attributes"><li>Live multiplayer</li><li>Arena combat</li><li>Instant lobby</li></ul>
             <div class="game-actions">
               <a class="button primary" href="/games/game-03/">Play now <span aria-hidden="true">→</span></a>

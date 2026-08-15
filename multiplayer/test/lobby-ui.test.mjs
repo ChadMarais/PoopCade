@@ -31,6 +31,19 @@ test("game header omits the redundant scores link while the gameplay HUD retains
   assert.match(html, /\.gameplay-hud[^}]*background:\s*rgba\(18,8,27,\.48\)/);
 });
 
+test("lobby clearly explains the weapon upgrade and death downgrade loop", async () => {
+  const [html, css] = await Promise.all([
+    readFile(new URL("../../games/game-03/index.html", import.meta.url), "utf8"),
+    readFile(new URL("../../games/game-03/lobby.css", import.meta.url), "utf8"),
+  ]);
+  assert.match(html, /class="lobby-panel weapon-rules"/);
+  assert.match(html, /START WITH A PATHETIC PEA SHOOTER/);
+  assert.match(html, /EVERY KILL: GUN LEVELS UP/);
+  assert.match(html, /EVERY DEATH: GUN LEVELS DOWN/);
+  assert.match(html, /Death costs one weapon tier, never below T1/);
+  assert.match(css, /\.weapon-rule-steps/);
+});
+
 test("localhost previews connect to the IPv4-bound local Worker", async () => {
   const game = await readFile(new URL("../../games/game-03/game.js", import.meta.url), "utf8");
   assert.match(game, /location\.hostname === "localhost" \? "127\.0\.0\.1" : location\.hostname/);

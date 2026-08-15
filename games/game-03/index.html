@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#26132f">
   <meta name="description" content="Nebula Murderball, Poopcade's live multiplayer space free-for-all.">
   <title>NEBULA MURDERBALL — Poopcade Game 01</title>
-  <link rel="stylesheet" href="./lobby.css?v=20260814-4">
+  <link rel="stylesheet" href="./lobby.css?v=20260815-1">
   <style>
     :root { color-scheme: dark; font-family: ui-sans-serif, system-ui, sans-serif; }
     * { box-sizing: border-box; }
@@ -89,6 +89,14 @@
       <div class="lobby-profile"><strong data-lobby-player-name>Guest pilot</strong><p data-lobby-identity>CHECKING PROFILE</p></div>
     </header>
     <div class="lobby-grid">
+      <section class="lobby-panel weapon-rules" aria-labelledby="weaponRulesHeading">
+        <div class="weapon-rules-copy"><span class="eyebrow">HOW MURDERBALL WORKS</span><h2 id="weaponRulesHeading">YOUR GUN EARNS ITS WAY OUT OF THE GUTTER</h2><p>Climb from the Pea Shooter to the Plasma Cannon. Your weapon tier follows your body count.</p></div>
+        <ol class="weapon-rule-steps">
+          <li><b>T1</b><span><strong>START WITH A PATHETIC PEA SHOOTER</strong><small>Everybody begins with the galaxy’s least intimidating gun.</small></span></li>
+          <li><b>+1</b><span><strong>EVERY KILL: GUN LEVELS UP</strong><small>One kill earns one stronger weapon tier.</small></span></li>
+          <li><b>−1</b><span><strong>EVERY DEATH: GUN LEVELS DOWN</strong><small>Death costs one weapon tier, never below T1.</small></span></li>
+        </ol>
+      </section>
       <section class="lobby-panel map-panel" aria-labelledby="mapHeading">
         <div class="map-panel-heading"><div><span class="eyebrow">MAP SELECT</span><h2 id="mapHeading">PICK YOUR CRIME SCENE</h2></div><button class="quick-join-button" data-quick-join type="button">QUICK JOIN</button></div>
         <div class="map-rail" data-map-cards aria-label="Available maps"></div>

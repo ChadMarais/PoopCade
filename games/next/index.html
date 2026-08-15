@@ -129,6 +129,8 @@
     transform-origin:center;
   }
   .instruction.enter{animation:instructionPop .26s cubic-bezier(.2,.9,.2,1)}
+  .shell.correction-mode .instruction{color:var(--lime);font-size:clamp(22px,6.5vw,42px);line-height:1.02;text-shadow:0 0 28px rgba(201,255,90,.18)}
+  .shell.correction-mode .sub{color:#ffd7e6;font-weight:900}
   @keyframes instructionPop{
     0%{opacity:0;transform:translateY(-8px) scale(.88);filter:blur(4px)}
     70%{opacity:1;transform:translateY(2px) scale(1.04);filter:blur(0)}
@@ -679,6 +681,7 @@
   let recentTypes = [];
   let recentCategories = [];
   let currentRoundFn = null;
+  let roundAnswer = '';
   let pausedRoundFn = null;
   let runActive = false;
   let paused = false;
@@ -930,6 +933,8 @@
     arena.innerHTML='';
     arena.onpointerdown=arena.onpointermove=arena.onpointerup=arena.onpointercancel=null;
     arena.style.transform='';
+    roundAnswer='';
+    shell.classList.remove('correction-mode');
   }
   function activateChallengeHost(){
     host.classList.add('challenge-active');
@@ -946,6 +951,7 @@
     sub.textContent=small;
     animateInstruction();
   }
+  function setRoundAnswer(answer){roundAnswer=String(answer||'').trim();}
   function protocol(){
     eyebrow.textContent = `PROTOCOL ${String(score+1).padStart(2,'0')}`;
   }
@@ -1264,6 +1270,12 @@
     running=false;roundToken++;
     stopPressureBar();
 
+    const shownInstruction=instruction.textContent.trim();
+    const correctAnswer=roundAnswer || `DO THIS: ${shownInstruction}`;
+    shell.classList.add('correction-mode');
+    eyebrow.textContent='CORRECT ANSWER';
+    setInstruction(correctAnswer,reason || 'Challenge failed.');
+
     shell.classList.remove('shake');void shell.offsetWidth;shell.classList.add('shake');
     showFeedback('NOPE.',false);
     hostReact('gleeful',1200);
@@ -1302,7 +1314,7 @@
           running=true;
           nextRound();
         }
-      },720);
+      },1800);
       return;
     }
 
@@ -1328,7 +1340,7 @@
       'Official ruling: oops.',
       'I would clap, but you lost.'
     ];
-    deathReason.textContent=reason || 'Challenge failed.';
+    deathReason.textContent=`${reason || 'Challenge failed.'} Correct answer: ${correctAnswer}`;
     deathMsg.textContent=pickFresh([...GAME_OVER_LINES,...msgs]);
     hostReact('smug',2400);
     runActive=false;
@@ -1338,7 +1350,7 @@
       shell.classList.remove('menu-mode');
       shell.classList.add('over-mode');
       gameOver.style.display='flex';
-    },680);
+    },1500);
   }
 
   function createClientRunId(){
@@ -1466,6 +1478,7 @@
       'POKE IT.',
       'BOOP IT.'
     ]));
+    setRoundAnswer('TAP THE BUTTON.');
     const c=choice(COLORS);
     const b=targetButton({x:rand(24,76),y:rand(34,70),size:randi(76,118),color:c.hex,onTap:(e)=>{
       particles(e.clientX,e.clientY,14);correct();
@@ -1490,6 +1503,7 @@
       `${target.name}. NOW.`,
       `PICK ${target.name}.`
     ]));
+    setRoundAnswer(`TAP ${target.name}.`);
     const positions=shuffle([[27,38],[72,38],[27,68],[72,68]]).slice(0,count);
     cols.forEach((c,i)=>{
       targetButton({x:positions[i][0],y:positions[i][1],size:82,color:c.hex,onTap:(e)=>{
@@ -1506,6 +1520,7 @@
       'PICK SMALL.',
       'LITTLE ONE.'
     ]));
+    setRoundAnswer('TAP THE SMALLER BUTTON.');
     const c=choice(COLORS);
     const maxBase=Math.max(84,Math.min(118,arena.clientWidth*.34));
     const small=randi(Math.max(52,Math.floor(maxBase*.52)),Math.max(60,Math.floor(maxBase*.64)));
@@ -1524,6 +1539,7 @@
       `${needed} TAPS.`,
       `POKE IT ${needed} TIMES.`
     ]));
+    setRoundAnswer(`TAP EXACTLY ${needed} TIMES.`);
     sub.textContent=choice(['Exactly.','Count carefully.','No extras.']);
     const b=targetButton({x:50,y:54,size:126,color:choice(COLORS).hex,text:'0',onTap:(e,el)=>{
       n++;el.querySelector('span').textContent=n;
@@ -1544,6 +1560,7 @@
       'HANDS OFF.',
       'DON’T TOUCH.'
     ]));
+    setRoundAnswer('DO NOTHING. WAIT FOR THE TIMER.');
     sub.textContent=choice(['Seriously.','Hands off.','Resist.']);
     arena.onpointerdown=()=>fail('You touched it.');
     const ms=scaledDeadline(score<20?1600:randi(1200,1900));
@@ -1562,6 +1579,7 @@
       'HIT THE LINE.',
       'NAIL IT.'
     ]));
+    setRoundAnswer('STOP THE BAR ON THE WHITE LINE.');
     sub.textContent=choice(['White line.','Time it.','Tiny window.']);
     const wrap=document.createElement('div');wrap.className='meter';
     const fill=document.createElement('div');fill.className='meterFill';
@@ -1601,6 +1619,7 @@
       'HOLD IT.',
       'PRESS. HOLD.'
     ]));
+    setRoundAnswer('HOLD UNTIL “LET GO!”, THEN RELEASE.');
     sub.textContent=choice([
       'Wait…',
       'Steady…',
@@ -1725,6 +1744,7 @@
       `FLICK ${dir}.`,
       `${dir}.`
     ]));
+    setRoundAnswer(`SWIPE ${dir}.`);
     bindSwipe(dir,()=>correct('WHOOSH.'));
     const arrow=document.createElement('div');
     arrow.style.cssText='position:absolute;left:50%;top:55%;transform:translate(-50%,-50%);font-size:94px;font-weight:1000;opacity:.16;';
@@ -1738,6 +1758,7 @@
       'WAIT.',
       'GREEN = GO.'
     ]));
+    setRoundAnswer('WAIT FOR GREEN, THEN TAP.');
     sub.textContent=choice(['Then tap.','No early taps.','Wait for it.']);
     let green=false;
     arena.style.background='#271117';
@@ -1788,6 +1809,7 @@
       `RECALL #${askIndex+1}.`,
       `#${askIndex+1}?`
     ]));
+    setRoundAnswer(`THE CORRECT COLOUR WAS ${answer}.`);
     sub.textContent=choice(['Remember?','From earlier.','Hope you kept it.']);
     const options=shuffle(COLORS).slice(0,4);
     if(!options.some(c=>c.name===answer)){
@@ -1809,6 +1831,7 @@
     ]));
     const odd=randi(0,8), base=choice(['●','▲','■']);
     let alt=choice(['●','▲','■'].filter(x=>x!==base));
+    setRoundAnswer(`TAP THE ${alt} SYMBOL.`);
     for(let i=0;i<9;i++){
       const x=22+(i%3)*28, y=29+Math.floor(i/3)*25;
       targetButton({x,y,size:Math.max(48,Math.min(62,arena.clientWidth*.17)),color:'#e9ebf2',text:i===odd?alt:base,shape:'square',onTap:e=>{
@@ -1824,6 +1847,7 @@
       'GRAB IT.',
       'GET IT.'
     ]));
+    setRoundAnswer('TAP THE MOVING BUTTON.');
     const b=targetButton({x:50,y:52,size:82,color:choice(COLORS).hex,text:'!',onTap:e=>{particles(e.clientX,e.clientY);correct('GOTCHA.');}});
     const dx=Math.max(12,Math.min(arena.clientWidth*.28,(arena.clientWidth-b.offsetWidth)/2-8));
     const dy=Math.max(10,Math.min(arena.clientHeight*.18,(arena.clientHeight-b.offsetHeight)/2-8));
@@ -1842,6 +1866,7 @@
   function dragRound(){
     setInstruction(choice(['DRAG IT HOME.','MOVE IT OVER.','PUT IT THERE.']));
     sub.textContent='Drag. Drop. Done.';
+    setRoundAnswer('DRAG “ME” INTO THE “HERE” BOX.');
 
     const zoneSize=Math.max(86,Math.min(104,arena.clientWidth*.29));
     const thingSize=Math.max(58,Math.min(72,arena.clientWidth*.20));
@@ -1907,6 +1932,7 @@
   function orderRound(){
     setInstruction('1 → 2 → 3 → 4.');
     sub.textContent='In order.';
+    setRoundAnswer('TAP 1, THEN 2, THEN 3, THEN 4.');
     const positions=shuffle([[25,35],[73,35],[25,70],[73,70]]);
     let expected=1;
     for(let n=1;n<=4;n++){
@@ -1929,6 +1955,7 @@
     sub.textContent='Watch.';
     const positions=[[27,38],[73,38],[27,70],[73,70]];
     const chosen=randi(0,3);
+    setRoundAnswer(`THE ${['TOP-LEFT','TOP-RIGHT','BOTTOM-LEFT','BOTTOM-RIGHT'][chosen]} BUTTON MOVED.`);
     const buttons=[];
     positions.forEach((p,i)=>{
       const b=targetButton({
@@ -1960,6 +1987,7 @@
   function sideRound(){
     const want=choice(['LEFTMOST','RIGHTMOST','TOP','BOTTOM']);
     setInstruction(`TAP ${want}.`);
+    setRoundAnswer(`TAP THE ${want} BUTTON.`);
     const narrow=arena.clientWidth<360;
     const positions=shuffle(narrow
       ? [[24,31],[68,37],[36,68],[72,68]]
@@ -1987,6 +2015,7 @@
     sub.textContent='Pick one.';
     const c1=choice(COLORS);
     const c2=same?c1:choice(COLORS.filter(c=>c.name!==c1.name));
+    setRoundAnswer(`THE CORRECT ANSWER WAS ${same?'SAME':'DIFFERENT'}.`);
 
     [c1,c2].forEach((color,index)=>{
       const sample=document.createElement('div');
@@ -2027,6 +2056,7 @@
     const opposite={LEFT:'RIGHT',RIGHT:'LEFT',UP:'DOWN',DOWN:'UP'}[shown];
     setInstruction(`OPPOSITE OF ${shown}.`);
     sub.textContent='Swipe it.';
+    setRoundAnswer(`SWIPE ${opposite}.`);
     bindSwipe(opposite,()=>correct(choice(['OPPOSITES.','GOOD BRAIN.','YEP.'])));
     const arrow=document.createElement('div');
     arrow.style.cssText='position:absolute;left:50%;top:55%;transform:translate(-50%,-50%);font-size:94px;font-weight:1000;opacity:.13;';
@@ -2038,6 +2068,7 @@
   function rapidTargetsRound(){
     setInstruction('GET ALL 3.');
     sub.textContent='Quick.';
+    setRoundAnswer('TAP ALL THREE TARGETS.');
     let hit=0;
     const spawn=()=>{
       if(!running)return;
@@ -2059,6 +2090,7 @@
     const count=randi(3,7);
     setInstruction('HOW MANY?');
     sub.textContent='Count fast.';
+    setRoundAnswer(`THERE WERE ${count} DOTS.`);
     const dots=[];
     const positions=[];
     const dotSize=Math.max(22,Math.min(28,arena.clientWidth*.08));
@@ -2132,6 +2164,7 @@
       }
     ];
     const v=choice(variants);
+    setRoundAnswer(`TAP “${v.answer}”.`);
     setInstruction(v.prompt);
     sub.textContent=v.sub;
     const labels=shuffle(v.labels);
@@ -2157,6 +2190,7 @@
       'FIND "HERE".',
       'TOUCH "HERE".'
     ]));
+    setRoundAnswer('TAP THE BUTTON LABELLED EXACTLY “HERE”.');
     const options=['HERE','THERE','HERE?','NOT HERE'];
     const correctIndex=0;
     const shuffled=shuffle(options.map((txt,i)=>({txt,i})));
@@ -2184,6 +2218,7 @@
       'HIT THIS.',
       'BREAK IT.'
     ]));
+    setRoundAnswer('KEEP PRESSING UNTIL THE BOSS BREAKS.');
     sub.textContent=choice(['Break it.','Hit it.','Again.']);
     hostReact('angry',5200);hostSpeak('This protocol is extremely official.',1800);
     const boss=document.createElement('div');boss.className='boss';
@@ -2214,6 +2249,7 @@
       `FIND ${missing.name}.`,
       `${missing.name}?`
     ]));
+    setRoundAnswer(`DO NOTHING. ${missing.name} IS NOT THERE.`);
     sub.textContent=choice(['Look carefully.','Maybe nothing.','Check first.']);
     const pos=[[27,44],[72,44],[50,70]];
     available.forEach((c,i)=>targetButton({x:pos[i][0],y:pos[i][1],size:86,color:c.hex,onTap:()=>fail('That was not '+missing.name+'.')}));
@@ -2234,6 +2270,7 @@
       'LEAVE IT ALONE.',
       'NOT THIS ONE.'
     ]));
+    setRoundAnswer('DO NOT PRESS THE BUTTON.');
     sub.textContent=choice([
       'Tempting, huh?',
       'Hands off.',
@@ -2266,7 +2303,7 @@
       ],
       threatened:[
         ['ENOUGH.','My turn.'],
-        ['RIGHT.','No more nice machine.'],
+        ['I DARE YOU!','No more nice machine.'],
         ['RECOUNT.','Immediately.']
       ],
       unhinged:[
@@ -2279,6 +2316,7 @@
     };
     const [main,small]=choice(lines[stage]);
     setInstruction(main,small);
+    setRoundAnswer('DO NOTHING. THE MACHINE IS JUST TAUNTING YOU.');
     audio.vowel(stage==='unhinged'?'ah':'oo',.4,130,170,.03);
     const ms=scaledDeadline(1050);
     startPressureBar(ms);
@@ -2289,6 +2327,7 @@
   // reuse the existing round lifecycle so pause, timeout and cleanup stay safe.
   function slapMachineRound(){
     setInstruction('SLAP THE MACHINE.','A proper sideways one.');
+    setRoundAnswer('SWIPE SIDEWAYS ACROSS THE MACHINE.');
     activateChallengeHost();
     hostReact('side-eye',2200);
     hostSpeak('This feels like a workplace issue.',2300);
@@ -2336,6 +2375,7 @@
     const literal=Math.random()<.5;
     const targetIndex=randi(0,2);
     const target=literal?colours[targetIndex]:inks[targetIndex];
+    setRoundAnswer(`CHOOSE ${colours[targetIndex].name} WRITTEN IN ${inks[targetIndex].name} INK.`);
     setInstruction(literal?`TAP THE WORD ${target.name}.`:`TAP THE ${target.name} WORD.`,literal?'Read the letters.':'Read the ink.');
     const buttons=colours.map((label,i)=>{
       const b=targetButton({
@@ -2395,6 +2435,7 @@
       }
       addTimer(()=>{
         selectable=true;sub.textContent='Pick the original pod.';pods.forEach(p=>p.classList.add('ready'));
+        setRoundAnswer(`THE ORIGINAL POD FINISHED ON THE ${['LEFT','MIDDLE','RIGHT'][slotByPod[trackedIndex]]}.`);
         const answerMs=scaledDeadline(2300);startPressureBar(answerMs);addTimer(()=>{if(running)fail('Lost it.');},answerMs);
       },swaps*(moveMs+90)+120);
     },650);
@@ -2402,12 +2443,13 @@
 
   function shutMeUpRound(){
     setInstruction('PLEASE WAIT.','The machine has notes.');
+    setRoundAnswer('WAIT FOR “SHUT ME UP”, THEN HOLD THE MACHINE.');
     activateChallengeHost();hostReact('ranting',1800);
     const rants=['I have reviewed your performance.','The buttons are clearly biased.','Your technique lacks paperwork.'];
     rants.forEach((line,i)=>addTimer(()=>{hostSpeak(line,650);audio.vowel(i%2?'oh':'oo',.22,130+i*15,175,.026);},i*430));
     let armed=false,holding=false,finished=false,pointerId=null,holdTimer=0;
     addTimer(()=>{
-      armed=true;setInstruction('SHUT ME UP.','Press and hold the machine.');hostSpeak('I was not finished—',1500);
+      armed=true;setInstruction('SHUT ME UP.','Press and hold the machine.');setRoundAnswer('PRESS AND HOLD THE MACHINE UNTIL IT STOPS TALKING.');hostSpeak('I was not finished—',1500);
       armTimeout(3400);
     },1280);
     host.onpointerdown=e=>{
@@ -2437,15 +2479,19 @@
     const variant=choice(['colour','size','swipe','position']);
     if(variant==='colour'){
       const [said,other]=shuffle(COLORS).slice(0,2);statement.textContent=`MACHINE SAYS · TAP ${said.name}`;
+      setRoundAnswer(`IGNORE THE MACHINE. TAP ${other.name}.`);
       [said,other].forEach((c,i)=>targetButton({x:i?68:32,y:64,size:82,color:c.hex,text:c.name,extraClass:'wordy singleLine',onTap:e=>c===other?(particles(e.clientX,e.clientY),correct('LIAR DETECTED.')):fail('You believed it.')}));
     }else if(variant==='size'){
       const saysBig=Math.random()<.5;statement.textContent=`MACHINE SAYS · TAP ${saysBig?'BIG':'SMALL'}`;
+      setRoundAnswer(`IGNORE THE MACHINE. TAP ${saysBig?'SMALL':'BIG'}.`);
       const sizes=[62,112];sizes.forEach((size,i)=>targetButton({x:i?68:32,y:64,size,color:choice(COLORS).hex,onTap:e=>((saysBig&&i===0)||(!saysBig&&i===1))?(particles(e.clientX,e.clientY),correct('OPPOSITE.')):fail('The machine lied.')}));
     }else if(variant==='position'){
       const said=choice(['LEFT','RIGHT']),answer=said==='LEFT'?'RIGHT':'LEFT';statement.textContent=`MACHINE SAYS · TAP ${said}`;
+      setRoundAnswer(`IGNORE THE MACHINE. TAP ${answer}.`);
       ['LEFT','RIGHT'].forEach((label,i)=>targetButton({x:i?68:32,y:64,size:94,color:'#e7e8ee',shape:'square',text:label,extraClass:'wordy singleLine',onTap:e=>label===answer?(particles(e.clientX,e.clientY),correct('DISTRUST PAYS.')):fail('You trusted it.')}));
     }else{
       const said=choice(['LEFT','RIGHT','UP','DOWN']);const opposite={LEFT:'RIGHT',RIGHT:'LEFT',UP:'DOWN',DOWN:'UP'}[said];statement.textContent=`MACHINE SAYS · SWIPE ${said}`;
+      setRoundAnswer(`IGNORE THE MACHINE. SWIPE ${opposite}.`);
       bindSwipe(opposite,()=>correct('LIAR.'));
     }
     armTimeout(3300);
@@ -2459,6 +2505,7 @@
 
   function rareRound(){
     setInstruction('...');sub.textContent='';
+    setRoundAnswer('DO NOTHING. WAIT IT OUT.');
     audio.suspense();
     const ms=scaledDeadline(1700);
     startPressureBar(ms);

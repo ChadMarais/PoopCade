@@ -22,6 +22,9 @@ test("homepage promotes Nebula Murderball as Game 01 ahead of Orbit Shift and NE
     "ORBIT<i>//</i>SHIFT",
     "NEXT<i>.</i>",
   ]);
+  assert.match(homepage, /START WITH A PATHETIC PEA SHOOTER/);
+  assert.match(homepage, /EVERY KILL[\s\S]*upgrades it one level/);
+  assert.match(homepage, /EVERY DEATH[\s\S]*drops it one level/);
 });
 
 test("game titles, account cards, and leaderboards follow the public game order", async () => {

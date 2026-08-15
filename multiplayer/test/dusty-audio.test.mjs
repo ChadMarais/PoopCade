@@ -50,6 +50,17 @@ test("all supplied production audio files are packaged with the game", () => {
   }
 });
 
+test("Murderball mixes every sound effect at half of its previous maximum volume", () => {
+  assert.equal(DUSTY_AUDIO_MAX_VOLUME, .35);
+  const audio = fresh();
+  audio.weaponFired({ playerId: "pilot", groupKey: "half-volume", tier: 1 });
+  audio.powerupCollected("health");
+  audio.teleport();
+  audio.death();
+  audio.nuke();
+  assert.deepEqual(FakeAudio.volumes, Array(5).fill(.35));
+});
+
 test("every weapon tier uses its supplied production sound", () => {
   const audio = fresh();
   for (let tier = 1; tier <= 6; tier++) audio.weaponFired({ playerId: "pilot", groupKey: `shot:${tier}`, tier });
