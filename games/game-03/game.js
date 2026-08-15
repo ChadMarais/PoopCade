@@ -11,7 +11,7 @@ import { consumeFixedStep, convergeVisualPosition } from "./timing.js?v=20260813
 import { DustyLobby } from "./lobby.js?v=20260814-7";
 import { RECRUITMENT_HREF } from "./presence.js?v=20260814-2";
 import { DustyOrbitHighscoreTracker } from "./highscore.js?v=20260813-2";
-import { DustyOrbitAudio } from "./audio.js?v=20260815-3";
+import { DustyOrbitAudio } from "./audio.js?v=20260815-4";
 import { makePanelDraggable } from "./draggable-panel.js?v=20260814-4";
 
 const INPUT_RATE = 30;
@@ -114,6 +114,10 @@ const audio = new DustyOrbitAudio({
   getListener: () => visualPredicted || predicted || latestSnapshot?.players?.find((player) => player.id === localId),
   world: assets.world,
 });
+const unlockAudio = () => { void audio.unlock(); };
+window.addEventListener("pointerdown", unlockAudio, { capture: true, passive: true });
+window.addEventListener("touchstart", unlockAudio, { capture: true, passive: true });
+window.addEventListener("keydown", unlockAudio, { capture: true });
 canvas.addEventListener("dusty-orbit:weapon-fired", (event) => audio.weaponFired(event.detail));
 canvas.addEventListener("dusty-orbit:nuke-audio-cue", (event) => { if (event.detail?.cue === "detonation") audio.nuke(event.detail); });
 const input = new InputController(canvas, null, null, {

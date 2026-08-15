@@ -20,6 +20,18 @@ class FakeAudio {
   play() { this.paused = false; FakeAudio.played.push(this.src); FakeAudio.volumes.push(this.volume); return Promise.resolve(); }
 }
 
+class FakeAudioContext {
+  static latest = null;
+  constructor() { this.state = "suspended"; this.destination = {}; this.started = []; FakeAudioContext.latest = this; }
+  resume() { this.state = "running"; return Promise.resolve(); }
+  decodeAudioData(bytes) { return Promise.resolve({ bytes }); }
+  createGain() { return { gain: { value: 1 }, connect() {}, disconnect() {} }; }
+  createBufferSource() {
+    const context = this;
+    return { buffer: null, onended: null, connect() {}, disconnect() {}, start() { context.started.push(this); } };
+  }
+}
+
 function fresh(options = {}) {
   FakeAudio.played = [];
   FakeAudio.volumes = [];
@@ -83,6 +95,20 @@ test("power-up playback cannot exhaust or interrupt the reusable weapon voice po
   }
   assert.equal(FakeAudio.played.filter((url) => url === DUSTY_AUDIO_FILES.weapons[4]).length, 100);
   assert.equal(FakeAudio.created, 21);
+});
+
+test("Web Audio unlocks on interaction and mixes effects with sustained gunfire", async () => {
+  const audio = fresh({
+    AudioContextCtor: FakeAudioContext,
+    fetchFn: async () => ({ ok: true, arrayBuffer: async () => new ArrayBuffer(8) }),
+  });
+  await audio.ready();
+  assert.equal(await audio.unlock(), true);
+  audio.powerupCollected("speed");
+  for (let shot = 0; shot < 100; shot++) audio.weaponFired({ playerId: "pilot", groupKey: `web:${shot}`, tier: 4 });
+  assert.equal(FakeAudioContext.latest.state, "running");
+  assert.equal(FakeAudioContext.latest.started.length, 101);
+  assert.equal(FakeAudio.played.length, 0, "decoded sounds should not depend on HTML media playback");
 });
 
 test("teleport uses the one supplied power-up sound exactly once", () => {

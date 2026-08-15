@@ -43,15 +43,29 @@ export function spatialSoundVolume(source, listener, world) {
 }
 
 export class DustyOrbitAudio {
-  constructor({ AudioCtor = globalThis.Audio, getListener = () => null, world = null } = {}) {
+  constructor({
+    AudioCtor = globalThis.Audio,
+    AudioContextCtor = globalThis.AudioContext || globalThis.webkitAudioContext,
+    fetchFn = globalThis.fetch,
+    getListener = () => null,
+    world = null,
+  } = {}) {
     this.AudioCtor = AudioCtor;
+    this.fetchFn = fetchFn;
     this.getListener = getListener;
     this.world = world;
     this.templates = new Map();
     this.voicePools = new Map();
     this.activeVoices = new Set();
+    this.activeSources = new Set();
+    this.buffers = new Map();
+    this.bufferLoads = [];
+    this.audioContext = null;
     this.playedShotGroups = new Set();
     this.shotGroupOrder = [];
+    if (typeof AudioContextCtor === "function") {
+      try { this.audioContext = new AudioContextCtor(); } catch { this.audioContext = null; }
+    }
     if (typeof AudioCtor !== "function") return;
     const urls = [
       DUSTY_AUDIO_FILES.nuke,
@@ -65,12 +79,54 @@ export class DustyOrbitAudio {
       template.preload = "auto";
       template.load?.();
       this.templates.set(url, template);
+      if (this.audioContext && typeof fetchFn === "function") {
+        this.bufferLoads.push(Promise.resolve(fetchFn(url))
+          .then((response) => {
+            if (!response?.ok) throw new Error(`Audio request failed: ${response?.status || "unknown"}`);
+            return response.arrayBuffer();
+          })
+          .then((bytes) => this.audioContext.decodeAudioData(bytes))
+          .then((buffer) => this.buffers.set(url, buffer))
+          .catch(() => null));
+      }
     }
+  }
+
+  ready() { return Promise.allSettled(this.bufferLoads); }
+
+  unlock() {
+    const context = this.audioContext;
+    if (!context || context.state === "running" || typeof context.resume !== "function") return Promise.resolve(Boolean(context));
+    return Promise.resolve(context.resume()).then(() => context.state === "running").catch(() => false);
   }
 
   play(url, source = null) {
     const template = this.templates.get(url);
     if (!template) return false;
+    const volume = spatialSoundVolume(source, this.getListener?.(), this.world);
+    const context = this.audioContext;
+    const buffer = this.buffers.get(url);
+    if (context && buffer) {
+      try {
+        void this.unlock();
+        const sourceNode = context.createBufferSource();
+        const gainNode = context.createGain();
+        sourceNode.buffer = buffer;
+        gainNode.gain.value = volume;
+        sourceNode.connect(gainNode);
+        gainNode.connect(context.destination);
+        this.activeSources.add(sourceNode);
+        sourceNode.onended = () => {
+          this.activeSources.delete(sourceNode);
+          sourceNode.disconnect?.();
+          gainNode.disconnect?.();
+        };
+        sourceNode.start(0);
+        return true;
+      } catch {
+        // Fall through to the media-element compatibility path.
+      }
+    }
     const pool = this.voicePools.get(url) || [];
     if (!this.voicePools.has(url)) this.voicePools.set(url, pool);
     const limit = WEAPON_AUDIO_URLS.has(url) ? WEAPON_VOICE_LIMIT : EFFECT_VOICE_LIMIT;
@@ -91,7 +147,7 @@ export class DustyOrbitAudio {
     }
     voice.preload = "auto";
     voice.currentTime = 0;
-    voice.volume = spatialSoundVolume(source, this.getListener?.(), this.world);
+    voice.volume = volume;
     entry.busy = true;
     entry.startedAt = performance.now();
     const token = ++entry.token;
