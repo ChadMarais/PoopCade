@@ -134,8 +134,12 @@ export const SATELLITE_INSTANCES = Object.freeze([
   Object.freeze({ id: "SAT 01", assetId: "sat", kind: "satellite", x: 560.5, y: 1196.5, width: 360, height: 360, rotation: 0 }),
   Object.freeze({ id: "SAT-COPY 01", assetId: "sat-copy", kind: "satellite", x: 3436, y: 1224, width: 360, height: 360, rotation: 0 }),
 ]);
+export const HEALING_STATION_INSTANCES = Object.freeze([
+  Object.freeze({ id: "CORE1 01", assetId: "core1", kind: "healing-station", x: 2001.5, y: 1175, width: 360, height: 360, rotation: 0 }),
+]);
 export const OUTPOST_INSTANCES = Object.freeze([]);
 export const SATELLITE_CONNECTION = Object.freeze({ connectTolerance: 6, disconnectTolerance: 9 });
+export const HEALING_STATION_CONNECTION = Object.freeze({ connectTolerance: 6, disconnectTolerance: 9, healIntervalMs: 2000 });
 export const ENVIRONMENT_INSTANCES = Object.freeze([
   ...SCORCH_INSTANCES,
   ...REGION_INSTANCES,
@@ -151,7 +155,7 @@ export const ENVIRONMENT_INSTANCES = Object.freeze([
   Object.freeze({ id: "LAVA2-3 01", assetId: "lava2-3", kind: "imported", x: 1768.9, y: 1015, width: 360, height: 360, rotation: 0 }),
   Object.freeze({ id: "LAVA2-4 01", assetId: "lava2-4", kind: "imported", x: 2237.5, y: 1016, width: 360, height: 360, rotation: 89.5 }),
   ...SATELLITE_INSTANCES,
-  Object.freeze({ id: "CORE1 01", assetId: "core1", kind: "imported", x: 2001.5, y: 1175, width: 360, height: 360, rotation: 0 }),
+  ...HEALING_STATION_INSTANCES,
   Object.freeze({ id: "BUILDING1 01", assetId: "building1", kind: "imported", x: 2495.7, y: 408.4, width: 360, height: 360, rotation: -0.5 }),
   Object.freeze({ id: "BUNKER1 01", assetId: "bunker1", kind: "imported", x: 1491.4, y: 430.5, width: 360, height: 360, rotation: -0.7 }),
   Object.freeze({ id: "POWERGRID1 01", assetId: "powergrid1", kind: "imported", x: 3330, y: 749.2, width: 360, height: 360, rotation: 0 }),

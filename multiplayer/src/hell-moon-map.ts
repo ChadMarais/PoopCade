@@ -1,4 +1,4 @@
-import { BOUNDARY_COLLIDERS, ENVIRONMENT_INSTANCES, MAP_METADATA, PLAYER_SPAWNS, SATELLITE_CONNECTION, SATELLITE_INSTANCES, WORLD } from "../../games/game-03/maps/hell-moon/map.js";
+import { BOUNDARY_COLLIDERS, ENVIRONMENT_INSTANCES, HEALING_STATION_CONNECTION, HEALING_STATION_INSTANCES, MAP_METADATA, PLAYER_SPAWNS, SATELLITE_CONNECTION, SATELLITE_INSTANCES, WORLD } from "../../games/game-03/maps/hell-moon/map.js";
 import importedLava32Definition from "../../games/game-03/maps/hell-moon/objects/imported/lava3-2/lava3-2.json" with { type: "json" };
 import importedLava12Definition from "../../games/game-03/maps/hell-moon/objects/imported/lava1-2/lava1-2.json" with { type: "json" };
 import importedLava31Definition from "../../games/game-03/maps/hell-moon/objects/imported/lava3-1/lava3-1.json" with { type: "json" };
@@ -109,6 +109,19 @@ export const HELL_MOON_SATELLITES = Object.freeze(SATELLITE_INSTANCES.map((satel
   });
 }));
 
+export const HELL_MOON_HEALING_STATIONS = Object.freeze(HEALING_STATION_INSTANCES.map((stationInstance) => {
+  const collider = HELL_MOON_ENVIRONMENT_COLLIDERS.find((item) => item.id === stationInstance.id);
+  if (!collider) throw new Error(`Missing Hell Moon healing-station collider for ${stationInstance.id}.`);
+  return Object.freeze({
+    ...stationInstance,
+    polygon: collider.polygon as Polygon,
+  });
+}));
+
+export const HELL_MOON_BOUNDARY_POLYGONS = Object.freeze(
+  BOUNDARY_ENVIRONMENT_COLLIDERS.map((item) => item.polygon),
+) as unknown as readonly Polygon[];
+
 const MOVEMENT_POLYGONS = Object.freeze(HELL_MOON_ENVIRONMENT_COLLIDERS.filter((item) => item.blocksMovement).map((item) => item.polygon)) as unknown as Polygon[];
 const PROJECTILE_POLYGONS = Object.freeze(HELL_MOON_ENVIRONMENT_COLLIDERS.filter((item) => item.blocksProjectiles).map((item) => item.polygon)) as unknown as Polygon[];
 
@@ -119,6 +132,11 @@ export const HELL_MOON_MAP_RUNTIME: MurderballMapRuntime = Object.freeze({
   satellites: HELL_MOON_SATELLITES,
   satelliteConnectTolerance: SATELLITE_CONNECTION.connectTolerance,
   satelliteDisconnectTolerance: SATELLITE_CONNECTION.disconnectTolerance,
+  healingStations: HELL_MOON_HEALING_STATIONS,
+  healingStationConnectTolerance: HEALING_STATION_CONNECTION.connectTolerance,
+  healingStationDisconnectTolerance: HEALING_STATION_CONNECTION.disconnectTolerance,
+  healingStationHealIntervalMs: HEALING_STATION_CONNECTION.healIntervalMs,
+  boundaryPolygons: HELL_MOON_BOUNDARY_POLYGONS,
   spawns: PLAYER_SPAWNS as readonly Point[],
 });
 

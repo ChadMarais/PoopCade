@@ -99,6 +99,7 @@ export async function loadDustyOrbitAssets(mapDefinition = DEFAULT_MAP, onProgre
   });
   const rocks = environment.filter((item) => item.kind === "rock");
   const satellites = environment.filter((item) => item.kind === "satellite");
+  const healingStations = environment.filter((item) => item.kind === "healing-station");
   const characters = new Map([[defaultCharacter.skin.id, defaultCharacter]]);
   const characterLoads = new Map();
   const ensureCharacterSkin = (skinId) => {
@@ -124,12 +125,14 @@ export async function loadDustyOrbitAssets(mapDefinition = DEFAULT_MAP, onProgre
     rockDefinition: rocks[0]?.definition,
     rocks,
     satellites,
+    healingStations,
     satelliteConnection: SATELLITE_CONNECTION,
     environment,
     polygons: [
       ...environment.filter((item) => collisionBlocksMovement(item.definition)).map((item) => item.polygon),
       ...BOUNDARY_COLLIDERS.map((item) => item.polygon),
     ],
+    boundaryPolygons: BOUNDARY_COLLIDERS.map((item) => item.polygon),
     characters,
     character: defaultCharacter,
     ensureCharacterSkin,

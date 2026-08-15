@@ -1,9 +1,9 @@
 import { moveCircleWithSliding } from "./collision-geometry.js?v=20260815-3";
 import { CollisionEditor } from "./collision-editor.js?v=20260815-15";
-import { loadDustyOrbitAssets } from "./assets.js?v=20260815-3";
+import { loadDustyOrbitAssets } from "./assets.js?v=20260815-4";
 import { PRODUCTION_ARENA_WSS } from "./config.js?v=20260812";
 import { MAP_CATALOG, mapCatalogEntry } from "./maps/catalog.js?v=20260814-2";
-import { DustyOrbitMultiplayerRenderer } from "./renderer.js?v=20260815-7";
+import { DustyOrbitMultiplayerRenderer } from "./renderer.js?v=20260815-8";
 import { InputController } from "./input.js?v=20260813-3";
 import { claimSessionIdentity, resolvePoopcadePlayerIdentity } from "./identity.js?v=20260813-2";
 import { ArenaNetwork } from "./network.js?v=20260814-2";
@@ -11,7 +11,7 @@ import { consumeFixedStep, convergeVisualPosition } from "./timing.js?v=20260813
 import { DustyLobby } from "./lobby.js?v=20260814-7";
 import { RECRUITMENT_HREF } from "./presence.js?v=20260814-2";
 import { DustyOrbitHighscoreTracker } from "./highscore.js?v=20260813-2";
-import { DustyOrbitAudio } from "./audio.js?v=20260815-2";
+import { DustyOrbitAudio } from "./audio.js?v=20260815-3";
 import { makePanelDraggable } from "./draggable-panel.js?v=20260814-4";
 
 const INPUT_RATE = 30;
@@ -20,7 +20,7 @@ const PLAYER_RADIUS = 17;
 const FALLBACK_PLAYER_SPEED = 165;
 const parameters = new URLSearchParams(location.search);
 const selectedMap = mapCatalogEntry(parameters.get("map"));
-const selectedMapDefinition = await import(`${selectedMap.moduleUrl}?v=20260815-4`);
+const selectedMapDefinition = await import(`${selectedMap.moduleUrl}?v=20260815-5`);
 const ARENA_ID = selectedMap.arenaId;
 const debugMode = parameters.get("debug") === "1";
 let debugCollision = debugMode;
@@ -396,6 +396,10 @@ network = new ArenaNetwork({
         addEvent(`PICKED UP ${String(message.powerup).toUpperCase()}`);
       }
     }
+    if (message.type === "station_heal") {
+      audio.powerupCollected("health", message);
+      if (message.playerId === localId) addEvent(`HEALING STATION · +1 HP · ${message.hp}/3`);
+    }
     if (message.type === "nuke_warning") { renderer.nukeWarning(message); if (message.ownerId === localId) nukeQueuedUntil = 0; addEvent("NUKE INCOMING"); }
     if (message.type === "nuke_detonated") renderer.nukeDetonated(message);
     if (message.type === "player_hit") { renderer.playerHit(message.playerId); addEvent(`${message.playerId === localId ? "YOU" : "PLAYER"} HIT · ${message.hp} HP`); }
@@ -424,7 +428,8 @@ function applyMovement(position, sample, duration, player) {
   const elapsed = Number.isFinite(duration) ? Math.max(0, Math.min(.1, duration)) : 0;
   const baseSpeed = Number.isFinite(gameplay.baseMovementSpeed) ? gameplay.baseMovementSpeed : FALLBACK_PLAYER_SPEED;
   const speed = baseSpeed * (turboActive(player) ? gameplay.speedMultiplier : 1);
-  const next = moveCircleWithSliding(position, { x: finiteAxis(sample?.moveX) * speed * elapsed, y: finiteAxis(sample?.moveY) * speed * elapsed }, PLAYER_RADIUS, player.moleMode ? [] : assets.polygons);
+  const predictionPolygons = player.moleMode ? assets.boundaryPolygons : assets.polygons;
+  const next = moveCircleWithSliding(position, { x: finiteAxis(sample?.moveX) * speed * elapsed, y: finiteAxis(sample?.moveY) * speed * elapsed }, PLAYER_RADIUS, predictionPolygons);
   return {
     x: Math.max(PLAYER_RADIUS, Math.min(assets.world.width - PLAYER_RADIUS, next.x)),
     y: Math.max(PLAYER_RADIUS, Math.min(assets.world.height - PLAYER_RADIUS, next.y)),
@@ -527,6 +532,11 @@ function updateHud(snapshot) {
   const effects = [];
   if (player?.spyRemaining > 0) effects.push(`SPY ${(player.spyRemaining / 1000).toFixed(1)}s`);
   if (player?.satelliteConnected) effects.push("UPLINK: ACTIVE");
+  if (player?.healingStationConnected) {
+    effects.push(player.healingInProgress
+      ? `HEALING IN PROGRESS: +1 HP IN ${(Math.max(0, player.healingRemaining) / 1000).toFixed(1)}s`
+      : "HEALING STATION: CONNECTED · HEALTH FULL");
+  }
   if (player?.speedRemaining > 0) effects.push(`SPEED ${(player.speedRemaining / 1000).toFixed(1)}s`);
   if (player?.moleMode) effects.push(`MOLE ${(player.moleRemaining / 1000).toFixed(1)}s${player.emergeBlocked ? " · BLOCKED" : ""}`);
   gameplayHud.textContent = [

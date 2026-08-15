@@ -39,7 +39,7 @@ export type DustyPlayer = {
   aimX: number; aimY: number; hp: number; kills: number; deaths: number; killScore: number; highScore: number;
   weaponTier: number; nukeProgress: number; nukeReady: boolean; shieldHits: number;
   spyUntil: number; speedUntil: number; moleMode: boolean; moleUntil: number; moleForceAt: number;
-  connectedSatelliteId: string | null;
+  connectedSatelliteId: string | null; connectedHealingStationId: string | null; healingNextAt: number;
   emergeBlockedUntil: number; alive: boolean; respawnAt: number; protectedUntil: number;
   lastInputAt: number; lastMessageAt: number; lastInputSeq: number; lastFireAt: number;
   lastFireInput: boolean; suppressFireUntilRelease: boolean; lastNukeInput: boolean;
@@ -171,7 +171,7 @@ export class DustyOrbitSimulation {
       joinOrder: ++this.joinCursor, x: spawn.x, y: spawn.y, vx: 0, vy: 0, aimX: 1, aimY: 0,
       hp: DUSTY_GAMEPLAY.maxHp, kills: 0, deaths: 0, killScore: 0, highScore: 0, weaponTier: 1, nukeProgress: 0,
       nukeReady: false, shieldHits: 0, spyUntil: 0, speedUntil: 0, moleMode: false, moleUntil: 0,
-      connectedSatelliteId: null,
+      connectedSatelliteId: null, connectedHealingStationId: null, healingNextAt: 0,
       moleForceAt: 0, emergeBlockedUntil: 0, alive: true, respawnAt: 0,
       protectedUntil: now + DUSTY_SPAWN_PROTECTION_MS, lastInputAt: now, lastMessageAt: now,
       lastInputSeq: 0, lastFireAt: Number.NEGATIVE_INFINITY, lastFireInput: false,
@@ -190,7 +190,7 @@ export class DustyOrbitSimulation {
     const player = this.players.get(id);
     if (!player) return;
     player.disconnectedAt = now; player.pendingInput = null;
-    player.connectedSatelliteId = null;
+    player.connectedSatelliteId = null; player.connectedHealingStationId = null; player.healingNextAt = 0;
     player.input = { ...player.input, moveX: 0, moveY: 0, fire: false, nuke: false };
   }
 
@@ -276,7 +276,7 @@ export class DustyOrbitSimulation {
         continue;
       }
       if (!player.alive) {
-        player.connectedSatelliteId = null;
+        player.connectedSatelliteId = null; player.connectedHealingStationId = null; player.healingNextAt = 0;
         player.pendingInput = null; player.lastProcessedInputSeq = player.lastInputSeq;
         if (now >= player.respawnAt) this.respawnPlayer(player, now);
         continue;
@@ -290,13 +290,16 @@ export class DustyOrbitSimulation {
       player.vx = move.x * speed; player.vy = move.y * speed;
       movementStarts.set(player.id, { x: player.x, y: player.y });
       const displacement = { x: player.vx * dt, y: player.vy * dt };
-      const moved = player.moleMode ? { x: player.x + displacement.x, y: player.y + displacement.y } :
-        moveCircleWithSliding(player, displacement, DUSTY_PLAYER_RADIUS, this.mapRuntime.polygons);
+      // Mole can pass beneath ordinary objects, but the arena's exterior rim
+      // remains solid so burrowing never escapes a shaped map such as Hell Moon.
+      const movementPolygons = player.moleMode ? this.mapRuntime.boundaryPolygons : this.mapRuntime.polygons;
+      const moved = moveCircleWithSliding(player, displacement, DUSTY_PLAYER_RADIUS, movementPolygons);
       player.x = clamp(moved.x, DUSTY_PLAYER_RADIUS, this.mapRuntime.map.width - DUSTY_PLAYER_RADIUS);
       player.y = clamp(moved.y, DUSTY_PLAYER_RADIUS, this.mapRuntime.map.height - DUSTY_PLAYER_RADIUS);
       this.collectPickups(player, now);
       this.processActions(player, now);
       this.updateSatelliteConnection(player);
+      this.updateHealingStationConnection(player, now);
       this.recordPosition(player, now);
     }
     this.resolvePlayerCollisions(movementStarts, now);
@@ -557,6 +560,7 @@ export class DustyOrbitSimulation {
     victim.killScore = Math.max(0, victim.killScore - 1);
     victim.weaponTier = Math.max(DUSTY_GAMEPLAY.minWeaponTier, victim.weaponTier - 1);
     victim.spyUntil = 0; victim.speedUntil = 0; victim.shieldHits = 0; victim.moleMode = false; victim.connectedSatelliteId = null;
+    victim.connectedHealingStationId = null; victim.healingNextAt = 0;
     victim.moleUntil = 0; victim.moleForceAt = 0; victim.burstRemaining = 0; victim.suppressFireUntilRelease = false;
     victim.input = { ...victim.input, moveX: 0, moveY: 0, fire: false, nuke: false };
     victim.pendingInput = null; victim.lastProcessedInputSeq = victim.lastInputSeq;
@@ -659,6 +663,44 @@ export class DustyOrbitSimulation {
     player.connectedSatelliteId = nearest && nearestGap <= this.mapRuntime.satelliteConnectTolerance ? nearest.id : null;
   }
 
+  private updateHealingStationConnection(player: DustyPlayer, now: number): void {
+    if (!player.alive || player.moleMode || !this.mapRuntime.healingStations.length) {
+      player.connectedHealingStationId = null;
+      player.healingNextAt = 0;
+      return;
+    }
+    const connected = this.mapRuntime.healingStations.find((station) => station.id === player.connectedHealingStationId);
+    if (connected) {
+      const edgeGap = Math.max(0, distanceToPolygon(player, connected.polygon) - DUSTY_PLAYER_RADIUS);
+      if (edgeGap > this.mapRuntime.healingStationDisconnectTolerance) {
+        player.connectedHealingStationId = null;
+        player.healingNextAt = 0;
+      }
+    }
+    if (!player.connectedHealingStationId) {
+      let nearest: MurderballMapRuntime["healingStations"][number] | null = null;
+      let nearestGap = Number.POSITIVE_INFINITY;
+      for (const station of this.mapRuntime.healingStations) {
+        const edgeGap = Math.max(0, distanceToPolygon(player, station.polygon) - DUSTY_PLAYER_RADIUS);
+        if (edgeGap < nearestGap) { nearest = station; nearestGap = edgeGap; }
+      }
+      if (!nearest || nearestGap > this.mapRuntime.healingStationConnectTolerance) return;
+      player.connectedHealingStationId = nearest.id;
+      player.healingNextAt = now + this.mapRuntime.healingStationHealIntervalMs;
+    }
+    const station = this.mapRuntime.healingStations.find((item) => item.id === player.connectedHealingStationId);
+    if (!station) return;
+    if (player.hp >= DUSTY_GAMEPLAY.maxHp) {
+      player.healingNextAt = now + this.mapRuntime.healingStationHealIntervalMs;
+      return;
+    }
+    if (!player.healingNextAt) player.healingNextAt = now + this.mapRuntime.healingStationHealIntervalMs;
+    if (now < player.healingNextAt) return;
+    player.hp = Math.min(DUSTY_GAMEPLAY.maxHp, player.hp + 1);
+    player.healingNextAt = now + this.mapRuntime.healingStationHealIntervalMs;
+    this.events.push({ type: "station_heal", playerId: player.id, stationId: station.id, hp: player.hp, x: player.x, y: player.y });
+  }
+
   private maintainPickups(now: number): void {
     while (this.pickups.length < DUSTY_GAMEPLAY.pickupActiveCount) this.pickups.push({ id: ++this.pickupId, type: "health", x: 0, y: 0, active: false, respawnAt: 0 });
     for (const pickup of this.pickups) {
@@ -723,7 +765,7 @@ export class DustyOrbitSimulation {
 
   private respawnPlayer(player: DustyPlayer, now: number): void {
     const spawn = this.chooseRespawn(player.id);
-    Object.assign(player, { x: spawn.x, y: spawn.y, vx: 0, vy: 0, hp: DUSTY_GAMEPLAY.maxHp, alive: true, respawnAt: 0, protectedUntil: now + DUSTY_SPAWN_PROTECTION_MS, lastFireAt: Number.NEGATIVE_INFINITY, lastFireInput: false, lastNukeInput: false, connectedSatelliteId: null });
+    Object.assign(player, { x: spawn.x, y: spawn.y, vx: 0, vy: 0, hp: DUSTY_GAMEPLAY.maxHp, alive: true, respawnAt: 0, protectedUntil: now + DUSTY_SPAWN_PROTECTION_MS, lastFireAt: Number.NEGATIVE_INFINITY, lastFireInput: false, lastNukeInput: false, connectedSatelliteId: null, connectedHealingStationId: null, healingNextAt: 0 });
     this.resetPositionHistory(player, now);
     this.events.push({ type: "respawn", playerId: player.id, x: player.x, y: player.y, protectedUntil: player.protectedUntil });
   }
@@ -785,6 +827,10 @@ export class DustyOrbitSimulation {
       emergeBlocked: player.emergeBlockedUntil > now, concealed: this.isConcealed(player, now), alive: player.alive,
       satelliteConnected: this.mapRuntime.satellites.some((item) => item.id === player.connectedSatelliteId),
       connectedSatelliteId: player.connectedSatelliteId,
+      healingStationConnected: this.mapRuntime.healingStations.some((item) => item.id === player.connectedHealingStationId),
+      connectedHealingStationId: player.connectedHealingStationId,
+      healingInProgress: Boolean(player.connectedHealingStationId) && player.hp < DUSTY_GAMEPLAY.maxHp,
+      healingRemaining: player.connectedHealingStationId && player.hp < DUSTY_GAMEPLAY.maxHp ? Math.max(0, player.healingNextAt - now) : 0,
       respawnAt: player.respawnAt, protectedUntil: player.protectedUntil, color: player.color,
     });
     const visiblePlayers = [...this.players.values()].filter((player) => player.id === viewerId || (!player.moleMode && !this.isConcealed(player, now)));
@@ -814,6 +860,7 @@ export class DustyOrbitSimulation {
       threatLeaderIds: this.threatLeaderIds,
       totalPlayers: this.players.size,
       activeSatelliteIds: this.mapRuntime.satellites.filter((satellite) => [...this.players.values()].some((player) => player.alive && player.connectedSatelliteId === satellite.id)).map((satellite) => satellite.id),
+      activeHealingStationIds: this.mapRuntime.healingStations.filter((station) => [...this.players.values()].some((player) => player.alive && player.connectedHealingStationId === station.id)).map((station) => station.id),
       minimapPlayers,
     };
   }

@@ -1,5 +1,5 @@
 const CACHE_PREFIX = 'poopcade-';
-const CACHE_NAME = `${CACHE_PREFIX}shell-v21`;
+const CACHE_NAME = `${CACHE_PREFIX}shell-v22`;
 const SUPABASE_ORIGIN = 'https://kpssybcwwmtcdhrmfcgc.supabase.co';
 
 // These routes must exist for the offline shell to install successfully.
@@ -92,7 +92,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Game 03 is an active live multiplayer arena. Prefer the network
+  // Nebula Murderball is an active live multiplayer arena. Prefer the network
   // for its modules and artwork so a previously cached prototype cannot mix
   // with a newly deployed canonical build. Successful responses remain
   // available as an offline fallback.

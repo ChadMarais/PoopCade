@@ -496,7 +496,12 @@ export class DustyOrbitMultiplayerRenderer {
       ...players.map((player) => ({ type: "player", depth: player.y, value: player })),
     ].sort((a, b) => a.depth - b.depth);
     for (const layer of layers) {
-      if (layer.type === "environment") this.drawEnvironmentObject(layer.value, snapshot?.activeSatelliteIds?.includes(layer.value.id) === true);
+      if (layer.type === "environment") this.drawEnvironmentObject(layer.value, snapshot?.activeSatelliteIds?.includes(layer.value.id) === true, {
+        active: snapshot?.activeHealingStationIds?.includes(layer.value.id) === true,
+        connected: local?.connectedHealingStationId === layer.value.id,
+        inProgress: local?.connectedHealingStationId === layer.value.id && local?.healingInProgress === true,
+        remaining: Number(local?.healingRemaining) || 0,
+      });
       else if (layer.type === "pickup") this.drawPickup(layer.value);
       else this.drawPlayer(layer.value, layer.value.id === localId);
     }
@@ -714,7 +719,7 @@ export class DustyOrbitMultiplayerRenderer {
     drawNineSliceBoundary(ctx, overlay, -camera.x, -camera.y, assets.world.width, assets.world.height, overlay.inset);
   }
 
-  drawEnvironmentObject(item, satelliteActive) {
+  drawEnvironmentObject(item, satelliteActive, healingState = null) {
     const x = item.x - this.camera.x;
     const y = item.y - this.camera.y;
     const cullRadius = Math.hypot(item.width, item.height) / 2;
@@ -726,7 +731,9 @@ export class DustyOrbitMultiplayerRenderer {
     if (item.definition.render?.flipX === true) this.ctx.scale(-1, 1);
     this.ctx.drawImage(item.image, -item.width / 2, -item.height / 2, item.width, item.height);
     if (item.kind === "satellite" && satelliteActive) this.drawSatelliteActivePulse(item);
+    if (item.kind === "healing-station" && healingState?.active) this.drawHealingStationActivePulse(item);
     this.ctx.restore();
+    if (item.kind === "healing-station") this.drawHealingStationLabel(item, healingState);
   }
 
   drawSatelliteActivePulse(item) {
@@ -742,6 +749,51 @@ export class DustyOrbitMultiplayerRenderer {
     ctx.beginPath();
     ctx.ellipse(item.width * .035, -item.height * .18, item.width * (.08 + pulse * .018), item.height * (.025 + pulse * .008), -.15, 0, Math.PI * 2);
     ctx.stroke();
+    ctx.restore();
+  }
+
+  drawHealingStationActivePulse(item) {
+    const pulse = .5 + .5 * Math.sin(performance.now() / 170);
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.globalCompositeOperation = "screen";
+    ctx.globalAlpha = .35 + pulse * .35;
+    ctx.strokeStyle = "#7dff87";
+    ctx.shadowColor = "#4dff79";
+    ctx.shadowBlur = 18;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.ellipse(0, item.height * .08, item.width * (.32 + pulse * .025), item.height * (.19 + pulse * .018), 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  drawHealingStationLabel(item, state) {
+    const ctx = this.ctx;
+    const x = item.x - this.camera.x;
+    const y = item.y - this.camera.y - item.height * .55;
+    const connected = state?.connected === true;
+    const inProgress = state?.inProgress === true;
+    const status = inProgress
+      ? `HEALING IN PROGRESS · +1 HP IN ${(Math.max(0, state.remaining) / 1000).toFixed(1)}s`
+      : connected ? "CONNECTED · HEALTH FULL" : "MOVE CLOSE TO CONNECT";
+    const width = inProgress ? 252 : 184;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.fillStyle = connected ? "rgba(7,38,20,.9)" : "rgba(8,18,15,.8)";
+    ctx.strokeStyle = connected ? "rgba(125,255,135,.9)" : "rgba(125,255,135,.48)";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.roundRect(-width / 2, -18, width, 38, 8);
+    ctx.fill(); ctx.stroke();
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillStyle = "#aaffae";
+    ctx.font = "1000 10px ui-monospace,monospace";
+    ctx.fillText("HEALING STATION", 0, -7);
+    ctx.fillStyle = connected ? "#effff0" : "rgba(220,255,224,.78)";
+    ctx.font = "900 8px ui-monospace,monospace";
+    ctx.fillText(status, 0, 8);
     ctx.restore();
   }
 
@@ -1926,9 +1978,9 @@ export class DustyOrbitMultiplayerRenderer {
         if (index) ctx.lineTo(x, y); else ctx.moveTo(x, y);
       });
       ctx.closePath();
-      ctx.fillStyle = item.kind === "satellite" ? "rgba(74,239,255,.78)" : "rgba(229,137,255,.6)";
+      ctx.fillStyle = item.kind === "satellite" ? "rgba(74,239,255,.78)" : item.kind === "healing-station" ? "rgba(125,255,135,.82)" : "rgba(229,137,255,.6)";
       ctx.fill();
-      ctx.strokeStyle = item.kind === "satellite" ? "rgba(184,252,255,.92)" : "rgba(255,213,255,.62)";
+      ctx.strokeStyle = item.kind === "satellite" ? "rgba(184,252,255,.92)" : item.kind === "healing-station" ? "rgba(210,255,214,.9)" : "rgba(255,213,255,.62)";
       ctx.lineWidth = .75;
       ctx.stroke();
     }

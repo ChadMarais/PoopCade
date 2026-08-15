@@ -1,4 +1,6 @@
 const AUDIO_ASSET_VERSION = "20260815-1";
+const WEAPON_VOICE_LIMIT = 5;
+const EFFECT_VOICE_LIMIT = 2;
 export const DUSTY_AUDIO_MAX_VOLUME = .7;
 export const DUSTY_AUDIO_MIN_VOLUME = 0;
 const audioUrl = (file) => {
@@ -23,6 +25,7 @@ export const DUSTY_AUDIO_FILES = Object.freeze({
     Array.from({ length: 6 }, (_, index) => [index + 1, audioUrl(`weapon-${index + 1}.mp3`)]),
   )),
 });
+const WEAPON_AUDIO_URLS = new Set(Object.values(DUSTY_AUDIO_FILES.weapons));
 
 function finitePoint(value) {
   return Boolean(value) && Number.isFinite(value.x) && Number.isFinite(value.y);
@@ -45,6 +48,7 @@ export class DustyOrbitAudio {
     this.getListener = getListener;
     this.world = world;
     this.templates = new Map();
+    this.voicePools = new Map();
     this.activeVoices = new Set();
     this.playedShotGroups = new Set();
     this.shotGroupOrder = [];
@@ -67,12 +71,36 @@ export class DustyOrbitAudio {
   play(url, source = null) {
     const template = this.templates.get(url);
     if (!template) return false;
-    const voice = typeof template.cloneNode === "function" ? template.cloneNode(true) : new this.AudioCtor(url);
+    const pool = this.voicePools.get(url) || [];
+    if (!this.voicePools.has(url)) this.voicePools.set(url, pool);
+    const limit = WEAPON_AUDIO_URLS.has(url) ? WEAPON_VOICE_LIMIT : EFFECT_VOICE_LIMIT;
+    let entry = pool.find((candidate) => !candidate.busy);
+    if (!entry && pool.length < limit) {
+      const voice = typeof template.cloneNode === "function" ? template.cloneNode(true) : new this.AudioCtor(url);
+      entry = { voice, busy: false, startedAt: 0, token: 0 };
+      pool.push(entry);
+    }
+    // Reclaim the oldest voice instead of allocating media elements forever.
+    // Weapon and effect URLs have separate pools, so a power-up can never
+    // consume the voices reserved for gunfire.
+    if (!entry) entry = pool.reduce((oldest, candidate) => candidate.startedAt < oldest.startedAt ? candidate : oldest);
+    const voice = entry.voice;
+    if (entry.busy) {
+      voice.pause?.();
+      this.activeVoices.delete(voice);
+    }
     voice.preload = "auto";
     voice.currentTime = 0;
     voice.volume = spatialSoundVolume(source, this.getListener?.(), this.world);
+    entry.busy = true;
+    entry.startedAt = performance.now();
+    const token = ++entry.token;
     this.activeVoices.add(voice);
-    const release = () => this.activeVoices.delete(voice);
+    const release = () => {
+      if (entry.token !== token) return;
+      entry.busy = false;
+      this.activeVoices.delete(voice);
+    };
     voice.addEventListener?.("ended", release, { once: true });
     voice.addEventListener?.("error", release, { once: true });
     try {

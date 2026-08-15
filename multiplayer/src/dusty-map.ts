@@ -65,6 +65,8 @@ export const DUSTY_SATELLITES = Object.freeze(SATELLITE_INSTANCES.map((satellite
 
 export const DUSTY_SATELLITE_CONNECT_TOLERANCE = SATELLITE_CONNECTION.connectTolerance;
 export const DUSTY_SATELLITE_DISCONNECT_TOLERANCE = SATELLITE_CONNECTION.disconnectTolerance;
+export const DUSTY_HEALING_STATIONS = Object.freeze([]);
+export const DUSTY_BOUNDARY_POLYGONS = Object.freeze([]) as readonly Polygon[];
 
 // The first pair is deliberately near enough for a quick two-client combat test.
 export const DUSTY_SPAWNS: readonly Point[] = PLAYER_SPAWNS;
@@ -91,6 +93,11 @@ export type MurderballMapRuntime = Readonly<{
   satellites: typeof DUSTY_SATELLITES;
   satelliteConnectTolerance: number;
   satelliteDisconnectTolerance: number;
+  healingStations: readonly Readonly<{ id: string; x: number; y: number; polygon: Polygon }>[];
+  healingStationConnectTolerance: number;
+  healingStationDisconnectTolerance: number;
+  healingStationHealIntervalMs: number;
+  boundaryPolygons: readonly Polygon[];
   spawns: readonly Point[];
 }>;
 
@@ -101,5 +108,10 @@ export const DUSTY_MAP_RUNTIME: MurderballMapRuntime = Object.freeze({
   satellites: DUSTY_SATELLITES,
   satelliteConnectTolerance: DUSTY_SATELLITE_CONNECT_TOLERANCE,
   satelliteDisconnectTolerance: DUSTY_SATELLITE_DISCONNECT_TOLERANCE,
+  healingStations: DUSTY_HEALING_STATIONS,
+  healingStationConnectTolerance: 0,
+  healingStationDisconnectTolerance: 0,
+  healingStationHealIntervalMs: 2000,
+  boundaryPolygons: DUSTY_BOUNDARY_POLYGONS,
   spawns: DUSTY_SPAWNS,
 });

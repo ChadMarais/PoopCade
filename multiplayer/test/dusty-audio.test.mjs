@@ -7,16 +7,24 @@ import { existsSync } from "node:fs";
 class FakeAudio {
   static played = [];
   static volumes = [];
-  constructor(src) { this.src = src; this.currentTime = 0; this.volume = 1; }
+  static created = 0;
+  static constructionLimit = Infinity;
+  constructor(src) {
+    if (++FakeAudio.created > FakeAudio.constructionLimit) throw new Error("browser media element limit reached");
+    this.src = src; this.currentTime = 0; this.volume = 1; this.paused = true;
+  }
   load() {}
   cloneNode() { return new FakeAudio(this.src); }
   addEventListener() {}
-  play() { FakeAudio.played.push(this.src); FakeAudio.volumes.push(this.volume); return Promise.resolve(); }
+  pause() { this.paused = true; }
+  play() { this.paused = false; FakeAudio.played.push(this.src); FakeAudio.volumes.push(this.volume); return Promise.resolve(); }
 }
 
 function fresh(options = {}) {
   FakeAudio.played = [];
   FakeAudio.volumes = [];
+  FakeAudio.created = 0;
+  FakeAudio.constructionLimit = Infinity;
   return new DustyOrbitAudio({ AudioCtor: FakeAudio, ...options });
 }
 
@@ -61,6 +69,20 @@ test("power-ups, teleport, death, and nuke map to their production files", () =>
     DUSTY_AUDIO_FILES.death,
     DUSTY_AUDIO_FILES.nuke,
   ]);
+});
+
+test("power-up playback cannot exhaust or interrupt the reusable weapon voice pool", () => {
+  const audio = fresh();
+  // Fifteen templates plus one power-up voice and five weapon voices. The old
+  // clone-per-shot implementation exceeded this simulated browser limit on
+  // the seventh discharge and then lost gun audio until resources recovered.
+  FakeAudio.constructionLimit = 21;
+  audio.powerupCollected("speed");
+  for (let shot = 0; shot < 100; shot++) {
+    assert.equal(audio.weaponFired({ playerId: "pilot", groupKey: `shot:${shot}`, tier: 4 }), true);
+  }
+  assert.equal(FakeAudio.played.filter((url) => url === DUSTY_AUDIO_FILES.weapons[4]).length, 100);
+  assert.equal(FakeAudio.created, 21);
 });
 
 test("teleport uses the one supplied power-up sound exactly once", () => {
