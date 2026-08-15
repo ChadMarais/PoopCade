@@ -1,6 +1,6 @@
 const AUDIO_ASSET_VERSION = "20260815-1";
 export const DUSTY_AUDIO_MAX_VOLUME = .7;
-export const DUSTY_AUDIO_MIN_VOLUME = .035;
+export const DUSTY_AUDIO_MIN_VOLUME = 0;
 const audioUrl = (file) => {
   const url = new URL(`./assets/audio/${file}`, import.meta.url);
   url.searchParams.set("v", AUDIO_ASSET_VERSION);
@@ -28,37 +28,21 @@ function finitePoint(value) {
   return Boolean(value) && Number.isFinite(value.x) && Number.isFinite(value.y);
 }
 
-function distanceOutsideView(point, view) {
-  const left = view.x, top = view.y, right = left + view.width, bottom = top + view.height;
-  const dx = point.x < left ? left - point.x : point.x > right ? point.x - right : 0;
-  const dy = point.y < top ? top - point.y : point.y > bottom ? point.y - bottom : 0;
-  return Math.hypot(dx, dy);
-}
-
-export function spatialSoundVolume(source, view, world) {
-  if (!finitePoint(source) || !finitePoint(view) || !Number.isFinite(view.width) || !Number.isFinite(view.height) ||
+export function spatialSoundVolume(source, listener, world) {
+  if (!finitePoint(source) || !finitePoint(listener) ||
       !Number.isFinite(world?.width) || !Number.isFinite(world?.height)) return DUSTY_AUDIO_MAX_VOLUME;
-  const distance = distanceOutsideView(source, view);
-  if (distance <= 0) return DUSTY_AUDIO_MAX_VOLUME;
-
-  // Immediately beyond the camera edge the sound is 15% quieter. Continue
-  // fading through a near-screen band before falling smoothly to a faint
-  // floor at the most distant point in the arena.
-  const justOutsideVolume = DUSTY_AUDIO_MAX_VOLUME * .85;
-  const nearBand = Math.max(120, Math.min(view.width, view.height) * .25);
-  if (distance <= nearBand) return justOutsideVolume * (1 - .2 * distance / nearBand);
-
-  const corners = [{ x: 0, y: 0 }, { x: world.width, y: 0 }, { x: 0, y: world.height }, { x: world.width, y: world.height }];
-  const maximumDistance = Math.max(nearBand + 1, ...corners.map((corner) => distanceOutsideView(corner, view)));
-  const progress = Math.max(0, Math.min(1, (distance - nearBand) / (maximumDistance - nearBand)));
-  const eased = Math.pow(progress, .72);
-  return justOutsideVolume * .8 + (DUSTY_AUDIO_MIN_VOLUME - justOutsideVolume * .8) * eased;
+  const audibleDistance = Math.max(1, world.width, world.height);
+  const distance = Math.hypot(source.x - listener.x, source.y - listener.y);
+  const progress = Math.max(0, Math.min(1, distance / audibleDistance));
+  // Inverse-square-style falloff: adjacent action is effectively full volume,
+  // half a map away is 25%, and the far side is genuinely silent.
+  return DUSTY_AUDIO_MAX_VOLUME * Math.pow(1 - progress, 2);
 }
 
 export class DustyOrbitAudio {
-  constructor({ AudioCtor = globalThis.Audio, getView = () => null, world = null } = {}) {
+  constructor({ AudioCtor = globalThis.Audio, getListener = () => null, world = null } = {}) {
     this.AudioCtor = AudioCtor;
-    this.getView = getView;
+    this.getListener = getListener;
     this.world = world;
     this.templates = new Map();
     this.activeVoices = new Set();
@@ -86,7 +70,7 @@ export class DustyOrbitAudio {
     const voice = typeof template.cloneNode === "function" ? template.cloneNode(true) : new this.AudioCtor(url);
     voice.preload = "auto";
     voice.currentTime = 0;
-    voice.volume = spatialSoundVolume(source, this.getView?.(), this.world);
+    voice.volume = spatialSoundVolume(source, this.getListener?.(), this.world);
     this.activeVoices.add(voice);
     const release = () => this.activeVoices.delete(voice);
     voice.addEventListener?.("ended", release, { once: true });

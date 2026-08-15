@@ -1,0 +1,40 @@
+{
+  "id": "crate1",
+  "sprite": "crate1.png",
+  "anchor": {
+    "x": 0.5,
+    "y": 0.5
+  },
+  "depthSortAnchor": {
+    "x": 0.5,
+    "y": 0.82
+  },
+  "collision": {
+    "coordinateSpace": "normalized-image",
+    "type": "polygon",
+    "points": [
+      {
+        "x": -0.0398,
+        "y": 0.5597
+      },
+      {
+        "x": 0.7289,
+        "y": 0.2474
+      },
+      {
+        "x": 1.0515,
+        "y": 0.5297
+      },
+      {
+        "x": 0.2537,
+        "y": 0.9356
+      }
+    ],
+    "blocksMovement": true,
+    "blocksProjectiles": true
+  },
+  "gameplay": {
+    "destructible": false,
+    "walkable": false
+  }
+}

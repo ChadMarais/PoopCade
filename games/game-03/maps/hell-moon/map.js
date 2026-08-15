@@ -34,6 +34,13 @@ export const ASSET_DEFINITION_URLS = Object.freeze([
   "/games/game-03/maps/hell-moon/objects/imported/lava2-4/lava2-4.json",
   "/games/game-03/maps/hell-moon/objects/imported/sat/sat.json",
   "/games/game-03/maps/hell-moon/objects/imported/sat-copy/sat-copy.json",
+  "/games/game-03/maps/hell-moon/objects/imported/core1/core1.json",
+  "/games/game-03/maps/hell-moon/objects/imported/building1/building1.json",
+  "/games/game-03/maps/hell-moon/objects/imported/bunker1/bunker1.json",
+  "/games/game-03/maps/hell-moon/objects/imported/powergrid1/powergrid1.json",
+  "/games/game-03/maps/hell-moon/objects/imported/powergrid1-2/powergrid1-2.json",
+  "/games/game-03/maps/hell-moon/objects/imported/pipe1/pipe1.json",
+  "/games/game-03/maps/hell-moon/objects/imported/crate1/crate1.json",
 ]);
 
 export const TERRAIN_URL = "/games/game-03/maps/hell-moon/terrain/hell-moon-ground-tile.png?v=20260815-2";
@@ -45,7 +52,17 @@ export const TERRAIN_VARIATION_TILES = Object.freeze([
     opacity: .82,
   }),
 ]);
-export const BOUNDARY_OVERLAY = null;
+// A modular strip is projected along the same clockwise polygon used by the
+// authoritative collision rim. `sourceAnchorY` is the authored cliff lip: the
+// transparent pixels below it fall over playable ground while the lava and
+// drifting debris stay outside the arena.
+export const BOUNDARY_OVERLAY = Object.freeze({
+  mode: "polygon-strip",
+  url: "/games/game-03/maps/hell-moon/boundary/hell-moon-volcanic-rim.png?v=20260815-1",
+  thickness: 420,
+  sourceAnchorY: 430,
+  overlap: 60,
+});
 
 const freezePolygon = (points) => Object.freeze(points.map((point) => Object.freeze(point)));
 
@@ -134,6 +151,13 @@ export const ENVIRONMENT_INSTANCES = Object.freeze([
   Object.freeze({ id: "LAVA2-3 01", assetId: "lava2-3", kind: "imported", x: 1768.9, y: 1015, width: 360, height: 360, rotation: 0 }),
   Object.freeze({ id: "LAVA2-4 01", assetId: "lava2-4", kind: "imported", x: 2237.5, y: 1016, width: 360, height: 360, rotation: 89.5 }),
   ...SATELLITE_INSTANCES,
+  Object.freeze({ id: "CORE1 01", assetId: "core1", kind: "imported", x: 2001.5, y: 1175, width: 360, height: 360, rotation: 0 }),
+  Object.freeze({ id: "BUILDING1 01", assetId: "building1", kind: "imported", x: 2094, y: 453, width: 360, height: 360, rotation: 0 }),
+  Object.freeze({ id: "BUNKER1 01", assetId: "bunker1", kind: "imported", x: 1748, y: 461, width: 360, height: 360, rotation: 0 }),
+  Object.freeze({ id: "POWERGRID1 01", assetId: "powergrid1", kind: "imported", x: 3330, y: 749.2, width: 360, height: 360, rotation: 0 }),
+  Object.freeze({ id: "POWERGRID1-2 01", assetId: "powergrid1-2", kind: "imported", x: 903, y: 1665.5, width: 360, height: 360, rotation: 0 }),
+  Object.freeze({ id: "PIPE1 01", assetId: "pipe1", kind: "imported", x: 2043, y: 2090, width: 360, height: 360, rotation: 0 }),
+  Object.freeze({ id: "CRATE1 01", assetId: "crate1", kind: "imported", x: 1613, y: 1962.5, width: 360, height: 360, rotation: 0.9 }),
 ]);
 
 export const PLAYER_SPAWNS = Object.freeze([

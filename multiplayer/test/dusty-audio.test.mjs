@@ -72,21 +72,24 @@ test("teleport uses the one supplied power-up sound exactly once", () => {
   assert.equal(existsSync(new URL("../../games/game-03/assets/audio/teleport.mp3", import.meta.url)), false);
 });
 
-test("all game audio has a 30% ceiling and fades smoothly beyond the visible screen", () => {
-  const view = { x: 0, y: 0, width: 1000, height: 600 };
-  const world = { width: 3200, height: 2000 };
-  const inside = spatialSoundVolume({ x: 500, y: 300 }, view, world);
-  const justOutside = spatialSoundVolume({ x: 1001, y: 300 }, view, world);
-  const farther = spatialSoundVolume({ x: 2000, y: 1000 }, view, world);
-  const oppositeCorner = spatialSoundVolume({ x: 3200, y: 2000 }, view, world);
-  assert.equal(inside, .7);
-  assert.ok(Math.abs(justOutside - DUSTY_AUDIO_MAX_VOLUME * .85) < .002);
-  assert.ok(farther < justOutside && farther > oppositeCorner);
-  assert.ok(Math.abs(oppositeCorner - DUSTY_AUDIO_MIN_VOLUME) < 1e-9);
+test("world audio is full nearby, 25% at half-map distance, and silent across the map", () => {
+  const listener = { x: 0, y: 1250 };
+  const world = { width: 4000, height: 2500 };
+  const local = spatialSoundVolume({ x: 0, y: 1250 }, listener, world);
+  const adjacent = spatialSoundVolume({ x: 50, y: 1250 }, listener, world);
+  const halfMap = spatialSoundVolume({ x: 2000, y: 1250 }, listener, world);
+  const farSide = spatialSoundVolume({ x: 4000, y: 1250 }, listener, world);
+  assert.equal(local, DUSTY_AUDIO_MAX_VOLUME);
+  assert.ok(adjacent > DUSTY_AUDIO_MAX_VOLUME * .97);
+  assert.ok(Math.abs(halfMap - DUSTY_AUDIO_MAX_VOLUME * .25) < 1e-9);
+  assert.equal(farSide, DUSTY_AUDIO_MIN_VOLUME);
 
-  const audio = fresh({ getView: () => view, world });
-  audio.weaponFired({ playerId: "near", groupKey: "shot:near", tier: 1, x: 500, y: 300 });
-  audio.death({ x: 3200, y: 2000 });
-  assert.equal(FakeAudio.volumes[0], DUSTY_AUDIO_MAX_VOLUME);
-  assert.ok(Math.abs(FakeAudio.volumes[1] - DUSTY_AUDIO_MIN_VOLUME) < 1e-9);
+  const audio = fresh({ getListener: () => listener, world });
+  const distant = { x: 2000, y: 1250 };
+  audio.weaponFired({ playerId: "remote", groupKey: "shot:remote", tier: 1, ...distant });
+  audio.powerupCollected("health", distant);
+  audio.teleport(distant);
+  audio.death(distant);
+  audio.nuke(distant);
+  assert.deepEqual(FakeAudio.volumes, Array(5).fill(DUSTY_AUDIO_MAX_VOLUME * .25));
 });

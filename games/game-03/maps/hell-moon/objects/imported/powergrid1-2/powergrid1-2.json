@@ -1,0 +1,40 @@
+{
+  "id": "powergrid1-2",
+  "sprite": "powergrid1-2.png",
+  "anchor": {
+    "x": 0.5,
+    "y": 0.5
+  },
+  "depthSortAnchor": {
+    "x": 0.5,
+    "y": 0.82
+  },
+  "collision": {
+    "coordinateSpace": "normalized-image",
+    "type": "polygon",
+    "points": [
+      {
+        "x": 0.5139,
+        "y": 0.4444
+      },
+      {
+        "x": 0.9597,
+        "y": 0.6056
+      },
+      {
+        "x": 0.4167,
+        "y": 0.9056
+      },
+      {
+        "x": 0.0319,
+        "y": 0.6222
+      }
+    ],
+    "blocksMovement": true,
+    "blocksProjectiles": true
+  },
+  "gameplay": {
+    "destructible": false,
+    "walkable": false
+  }
+}

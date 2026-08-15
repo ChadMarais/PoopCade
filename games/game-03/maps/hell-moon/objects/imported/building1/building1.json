@@ -1,0 +1,40 @@
+{
+  "id": "building1",
+  "sprite": "building1.png",
+  "anchor": {
+    "x": 0.5,
+    "y": 0.5
+  },
+  "depthSortAnchor": {
+    "x": 0.5,
+    "y": 0.82
+  },
+  "collision": {
+    "coordinateSpace": "normalized-image",
+    "type": "polygon",
+    "points": [
+      {
+        "x": 0.5303,
+        "y": 0.4184
+      },
+      {
+        "x": 0.9775,
+        "y": 0.685
+      },
+      {
+        "x": 0.4462,
+        "y": 0.9761
+      },
+      {
+        "x": 0.0559,
+        "y": 0.6886
+      }
+    ],
+    "blocksMovement": true,
+    "blocksProjectiles": true
+  },
+  "gameplay": {
+    "destructible": false,
+    "walkable": false
+  }
+}

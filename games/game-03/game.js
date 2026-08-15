@@ -11,7 +11,7 @@ import { consumeFixedStep, convergeVisualPosition } from "./timing.js?v=20260813
 import { DustyLobby } from "./lobby.js?v=20260814-7";
 import { RECRUITMENT_HREF } from "./presence.js?v=20260814-2";
 import { DustyOrbitHighscoreTracker } from "./highscore.js?v=20260813-2";
-import { DustyOrbitAudio } from "./audio.js?v=20260815-1";
+import { DustyOrbitAudio } from "./audio.js?v=20260815-2";
 import { makePanelDraggable } from "./draggable-panel.js?v=20260814-4";
 
 const INPUT_RATE = 30;
@@ -111,7 +111,7 @@ const debugFocus = debugCollision
   : null;
 const renderer = new DustyOrbitMultiplayerRenderer(canvas, assets, debugCollision, debugFocus);
 const audio = new DustyOrbitAudio({
-  getView: () => ({ x: renderer.camera.x, y: renderer.camera.y, width: renderer.viewport.width, height: renderer.viewport.height }),
+  getListener: () => visualPredicted || predicted || latestSnapshot?.players?.find((player) => player.id === localId),
   world: assets.world,
 });
 canvas.addEventListener("dusty-orbit:weapon-fired", (event) => audio.weaponFired(event.detail));

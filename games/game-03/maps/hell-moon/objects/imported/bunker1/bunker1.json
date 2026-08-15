@@ -1,0 +1,40 @@
+{
+  "id": "bunker1",
+  "sprite": "bunker1.png",
+  "anchor": {
+    "x": 0.5,
+    "y": 0.5
+  },
+  "depthSortAnchor": {
+    "x": 0.5,
+    "y": 0.82
+  },
+  "collision": {
+    "coordinateSpace": "normalized-image",
+    "type": "polygon",
+    "points": [
+      {
+        "x": 0.0145,
+        "y": 0.6846
+      },
+      {
+        "x": 0.4138,
+        "y": 0.3906
+      },
+      {
+        "x": 1.0126,
+        "y": 0.6116
+      },
+      {
+        "x": 0.4865,
+        "y": 0.9346
+      }
+    ],
+    "blocksMovement": true,
+    "blocksProjectiles": true
+  },
+  "gameplay": {
+    "destructible": false,
+    "walkable": false
+  }
+}

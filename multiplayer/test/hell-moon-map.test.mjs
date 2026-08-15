@@ -35,7 +35,10 @@ test("Hell Moon has its own authoritative 4000 by 2500 runtime", () => {
   assert.equal(dustyCollisionForArena("hell-moon-001").instanceCount, ENVIRONMENT_INSTANCES.length + BOUNDARY_COLLIDERS.length);
   assert.equal(HELL_MOON_ENVIRONMENT_COLLIDERS.length, ENVIRONMENT_INSTANCES.length + BOUNDARY_COLLIDERS.length);
   assert.equal(HELL_MOON_CANONICAL_COLLISION.definitions.some((item) => item.definitionId === "maptile2"), false);
-  assert.equal(BOUNDARY_OVERLAY, null);
+  assert.equal(BOUNDARY_OVERLAY.mode, "polygon-strip");
+  assert.match(BOUNDARY_OVERLAY.url, /hell-moon-volcanic-rim\.png/);
+  assert.equal(BOUNDARY_OVERLAY.thickness, 420);
+  assert.equal(BOUNDARY_OVERLAY.sourceAnchorY, 430);
   assert.equal(PLAYABLE_AREA.length, 28);
   assert.equal(BOUNDARY_COLLIDERS.length, 4);
   assert.equal(BOUNDARY_COLLIDERS.every((item) => item.polygon.length > 4), true);

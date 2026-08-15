@@ -1,0 +1,64 @@
+{
+  "id": "pipe1",
+  "sprite": "pipe1.png",
+  "anchor": {
+    "x": 0.5,
+    "y": 0.5
+  },
+  "depthSortAnchor": {
+    "x": 0.5,
+    "y": 0.82
+  },
+  "collision": {
+    "coordinateSpace": "normalized-image",
+    "type": "polygon",
+    "points": [
+      {
+        "x": 0.715,
+        "y": 0.4367
+      },
+      {
+        "x": 1.0554,
+        "y": 0.5352
+      },
+      {
+        "x": 0.9168,
+        "y": 0.6287
+      },
+      {
+        "x": 0.9588,
+        "y": 0.723
+      },
+      {
+        "x": 0.8188,
+        "y": 0.7971
+      },
+      {
+        "x": 0.6977,
+        "y": 0.7156
+      },
+      {
+        "x": 0.6061,
+        "y": 0.7535
+      },
+      {
+        "x": 0.6136,
+        "y": 0.8826
+      },
+      {
+        "x": 0.3958,
+        "y": 0.9737
+      },
+      {
+        "x": 0.0908,
+        "y": 0.7248
+      }
+    ],
+    "blocksMovement": true,
+    "blocksProjectiles": true
+  },
+  "gameplay": {
+    "destructible": false,
+    "walkable": false
+  }
+}

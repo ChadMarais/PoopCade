@@ -1,0 +1,40 @@
+{
+  "id": "core1",
+  "sprite": "core1.png",
+  "anchor": {
+    "x": 0.5,
+    "y": 0.5
+  },
+  "depthSortAnchor": {
+    "x": 0.5,
+    "y": 0.82
+  },
+  "collision": {
+    "coordinateSpace": "normalized-image",
+    "type": "polygon",
+    "points": [
+      {
+        "x": 0.0611,
+        "y": 0.725
+      },
+      {
+        "x": 0.4833,
+        "y": 0.4972
+      },
+      {
+        "x": 0.9431,
+        "y": 0.6861
+      },
+      {
+        "x": 0.5,
+        "y": 1.0236
+      }
+    ],
+    "blocksMovement": true,
+    "blocksProjectiles": true
+  },
+  "gameplay": {
+    "destructible": false,
+    "walkable": false
+  }
+}

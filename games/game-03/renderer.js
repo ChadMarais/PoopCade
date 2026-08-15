@@ -55,6 +55,45 @@ function drawNineSliceBoundary(ctx, overlay, x, y, width, height, inset) {
   for (const corner of corners) ctx.drawImage(image, ...corner);
   ctx.restore();
 }
+function drawPolygonBoundary(ctx, overlay, points, offsetX = 0, offsetY = 0, scaleX = 1, scaleY = 1) {
+  const image = overlay.image;
+  if (!image || !Array.isArray(points) || points.length < 3) return;
+  const sourceWidth = image.naturalWidth;
+  const sourceHeight = image.naturalHeight;
+  const destinationHeight = Math.max(1, (Number(overlay.thickness) || 300) * (scaleX + scaleY) / 2);
+  const sourceScale = destinationHeight / sourceHeight;
+  const anchorY = (Number(overlay.sourceAnchorY) || sourceHeight * .6) * sourceScale;
+  const overlap = Math.max(0, (Number(overlay.overlap) || 0) * (scaleX + scaleY) / 2);
+
+  ctx.save();
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
+  for (let index = 0; index < points.length; index += 1) {
+    const start = points[index];
+    const end = points[(index + 1) % points.length];
+    const startX = offsetX + start.x * scaleX;
+    const startY = offsetY + start.y * scaleY;
+    const dx = (end.x - start.x) * scaleX;
+    const dy = (end.y - start.y) * scaleY;
+    const length = Math.hypot(dx, dy);
+    if (length < 1) continue;
+
+    const drawWidth = length + overlap * 2;
+    const requiredSourceWidth = Math.min(sourceWidth, drawWidth / sourceScale);
+    const availableOffset = Math.max(0, sourceWidth - requiredSourceWidth);
+    const sourceX = availableOffset * seededUnit(index * 47.13 + 9);
+    ctx.save();
+    ctx.translate(startX, startY);
+    ctx.rotate(Math.atan2(dy, dx));
+    ctx.drawImage(
+      image,
+      sourceX, 0, requiredSourceWidth, sourceHeight,
+      -overlap, -anchorY, drawWidth, destinationHeight,
+    );
+    ctx.restore();
+  }
+  ctx.restore();
+}
 function tracePolygon(ctx, points, offsetX = 0, offsetY = 0, scaleX = 1, scaleY = 1) {
   if (!Array.isArray(points) || points.length < 3) return false;
   ctx.beginPath();
@@ -496,7 +535,7 @@ export class DustyOrbitMultiplayerRenderer {
       if (tracePolygon(ctx, assets.playableArea, -camera.x, -camera.y)) ctx.clip();
       this.drawGroundTexture();
       ctx.restore();
-      this.drawArenaRim();
+      if (!assets.boundaryOverlay) this.drawArenaRim();
       return;
     }
     this.drawGroundTexture();
@@ -668,6 +707,10 @@ export class DustyOrbitMultiplayerRenderer {
     const overlay = this.assets.boundaryOverlay;
     if (!overlay) return;
     const { ctx, camera, assets } = this;
+    if (overlay.mode === "polygon-strip" && assets.playableArea) {
+      drawPolygonBoundary(ctx, overlay, assets.playableArea, -camera.x, -camera.y);
+      return;
+    }
     drawNineSliceBoundary(ctx, overlay, -camera.x, -camera.y, assets.world.width, assets.world.height, overlay.inset);
   }
 
@@ -1841,7 +1884,8 @@ export class DustyOrbitMultiplayerRenderer {
       }
     }
     ctx.restore();
-    if (this.assets.playableArea && tracePolygon(ctx, this.assets.playableArea, 0, 0, scaleX, scaleY)) {
+    const overlay = this.assets.boundaryOverlay;
+    if (!overlay && this.assets.playableArea && tracePolygon(ctx, this.assets.playableArea, 0, 0, scaleX, scaleY)) {
       ctx.lineJoin = "round";
       ctx.strokeStyle = "rgba(255,68,8,.8)";
       ctx.lineWidth = 7;
@@ -1850,14 +1894,17 @@ export class DustyOrbitMultiplayerRenderer {
       ctx.lineWidth = 4;
       ctx.stroke();
     }
-    const overlay = this.assets.boundaryOverlay;
     if (overlay) {
-      drawNineSliceBoundary(ctx, overlay, 0, 0, width, height, {
-        left: overlay.inset.left * scaleX,
-        top: overlay.inset.top * scaleY,
-        right: overlay.inset.right * scaleX,
-        bottom: overlay.inset.bottom * scaleY,
-      });
+      if (overlay.mode === "polygon-strip" && this.assets.playableArea) {
+        drawPolygonBoundary(ctx, overlay, this.assets.playableArea, 0, 0, scaleX, scaleY);
+      } else {
+        drawNineSliceBoundary(ctx, overlay, 0, 0, width, height, {
+          left: overlay.inset.left * scaleX,
+          top: overlay.inset.top * scaleY,
+          right: overlay.inset.right * scaleX,
+          bottom: overlay.inset.bottom * scaleY,
+        });
+      }
     }
     for (const item of this.assets.environment) {
       if (item.renderLayer !== "terrain") continue;

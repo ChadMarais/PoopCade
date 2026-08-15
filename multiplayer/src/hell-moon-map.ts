@@ -21,6 +21,13 @@ import importedLava23Definition from "../../games/game-03/maps/hell-moon/objects
 import importedLava24Definition from "../../games/game-03/maps/hell-moon/objects/imported/lava2-4/lava2-4.json" with { type: "json" };
 import importedSatDefinition from "../../games/game-03/maps/hell-moon/objects/imported/sat/sat.json" with { type: "json" };
 import importedSatCopyDefinition from "../../games/game-03/maps/hell-moon/objects/imported/sat-copy/sat-copy.json" with { type: "json" };
+import importedCore1Definition from "../../games/game-03/maps/hell-moon/objects/imported/core1/core1.json" with { type: "json" };
+import importedBuilding1Definition from "../../games/game-03/maps/hell-moon/objects/imported/building1/building1.json" with { type: "json" };
+import importedBunker1Definition from "../../games/game-03/maps/hell-moon/objects/imported/bunker1/bunker1.json" with { type: "json" };
+import importedPowergrid1Definition from "../../games/game-03/maps/hell-moon/objects/imported/powergrid1/powergrid1.json" with { type: "json" };
+import importedPowergrid12Definition from "../../games/game-03/maps/hell-moon/objects/imported/powergrid1-2/powergrid1-2.json" with { type: "json" };
+import importedPipe1Definition from "../../games/game-03/maps/hell-moon/objects/imported/pipe1/pipe1.json" with { type: "json" };
+import importedCrate1Definition from "../../games/game-03/maps/hell-moon/objects/imported/crate1/crate1.json" with { type: "json" };
 import { collisionBlocksMovement, collisionBlocksProjectiles, transformNormalizedPolygon } from "../../games/game-03/collision-geometry.js";
 import type { MurderballMapRuntime, Point, Polygon } from "./dusty-map.ts";
 
@@ -62,6 +69,13 @@ const DEFINITIONS = Object.freeze({
   [importedLava24Definition.id]: importedLava24Definition,
   [importedSatDefinition.id]: importedSatDefinition,
   [importedSatCopyDefinition.id]: importedSatCopyDefinition,
+  [importedCore1Definition.id]: importedCore1Definition,
+  [importedBuilding1Definition.id]: importedBuilding1Definition,
+  [importedBunker1Definition.id]: importedBunker1Definition,
+  [importedPowergrid1Definition.id]: importedPowergrid1Definition,
+  [importedPowergrid12Definition.id]: importedPowergrid12Definition,
+  [importedPipe1Definition.id]: importedPipe1Definition,
+  [importedCrate1Definition.id]: importedCrate1Definition,
 });
 
 const IMPORTED_ENVIRONMENT_COLLIDERS = ENVIRONMENT_INSTANCES.map((instance) => {
@@ -134,6 +148,13 @@ export const HELL_MOON_CANONICAL_COLLISION = Object.freeze({
     Object.freeze({ definitionId: importedLava24Definition.id, normalizedPointCount: importedLava24Definition.collision.points.length, source: "games/game-03/maps/hell-moon/objects/imported/lava2-4/lava2-4.json" }),
     Object.freeze({ definitionId: importedSatDefinition.id, normalizedPointCount: importedSatDefinition.collision.points.length, source: "games/game-03/maps/hell-moon/objects/imported/sat/sat.json" }),
     Object.freeze({ definitionId: importedSatCopyDefinition.id, normalizedPointCount: importedSatCopyDefinition.collision.points.length, source: "games/game-03/maps/hell-moon/objects/imported/sat-copy/sat-copy.json" }),
+    Object.freeze({ definitionId: importedCore1Definition.id, normalizedPointCount: importedCore1Definition.collision.points.length, source: "games/game-03/maps/hell-moon/objects/imported/core1/core1.json" }),
+    Object.freeze({ definitionId: importedBuilding1Definition.id, normalizedPointCount: importedBuilding1Definition.collision.points.length, source: "games/game-03/maps/hell-moon/objects/imported/building1/building1.json" }),
+    Object.freeze({ definitionId: importedBunker1Definition.id, normalizedPointCount: importedBunker1Definition.collision.points.length, source: "games/game-03/maps/hell-moon/objects/imported/bunker1/bunker1.json" }),
+    Object.freeze({ definitionId: importedPowergrid1Definition.id, normalizedPointCount: importedPowergrid1Definition.collision.points.length, source: "games/game-03/maps/hell-moon/objects/imported/powergrid1/powergrid1.json" }),
+    Object.freeze({ definitionId: importedPowergrid12Definition.id, normalizedPointCount: importedPowergrid12Definition.collision.points.length, source: "games/game-03/maps/hell-moon/objects/imported/powergrid1-2/powergrid1-2.json" }),
+    Object.freeze({ definitionId: importedPipe1Definition.id, normalizedPointCount: importedPipe1Definition.collision.points.length, source: "games/game-03/maps/hell-moon/objects/imported/pipe1/pipe1.json" }),
+    Object.freeze({ definitionId: importedCrate1Definition.id, normalizedPointCount: importedCrate1Definition.collision.points.length, source: "games/game-03/maps/hell-moon/objects/imported/crate1/crate1.json" }),
   ]),
   instanceCount: HELL_MOON_ENVIRONMENT_COLLIDERS.length,
 });
