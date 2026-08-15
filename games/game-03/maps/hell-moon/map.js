@@ -103,15 +103,11 @@ export const LAVA_TRENCH_INSTANCES = Object.freeze([
   lava("NE FAULT 03", "lava1-3", 2900, 620, 530, 225, -34),
   lava("SW FAULT 02", "lava1-2", 1449, 1635.5, 540, 235, -38),
   lava("SW FAULT 03", "lava1-3-2", 1100, 1880, 530, 225, -34),
-  lava("SE FAULT 02", "lava1-3", 2610, 1690, 540, 235, 38),
+  lava("SE FAULT 02", "lava1-3", 2566.6, 1651.1, 540, 235, 38),
   lava("SE FAULT 03", "lava1-2-3", 2900, 1880, 530, 225, 34),
 ]);
 
 export const RIM_FEATURE_INSTANCES = Object.freeze([
-  terrain("RIM CLIFF NW", "hell-moon-cliff-corner", 456.7, 448.8, 500, 500, 90),
-  terrain("RIM CLIFF NE", "hell-moon-cliff-corner", 3500, 430, 500, 500, 180),
-  terrain("RIM CLIFF SE", "hell-moon-cliff-corner", 3500, 2070, 500, 500, -90),
-  terrain("RIM CLIFF SW", "hell-moon-cliff-corner", 500, 2070, 500, 500, 0),
 ]);
 
 export const CENTER_ARENA_INSTANCE = terrain("HELL MOON CENTRAL COMBAT RING", "hell-moon-center-arena", 2000, 1250, 820, 820, 0);

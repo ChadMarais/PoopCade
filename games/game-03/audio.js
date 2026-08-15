@@ -1,4 +1,4 @@
-const AUDIO_ASSET_VERSION = "20260814-3";
+const AUDIO_ASSET_VERSION = "20260815-1";
 export const DUSTY_AUDIO_MAX_VOLUME = .7;
 export const DUSTY_AUDIO_MIN_VOLUME = .035;
 const audioUrl = (file) => {
@@ -10,7 +10,7 @@ const audioUrl = (file) => {
 export const DUSTY_AUDIO_FILES = Object.freeze({
   nuke: audioUrl("nuke.mp3"),
   death: audioUrl("player-death.mp3"),
-  teleport: audioUrl("teleport.mp3"),
+  teleport: audioUrl("powerup-teleport.mp3"),
   powerups: Object.freeze({
     fart: audioUrl("powerup-fart-cloud.mp3"),
     health: audioUrl("powerup-health.mp3"),
@@ -18,7 +18,6 @@ export const DUSTY_AUDIO_FILES = Object.freeze({
     shield: audioUrl("powerup-shield.mp3"),
     speed: audioUrl("powerup-speed.mp3"),
     spy: audioUrl("powerup-spy-plane.mp3"),
-    teleport: audioUrl("powerup-teleport.mp3"),
   }),
   weapons: Object.freeze(Object.fromEntries(
     Array.from({ length: 6 }, (_, index) => [index + 1, audioUrl(`weapon-${index + 1}.mp3`)]),

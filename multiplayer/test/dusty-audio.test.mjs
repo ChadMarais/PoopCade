@@ -23,7 +23,7 @@ function fresh(options = {}) {
 test("all supplied production audio files are packaged with the game", () => {
   const urls = [DUSTY_AUDIO_FILES.nuke, DUSTY_AUDIO_FILES.death, DUSTY_AUDIO_FILES.teleport,
     ...Object.values(DUSTY_AUDIO_FILES.powerups), ...Object.values(DUSTY_AUDIO_FILES.weapons)];
-  assert.equal(urls.length, 16);
+  assert.equal(urls.length, 15);
   for (const url of urls) {
     const file = new URL(url); file.search = "";
     assert.equal(existsSync(file), true, url);
@@ -53,7 +53,7 @@ test("weapon audio is emitted from the exact muzzle-materialization path", async
 
 test("power-ups, teleport, death, and nuke map to their production files", () => {
   const audio = fresh();
-  for (const type of ["fart", "health", "mole", "shield", "speed", "spy", "teleport"]) audio.powerupCollected(type);
+  for (const type of ["fart", "health", "mole", "shield", "speed", "spy"]) audio.powerupCollected(type);
   audio.teleport(); audio.death(); audio.nuke();
   assert.deepEqual(FakeAudio.played, [
     ...Object.values(DUSTY_AUDIO_FILES.powerups),
@@ -61,6 +61,15 @@ test("power-ups, teleport, death, and nuke map to their production files", () =>
     DUSTY_AUDIO_FILES.death,
     DUSTY_AUDIO_FILES.nuke,
   ]);
+});
+
+test("teleport uses the one supplied power-up sound exactly once", () => {
+  const audio = fresh();
+  assert.equal(audio.powerupCollected("teleport"), false);
+  assert.equal(audio.teleport(), true);
+  assert.deepEqual(FakeAudio.played, [DUSTY_AUDIO_FILES.teleport]);
+  assert.match(DUSTY_AUDIO_FILES.teleport, /powerup-teleport\.mp3\?v=20260815-1$/);
+  assert.equal(existsSync(new URL("../../games/game-03/assets/audio/teleport.mp3", import.meta.url)), false);
 });
 
 test("all game audio has a 30% ceiling and fades smoothly beyond the visible screen", () => {
