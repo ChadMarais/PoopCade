@@ -31,6 +31,19 @@ test("game header omits the redundant scores link while the gameplay HUD retains
   assert.match(html, /\.gameplay-hud[^}]*background:\s*rgba\(18,8,27,\.48\)/);
 });
 
+test("localhost previews connect to the IPv4-bound local Worker", async () => {
+  const game = await readFile(new URL("../../games/game-03/game.js", import.meta.url), "utf8");
+  assert.match(game, /location\.hostname === "localhost" \? "127\.0\.0\.1" : location\.hostname/);
+  assert.match(game, /ws:\/\/\$\{workerHostname\}:8787/);
+});
+
+test("temporary Worker reloads keep active gameplay out of the lobby", async () => {
+  const game = await readFile(new URL("../../games/game-03/game.js", import.meta.url), "utf8");
+  assert.match(game, /resumeAfterReconnect = interruptedGameplay && state !== "failed"/);
+  assert.match(game, /if \(resumeAfterReconnect\) \{\s*applicationState = "PLAYING";\s*lobby\.hide\(\)/);
+  assert.match(game, /resumeAfterReconnect && !joined && applicationState !== "JOINING"/);
+});
+
 test("lobby visibly separates waiting players from players already in the arena", async () => {
   const html = await readFile(new URL("../../games/game-03/index.html", import.meta.url), "utf8");
   assert.match(html, /data-lobby-waiting-roster/);
@@ -38,6 +51,21 @@ test("lobby visibly separates waiting players from players already in the arena"
   assert.match(html, /WAITING IN LOBBY/);
   assert.match(html, /data-lobby-roster/);
   assert.match(html, /FIGHTING RIGHT NOW/);
+});
+
+test("map editor exposes collision point insertion and placed object deletion", async () => {
+  const [html, editor] = await Promise.all([
+    readFile(new URL("../../games/game-03/index.html", import.meta.url), "utf8"),
+    readFile(new URL("../../games/game-03/collision-editor.js", import.meta.url), "utf8"),
+  ]);
+  assert.match(html, /id="collisionEditorAddPoint"[^>]*>ADD POINT/);
+  assert.match(html, /id="collisionEditorDeleteObject"[^>]*>DELETE OBJECT/);
+  assert.match(html, /id="collisionEditorProjectilePassthrough"[^>]*type="checkbox"/);
+  assert.match(html, /LET SHOTS PASS THROUGH/);
+  assert.match(editor, /Delete only this placed object from the map/);
+  assert.match(editor, /removeEnvironmentInstance/);
+  assert.match(editor, /insertCollisionPoint/);
+  assert.match(editor, /blocksProjectiles = !Boolean\(enabled\)/);
 });
 
 test("gameplay lobby button is clickable and waits for authoritative leave confirmation", async () => {

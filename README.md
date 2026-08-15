@@ -53,7 +53,7 @@ Guest play remains the default. Players may optionally sign in with Google, choo
 
 The NEBULA MURDERBALL Worker also submits a signed-in player's final authoritative arena score when the player deliberately leaves or is removed after the inactivity timeout. This closes sessions that otherwise have no game-over event; guest sessions remain analytics-only.
 
-NEBULA MURDERBALL maps are file-backed packages under `games/game-03/maps/`. Each map directory owns its terrain, object definitions, placements, spawn points, metadata, and 15-player arena ID. Characters, weapons, powerups, effects, and audio remain shared under `games/game-03/assets/` and the common game modules. The current map is **LUNAR LIABILITY** (`lunar-liability`); add future maps to `games/game-03/maps/catalog.js` to expose them in the lobby selector and Worker map directory.
+NEBULA MURDERBALL maps are file-backed packages under `games/game-03/maps/`. Each map directory owns its terrain, object definitions, placements, spawn points, metadata, and 15-player arena ID. Characters, weapons, powerups, effects, and audio remain shared under `games/game-03/assets/` and the common game modules. **LUNAR LIABILITY** (`lunar-liability`) remains the default map; **HELL MOON** (`hell-moon`) is a 4,000 × 2,500 tiled-terrain arena ready for object authoring. Add future maps to `games/game-03/maps/catalog.js` to expose them in the lobby selector and Worker map directory.
 
 The browser uses one Supabase client from `js/supabase-config.js`, with `@supabase/supabase-js` pinned to version `2.111.0`. The publishable browser key in that file is not a secret. Never add a secret key, service-role key, database password, OAuth client secret, or access token to frontend code or source control.
 

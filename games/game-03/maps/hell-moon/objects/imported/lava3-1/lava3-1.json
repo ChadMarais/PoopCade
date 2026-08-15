@@ -1,0 +1,60 @@
+{
+  "id": "lava3-1",
+  "sprite": "lava3-1.png",
+  "anchor": {
+    "x": 0.5,
+    "y": 0.5
+  },
+  "depthSortAnchor": {
+    "x": 0.5,
+    "y": 0.82
+  },
+  "collision": {
+    "coordinateSpace": "normalized-image",
+    "type": "polygon",
+    "points": [
+      {
+        "x": 0.3553,
+        "y": 0.5292
+      },
+      {
+        "x": -0.04,
+        "y": 0.1631
+      },
+      {
+        "x": 0.1264,
+        "y": -0.1076
+      },
+      {
+        "x": 0.5495,
+        "y": 0.256
+      },
+      {
+        "x": 0.8649,
+        "y": -0.0675
+      },
+      {
+        "x": 1.0515,
+        "y": 0.1856
+      },
+      {
+        "x": 0.6957,
+        "y": 0.5143
+      },
+      {
+        "x": 0.6816,
+        "y": 0.9892
+      },
+      {
+        "x": 0.3566,
+        "y": 0.9862
+      }
+    ],
+    "blocksMovement": true,
+    "blocksProjectiles": false
+  },
+  "gameplay": {
+    "destructible": false,
+    "walkable": false
+  }
+}

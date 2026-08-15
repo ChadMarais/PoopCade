@@ -26,7 +26,10 @@ export function collisionBlocksMovement(definition) {
 }
 
 export function collisionBlocksProjectiles(definition) {
-  return definition.blocksProjectiles === true || definition.collision?.blocksProjectiles === true;
+  const explicit = definition.blocksProjectiles ?? definition.collision?.blocksProjectiles;
+  // A solid object blocks shots by default. Below-ground objects such as lava
+  // ditches opt out explicitly while retaining movement collision.
+  return explicit === undefined ? collisionBlocksMovement(definition) : explicit === true;
 }
 
 export function depthSortY(definition, instance) {

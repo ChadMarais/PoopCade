@@ -1,6 +1,7 @@
 import { MAP_METADATA as LUNAR_LIABILITY } from "./lunar-liability/map.js";
+import { MAP_METADATA as HELL_MOON } from "./hell-moon/map.js";
 
-export const MAP_CATALOG = Object.freeze([LUNAR_LIABILITY]);
+export const MAP_CATALOG = Object.freeze([LUNAR_LIABILITY, HELL_MOON]);
 export const DEFAULT_MAP_ID = LUNAR_LIABILITY.id;
 
 export function mapCatalogEntry(id) {

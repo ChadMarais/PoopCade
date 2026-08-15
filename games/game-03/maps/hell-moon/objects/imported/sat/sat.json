@@ -1,0 +1,40 @@
+{
+  "id": "sat",
+  "sprite": "sat.png",
+  "anchor": {
+    "x": 0.5,
+    "y": 0.5
+  },
+  "depthSortAnchor": {
+    "x": 0.5,
+    "y": 0.82
+  },
+  "collision": {
+    "coordinateSpace": "normalized-image",
+    "type": "polygon",
+    "points": [
+      {
+        "x": -0.0138,
+        "y": 0.6485
+      },
+      {
+        "x": 0.489,
+        "y": 0.3804
+      },
+      {
+        "x": 0.9612,
+        "y": 0.661
+      },
+      {
+        "x": 0.4028,
+        "y": 1.0207
+      }
+    ],
+    "blocksMovement": true,
+    "blocksProjectiles": true
+  },
+  "gameplay": {
+    "destructible": false,
+    "walkable": false
+  }
+}

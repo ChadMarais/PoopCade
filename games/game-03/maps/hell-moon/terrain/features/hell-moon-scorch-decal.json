@@ -1,0 +1,19 @@
+{
+  "id": "hell-moon-scorch-decal",
+  "sprite": "hell-moon-scorch-decal.png",
+  "anchor": { "x": 0.5, "y": 0.5 },
+  "depthSortAnchor": { "x": 0.5, "y": 0.5 },
+  "collision": {
+    "coordinateSpace": "normalized-image",
+    "type": "polygon",
+    "points": [
+      { "x": 0.08, "y": 0.08 },
+      { "x": 0.92, "y": 0.08 },
+      { "x": 0.92, "y": 0.92 },
+      { "x": 0.08, "y": 0.92 }
+    ],
+    "blocksMovement": false,
+    "blocksProjectiles": false
+  },
+  "gameplay": { "destructible": false, "walkable": true }
+}

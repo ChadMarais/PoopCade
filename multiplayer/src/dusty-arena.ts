@@ -1,5 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
-import { DUSTY_CANONICAL_COLLISION, DUSTY_MAP } from "./dusty-map.ts";
+import { DUSTY_MAP_RUNTIME } from "./dusty-map.ts";
+import { dustyCollisionForArena, dustyMapRuntimeForArena } from "./dusty-maps.ts";
 import { MAX_INPUT_MESSAGES_PER_SECOND, parseClientMessage, safeGuestName, safePlayerName, encode } from "./protocol.ts";
 import {
   DustyOrbitSimulation,
@@ -16,6 +17,7 @@ import { summarizeDustyPresence, type DustyPresenceSurface } from "./dusty-prese
 type Env = { SUPABASE_URL?: string; SUPABASE_PUBLISHABLE_KEY?: string };
 type SessionRole = "lobby" | "active";
 type Session = {
+  arenaId: string;
   playerId: string;
   name: string;
   skinId: string;
@@ -34,7 +36,8 @@ type Session = {
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export class DustyOrbitArena extends DurableObject<Env> {
-  private readonly simulation = new DustyOrbitSimulation();
+  private simulation: DustyOrbitSimulation;
+  private collision: ReturnType<typeof dustyCollisionForArena>;
   private readonly sessions = new Map<WebSocket, Session>();
   private readonly scoreTokens = new Map<string, string>();
   private timer: ReturnType<typeof setInterval> | null = null;
@@ -42,11 +45,16 @@ export class DustyOrbitArena extends DurableObject<Env> {
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
     const now = Date.now();
-    for (const socket of this.ctx.getWebSockets()) {
-      const attachment = socket.deserializeAttachment() as Partial<Session> | null;
+    const restoredSockets = this.ctx.getWebSockets().map((socket) => ({ socket, attachment: socket.deserializeAttachment() as Partial<Session> | null }));
+    const restoredArenaId = restoredSockets.find(({ attachment }) => typeof attachment?.arenaId === "string")?.attachment?.arenaId;
+    const runtime = dustyMapRuntimeForArena(restoredArenaId) ?? DUSTY_MAP_RUNTIME;
+    this.simulation = new DustyOrbitSimulation(Math.random, runtime);
+    this.collision = dustyCollisionForArena(runtime.map.id);
+    for (const { socket, attachment } of restoredSockets) {
       if (!attachment?.playerId || !UUID_PATTERN.test(attachment.playerId)) continue;
       const role: SessionRole = attachment.role === "active" ? "active" : "lobby";
       const session: Session = {
+        arenaId: runtime.map.id,
         playerId: attachment.playerId,
         name: safePlayerName(attachment.name),
         skinId: validCharacterSkinId(attachment.skinId),
@@ -76,18 +84,31 @@ export class DustyOrbitArena extends DurableObject<Env> {
     if (this.simulation.players.size) this.startLoop();
   }
 
+  private selectArena(arenaId: string): boolean {
+    const runtime = dustyMapRuntimeForArena(arenaId);
+    if (!runtime) return false;
+    if (runtime.map.id === this.simulation.mapRuntime.map.id) return true;
+    if (this.sessions.size || this.simulation.players.size) return false;
+    this.simulation = new DustyOrbitSimulation(Math.random, runtime);
+    this.collision = dustyCollisionForArena(runtime.map.id);
+    return true;
+  }
+
   async fetch(request: Request): Promise<Response> {
     const requestUrl = new URL(request.url);
+    const requestedArenaId = request.headers.get("X-Poopcade-Arena-Id") ?? requestUrl.pathname.match(/^\/arena\/([a-z0-9-]{1,48})\/ws$/)?.[1];
+    if (requestedArenaId && !this.selectArena(requestedArenaId)) return new Response("Unknown arena.", { status: 404 });
     if (request.method === "GET" && requestUrl.pathname === "/status") {
       const state = this.currentLobbyState();
+      const map = this.simulation.mapRuntime.map;
       return Response.json({
-        mapId: DUSTY_MAP.mapId,
-        arenaId: DUSTY_MAP.id,
-        name: DUSTY_MAP.name,
-        description: DUSTY_MAP.description,
+        mapId: map.mapId,
+        arenaId: map.id,
+        name: map.name,
+        description: map.description,
         activePlayers: state.activePlayers,
         onlinePlayers: state.onlinePlayers,
-        maxPlayers: DUSTY_MAP.maxPlayers,
+        maxPlayers: map.maxPlayers,
         full: state.full,
       }, { headers: { "Cache-Control": "no-store" } });
     }
@@ -111,6 +132,7 @@ export class DustyOrbitArena extends DurableObject<Env> {
     const pair = new WebSocketPair();
     const [client, server] = Object.values(pair) as [WebSocket, WebSocket];
     const session: Session = {
+      arenaId: this.simulation.mapRuntime.map.id,
       playerId,
       name: "Guest-0000",
       skinId: validCharacterSkinId(null),
@@ -280,9 +302,9 @@ export class DustyOrbitArena extends DurableObject<Env> {
     socket.send(encode({
       type: "welcome",
       playerId: player.id,
-      arenaId: DUSTY_MAP.id,
-      map: DUSTY_MAP,
-      collision: DUSTY_CANONICAL_COLLISION,
+      arenaId: this.simulation.mapRuntime.map.id,
+      map: this.simulation.mapRuntime.map,
+      collision: this.collision,
       rates: { tick: DUSTY_TICK_RATE, snapshot: DUSTY_SNAPSHOT_RATE, interpolationMs: 100 },
       weapons: DUSTY_WEAPONS,
       gameplay: DUSTY_GAMEPLAY,

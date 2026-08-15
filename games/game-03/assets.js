@@ -53,7 +53,7 @@ export async function loadDustyOrbitAssets(mapDefinition = DEFAULT_MAP, onProgre
     onProgress = mapDefinition;
     mapDefinition = DEFAULT_MAP;
   }
-  const { ASSET_DEFINITION_URLS, ENVIRONMENT_INSTANCES, MAP_METADATA, SATELLITE_CONNECTION, TERRAIN_URL, WORLD } = mapDefinition;
+  const { ASSET_DEFINITION_URLS, BOUNDARY_COLLIDERS = [], BOUNDARY_OVERLAY = null, ENVIRONMENT_INSTANCES, MAP_METADATA, PLAYABLE_AREA = null, SATELLITE_CONNECTION, TERRAIN_MODE = "single", TERRAIN_URL, TERRAIN_VARIATION_TILES = [], WORLD } = mapDefinition;
   if (!MAP_METADATA || !Array.isArray(ASSET_DEFINITION_URLS) || !WORLD) throw new Error("Invalid Nebula Murderball map definition.");
   onProgress("Loading canonical collision geometry…", 0.12);
   const environmentDefinitions = await Promise.all(ASSET_DEFINITION_URLS.map((url) => loadJson(versioned(url))));
@@ -64,8 +64,10 @@ export async function loadDustyOrbitAssets(mapDefinition = DEFAULT_MAP, onProgre
   const weaponRoot = "./assets/weapons/";
   const definitionById = new Map(environmentDefinitions.map((definition) => [definition.id, definition]));
   const definitionRoot = new Map(ASSET_DEFINITION_URLS.map((url, index) => [environmentDefinitions[index].id, url.slice(0, url.lastIndexOf("/") + 1)]));
-  const [terrain, environmentImages, defaultCharacter, health, spy, speed, mole, shield, teleport, fart, peaShooter, pistol, burst, smg, shotgun, plasmaCannon] = await Promise.all([
+  const [terrain, terrainVariationImages, boundaryOverlayImage, environmentImages, defaultCharacter, health, spy, speed, mole, shield, teleport, fart, peaShooter, pistol, burst, smg, shotgun, plasmaCannon] = await Promise.all([
     loadImage(TERRAIN_URL),
+    Promise.all(TERRAIN_VARIATION_TILES.map((tile) => loadImage(tile.url))),
+    BOUNDARY_OVERLAY?.url ? loadImage(BOUNDARY_OVERLAY.url) : Promise.resolve(null),
     Promise.all(environmentDefinitions.map((definition) => loadImage(versioned(definitionRoot.get(definition.id) + definition.sprite)))),
     loadCharacterAsset(defaultSkin),
     loadImage(versioned(powerupRoot + POWERUP_ART.health.sprite)),
@@ -113,14 +115,21 @@ export async function loadDustyOrbitAssets(mapDefinition = DEFAULT_MAP, onProgre
   return {
     map: MAP_METADATA,
     world: WORLD,
+    playableArea: PLAYABLE_AREA,
     terrain,
+    terrainMode: TERRAIN_MODE,
+    terrainVariations: TERRAIN_VARIATION_TILES.map((tile, index) => ({ ...tile, image: terrainVariationImages[index] })),
+    boundaryOverlay: boundaryOverlayImage ? { ...BOUNDARY_OVERLAY, image: boundaryOverlayImage } : null,
     rock: rocks[0]?.image,
     rockDefinition: rocks[0]?.definition,
     rocks,
     satellites,
     satelliteConnection: SATELLITE_CONNECTION,
     environment,
-    polygons: environment.filter((item) => collisionBlocksMovement(item.definition)).map((item) => item.polygon),
+    polygons: [
+      ...environment.filter((item) => collisionBlocksMovement(item.definition)).map((item) => item.polygon),
+      ...BOUNDARY_COLLIDERS.map((item) => item.polygon),
+    ],
     characters,
     character: defaultCharacter,
     ensureCharacterSkin,

@@ -9,6 +9,63 @@ import {
 } from "./nuke-vfx.js?v=20260813";
 
 function clamp(value, min, max) { return Math.max(min, Math.min(max, value)); }
+function drawNineSliceBoundary(ctx, overlay, x, y, width, height, inset) {
+  const image = overlay.image;
+  const source = overlay.sourceInset;
+  if (!image || !source) return;
+  const sourceWidth = image.naturalWidth;
+  const sourceHeight = image.naturalHeight;
+  const centerSourceWidth = sourceWidth - source.left - source.right;
+  const centerSourceHeight = sourceHeight - source.top - source.bottom;
+  const centerWidth = Math.max(0, width - inset.left - inset.right);
+  const centerHeight = Math.max(0, height - inset.top - inset.bottom);
+  ctx.save();
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
+  const horizontalEdge = (sourceY, sourceBandHeight, destinationY, destinationBandHeight) => {
+    const scale = destinationBandHeight / sourceBandHeight;
+    let drawn = 0;
+    while (drawn < centerWidth - .01) {
+      const sourceDrawWidth = Math.min(centerSourceWidth, (centerWidth - drawn) / scale);
+      const destinationDrawWidth = sourceDrawWidth * scale;
+      ctx.drawImage(image, source.left, sourceY, sourceDrawWidth, sourceBandHeight, x + inset.left + drawn, destinationY, destinationDrawWidth, destinationBandHeight);
+      drawn += destinationDrawWidth;
+    }
+  };
+  const verticalEdge = (sourceX, sourceBandWidth, destinationX, destinationBandWidth) => {
+    const scale = destinationBandWidth / sourceBandWidth;
+    let drawn = 0;
+    while (drawn < centerHeight - .01) {
+      const sourceDrawHeight = Math.min(centerSourceHeight, (centerHeight - drawn) / scale);
+      const destinationDrawHeight = sourceDrawHeight * scale;
+      ctx.drawImage(image, sourceX, source.top, sourceBandWidth, sourceDrawHeight, destinationX, y + inset.top + drawn, destinationBandWidth, destinationDrawHeight);
+      drawn += destinationDrawHeight;
+    }
+  };
+  horizontalEdge(0, source.top, y, inset.top);
+  horizontalEdge(sourceHeight - source.bottom, source.bottom, y + height - inset.bottom, inset.bottom);
+  verticalEdge(0, source.left, x, inset.left);
+  verticalEdge(sourceWidth - source.right, source.right, x + width - inset.right, inset.right);
+  const corners = [
+    [0, 0, source.left, source.top, x, y, inset.left, inset.top],
+    [sourceWidth - source.right, 0, source.right, source.top, x + width - inset.right, y, inset.right, inset.top],
+    [0, sourceHeight - source.bottom, source.left, source.bottom, x, y + height - inset.bottom, inset.left, inset.bottom],
+    [sourceWidth - source.right, sourceHeight - source.bottom, source.right, source.bottom, x + width - inset.right, y + height - inset.bottom, inset.right, inset.bottom],
+  ];
+  for (const corner of corners) ctx.drawImage(image, ...corner);
+  ctx.restore();
+}
+function tracePolygon(ctx, points, offsetX = 0, offsetY = 0, scaleX = 1, scaleY = 1) {
+  if (!Array.isArray(points) || points.length < 3) return false;
+  ctx.beginPath();
+  points.forEach((point, index) => {
+    const x = offsetX + point.x * scaleX;
+    const y = offsetY + point.y * scaleY;
+    if (index) ctx.lineTo(x, y); else ctx.moveTo(x, y);
+  });
+  ctx.closePath();
+  return true;
+}
 function mix(a, b, amount) { return a + (b - a) * amount; }
 function smoothstep(amount) { const t = clamp(amount, 0, 1); return t * t * (3 - 2 * t); }
 export function snapshotRenderTime(snapshot, fallback = Date.now()) {
@@ -17,6 +74,29 @@ export function snapshotRenderTime(snapshot, fallback = Date.now()) {
 function seededUnit(seed) {
   const value = Math.sin(seed * 12.9898 + 78.233) * 43758.5453;
   return value - Math.floor(value);
+}
+
+export function terrainVariationForCell(variations, column, row) {
+  if (!variations?.length) return null;
+  const seed = column * 719.17 + row * 313.61 + 41;
+  const variation = variations[Math.floor(seededUnit(seed + 5) * variations.length) % variations.length];
+  if (seededUnit(seed) >= (Number(variation.chance) || 0)) return null;
+  return {
+    ...variation,
+    flipX: seededUnit(seed + 11) >= .5,
+    flipY: seededUnit(seed + 17) >= .5,
+  };
+}
+
+function drawTerrainVariationCell(ctx, variation, x, y, width, height) {
+  ctx.save();
+  ctx.translate(x + width / 2, y + height / 2);
+  ctx.scale(variation.flipX ? -1 : 1, variation.flipY ? -1 : 1);
+  ctx.globalAlpha *= clamp(Number(variation.opacity) || 1, 0, 1);
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(variation.image, 0, 0, width, height, -width / 2, -height / 2, width, height);
+  ctx.restore();
 }
 
 const POWERUP_DISPLAY_NAMES = Object.freeze({
@@ -357,6 +437,8 @@ export class DustyOrbitMultiplayerRenderer {
     ctx.save();
     ctx.translate(shake.x, shake.y);
     this.drawTerrain();
+    this.drawBoundaryOverlay();
+    this.drawTerrainFeatures();
     this.drawNukes(snapshot?.nukes || [], Date.now());
     this.drawEffects("underlay", now);
 
@@ -370,7 +452,7 @@ export class DustyOrbitMultiplayerRenderer {
     });
     this.renderedPlayers = new Map(players.map((player) => [player.id, { x: player.x, y: player.y, vx: player.vx || 0, vy: player.vy || 0 }]));
     const layers = [
-      ...this.assets.environment.map((item) => ({ type: "environment", depth: item.depthY, value: item })),
+      ...this.assets.environment.filter((item) => item.renderLayer !== "terrain").map((item) => ({ type: "environment", depth: item.depthY, value: item })),
       ...(snapshot?.pickups || []).map((pickup) => ({ type: "pickup", depth: pickup.y, value: pickup })),
       ...players.map((player) => ({ type: "player", depth: player.y, value: player })),
     ].sort((a, b) => a.depth - b.depth);
@@ -407,12 +489,186 @@ export class DustyOrbitMultiplayerRenderer {
   }
 
   drawTerrain() {
+    const { ctx, camera, assets } = this;
+    if (assets.playableArea) {
+      this.drawSpaceBackdrop();
+      ctx.save();
+      if (tracePolygon(ctx, assets.playableArea, -camera.x, -camera.y)) ctx.clip();
+      this.drawGroundTexture();
+      ctx.restore();
+      this.drawArenaRim();
+      return;
+    }
+    this.drawGroundTexture();
+  }
+
+  drawGroundTexture() {
     const { ctx, camera, viewport, assets } = this;
+    if (assets.terrainMode === "tile") {
+      const tileWidth = assets.terrain.naturalWidth;
+      const tileHeight = assets.terrain.naturalHeight;
+      const startX = Math.floor(camera.x / tileWidth) * tileWidth;
+      const startY = Math.floor(camera.y / tileHeight) * tileHeight;
+      const endX = Math.min(assets.world.width, camera.x + viewport.width);
+      const endY = Math.min(assets.world.height, camera.y + viewport.height);
+      for (let worldY = startY; worldY < endY; worldY += tileHeight) {
+        for (let worldX = startX; worldX < endX; worldX += tileWidth) {
+          const drawWidth = Math.min(tileWidth, assets.world.width - worldX);
+          const drawHeight = Math.min(tileHeight, assets.world.height - worldY);
+          ctx.drawImage(assets.terrain, 0, 0, drawWidth, drawHeight, worldX - camera.x, worldY - camera.y, drawWidth, drawHeight);
+          const column = Math.floor(worldX / tileWidth);
+          const row = Math.floor(worldY / tileHeight);
+          const variation = terrainVariationForCell(assets.terrainVariations, column, row);
+          if (variation) drawTerrainVariationCell(ctx, variation, worldX - camera.x, worldY - camera.y, drawWidth, drawHeight);
+        }
+      }
+      return;
+    }
     const sx = clamp(camera.x, 0, Math.max(0, assets.terrain.naturalWidth - viewport.width));
     const sy = clamp(camera.y, 0, Math.max(0, assets.terrain.naturalHeight - viewport.height));
     const sw = Math.min(viewport.width, assets.terrain.naturalWidth - sx);
     const sh = Math.min(viewport.height, assets.terrain.naturalHeight - sy);
     ctx.drawImage(assets.terrain, sx, sy, sw, sh, sx - camera.x, sy - camera.y, sw, sh);
+  }
+
+  drawSpaceBackdrop() {
+    const { ctx, camera, viewport } = this;
+    ctx.fillStyle = "#020105";
+    ctx.fillRect(0, 0, viewport.width, viewport.height);
+
+    const nebulae = [
+      { x: 520, y: 390, radius: 620, color: "rgba(126,18,8,.16)" },
+      { x: 3240, y: 520, radius: 760, color: "rgba(166,27,10,.13)" },
+      { x: 3180, y: 2140, radius: 670, color: "rgba(88,9,20,.17)" },
+      { x: 860, y: 2100, radius: 720, color: "rgba(133,20,8,.12)" },
+    ];
+    for (const nebula of nebulae) {
+      const x = nebula.x - camera.x;
+      const y = nebula.y - camera.y;
+      if (x + nebula.radius < 0 || y + nebula.radius < 0 || x - nebula.radius > viewport.width || y - nebula.radius > viewport.height) continue;
+      const gradient = ctx.createRadialGradient(x, y, 0, x, y, nebula.radius);
+      gradient.addColorStop(0, nebula.color);
+      gradient.addColorStop(.5, nebula.color.replace(/\.[0-9]+\)$/, ".06)"));
+      gradient.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = gradient;
+      ctx.fillRect(Math.max(0, x - nebula.radius), Math.max(0, y - nebula.radius), nebula.radius * 2, nebula.radius * 2);
+    }
+
+    const cell = 92;
+    const startColumn = Math.floor(camera.x / cell) - 1;
+    const endColumn = Math.ceil((camera.x + viewport.width) / cell) + 1;
+    const startRow = Math.floor(camera.y / cell) - 1;
+    const endRow = Math.ceil((camera.y + viewport.height) / cell) + 1;
+    for (let row = startRow; row <= endRow; row += 1) {
+      for (let column = startColumn; column <= endColumn; column += 1) {
+        const seed = column * 719.17 + row * 313.61;
+        if (seededUnit(seed) < .36) continue;
+        const x = column * cell + seededUnit(seed + 3) * cell - camera.x;
+        const y = row * cell + seededUnit(seed + 7) * cell - camera.y;
+        const radius = .45 + seededUnit(seed + 11) * 1.25;
+        ctx.globalAlpha = .28 + seededUnit(seed + 17) * .62;
+        ctx.fillStyle = seededUnit(seed + 19) > .84 ? "#ff8b54" : "#fff4df";
+        ctx.beginPath();
+        ctx.arc(x, y, radius, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  drawArenaRim() {
+    const { ctx, camera, viewport, assets } = this;
+    const points = assets.playableArea;
+    if (!points) return;
+    ctx.save();
+    ctx.translate(-camera.x, -camera.y);
+    ctx.lineJoin = "round";
+    ctx.lineCap = "round";
+    const stroke = (width, color, shadowColor = "transparent", shadowBlur = 0) => {
+      if (!tracePolygon(ctx, points)) return;
+      ctx.lineWidth = width;
+      ctx.strokeStyle = color;
+      ctx.shadowColor = shadowColor;
+      ctx.shadowBlur = shadowBlur;
+      ctx.stroke();
+    };
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(-400, -400, assets.world.width + 800, assets.world.height + 800);
+    points.forEach((point, index) => {
+      if (index) ctx.lineTo(point.x, point.y); else ctx.moveTo(point.x, point.y);
+    });
+    ctx.closePath();
+    ctx.clip("evenodd");
+    stroke(132, "#050306", "rgba(255,41,4,.35)", 22);
+    stroke(92, "#ec3207", "rgba(255,71,6,.64)", 15);
+    ctx.restore();
+    stroke(58, "#121013");
+    ctx.shadowBlur = 0;
+
+    for (let segment = 0; segment < points.length; segment += 1) {
+      const start = points[segment];
+      const end = points[(segment + 1) % points.length];
+      const dx = end.x - start.x;
+      const dy = end.y - start.y;
+      const length = Math.hypot(dx, dy) || 1;
+      const normalX = -dy / length;
+      const normalY = dx / length;
+      let travelled = 8 + seededUnit(segment * 31 + 2) * 26;
+      let rockIndex = 0;
+      while (travelled < length) {
+        const seed = segment * 101 + rockIndex * 17.37;
+        const amount = travelled / length;
+        const offset = (seededUnit(seed + 4) - .5) * 26;
+        const x = mix(start.x, end.x, amount) + normalX * offset;
+        const y = mix(start.y, end.y, amount) + normalY * offset;
+        if (x > camera.x - 60 && x < camera.x + viewport.width + 60 && y > camera.y - 60 && y < camera.y + viewport.height + 60) {
+          const radiusX = 14 + seededUnit(seed + 8) * 19;
+          const radiusY = 10 + seededUnit(seed + 12) * 12;
+          ctx.save();
+          ctx.translate(x, y);
+          ctx.rotate(Math.atan2(dy, dx) + (seededUnit(seed + 16) - .5) * .8);
+          ctx.fillStyle = seededUnit(seed + 20) > .5 ? "#171619" : "#242022";
+          ctx.strokeStyle = "rgba(103,86,82,.42)";
+          ctx.lineWidth = 1.4;
+          ctx.beginPath();
+          const corners = 7;
+          for (let corner = 0; corner < corners; corner += 1) {
+            const angle = Math.PI * 2 * corner / corners;
+            const roughness = .78 + seededUnit(seed + corner * 5.3) * .34;
+            const rockX = Math.cos(angle) * radiusX * roughness;
+            const rockY = Math.sin(angle) * radiusY * roughness;
+            if (corner) ctx.lineTo(rockX, rockY); else ctx.moveTo(rockX, rockY);
+          }
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+          ctx.strokeStyle = "rgba(255,93,26,.2)";
+          ctx.beginPath();
+          ctx.moveTo(-radiusX * .34, radiusY * .08);
+          ctx.lineTo(radiusX * .05, -radiusY * .22);
+          ctx.lineTo(radiusX * .34, radiusY * .03);
+          ctx.stroke();
+          ctx.restore();
+        }
+        travelled += 38 + seededUnit(seed + 24) * 28;
+        rockIndex += 1;
+      }
+    }
+    ctx.restore();
+  }
+
+  drawTerrainFeatures() {
+    for (const item of this.assets.environment) {
+      if (item.renderLayer === "terrain") this.drawEnvironmentObject(item, false);
+    }
+  }
+
+  drawBoundaryOverlay() {
+    const overlay = this.assets.boundaryOverlay;
+    if (!overlay) return;
+    const { ctx, camera, assets } = this;
+    drawNineSliceBoundary(ctx, overlay, -camera.x, -camera.y, assets.world.width, assets.world.height, overlay.inset);
   }
 
   drawEnvironmentObject(item, satelliteActive) {
@@ -1566,12 +1822,56 @@ export class DustyOrbitMultiplayerRenderer {
     const scaleX = width / this.assets.world.width;
     const scaleY = height / this.assets.world.height;
 
-    ctx.globalAlpha = .44;
+    ctx.fillStyle = "#020105";
+    ctx.fillRect(0, 0, width, height);
+    ctx.save();
+    if (this.assets.playableArea && tracePolygon(ctx, this.assets.playableArea, 0, 0, scaleX, scaleY)) ctx.clip();
+    ctx.globalAlpha = .58;
     ctx.drawImage(this.assets.terrain, 0, 0, width, height);
-    ctx.globalAlpha = 1;
-    ctx.fillStyle = "rgba(19,5,30,.32)";
+    if (this.assets.terrainMode === "tile" && this.assets.terrainVariations?.length) {
+      const tileWidth = this.assets.terrain.naturalWidth;
+      const tileHeight = this.assets.terrain.naturalHeight;
+      for (let worldY = 0; worldY < this.assets.world.height; worldY += tileHeight) {
+        for (let worldX = 0; worldX < this.assets.world.width; worldX += tileWidth) {
+          const drawWidth = Math.min(tileWidth, this.assets.world.width - worldX);
+          const drawHeight = Math.min(tileHeight, this.assets.world.height - worldY);
+          const variation = terrainVariationForCell(this.assets.terrainVariations, Math.floor(worldX / tileWidth), Math.floor(worldY / tileHeight));
+          if (variation) drawTerrainVariationCell(ctx, variation, worldX * scaleX, worldY * scaleY, drawWidth * scaleX, drawHeight * scaleY);
+        }
+      }
+    }
+    ctx.restore();
+    if (this.assets.playableArea && tracePolygon(ctx, this.assets.playableArea, 0, 0, scaleX, scaleY)) {
+      ctx.lineJoin = "round";
+      ctx.strokeStyle = "rgba(255,68,8,.8)";
+      ctx.lineWidth = 7;
+      ctx.stroke();
+      ctx.strokeStyle = "rgba(30,25,27,.96)";
+      ctx.lineWidth = 4;
+      ctx.stroke();
+    }
+    const overlay = this.assets.boundaryOverlay;
+    if (overlay) {
+      drawNineSliceBoundary(ctx, overlay, 0, 0, width, height, {
+        left: overlay.inset.left * scaleX,
+        top: overlay.inset.top * scaleY,
+        right: overlay.inset.right * scaleX,
+        bottom: overlay.inset.bottom * scaleY,
+      });
+    }
+    for (const item of this.assets.environment) {
+      if (item.renderLayer !== "terrain") continue;
+      ctx.save();
+      ctx.translate(item.x * scaleX, item.y * scaleY);
+      ctx.rotate((Number(item.rotation) || 0) * Math.PI / 180);
+      ctx.globalAlpha = item.assetId === "hell-moon-scorch-decal" ? .68 : .9;
+      ctx.drawImage(item.image, -item.width * scaleX / 2, -item.height * scaleY / 2, item.width * scaleX, item.height * scaleY);
+      ctx.restore();
+    }
+    ctx.fillStyle = "rgba(19,5,30,.24)";
     ctx.fillRect(0, 0, width, height);
     for (const item of this.assets.environment) {
+      if (item.renderLayer === "terrain") continue;
       ctx.beginPath();
       item.polygon.forEach((point, index) => {
         const x = point.x * scaleX;

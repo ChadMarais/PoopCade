@@ -35,7 +35,9 @@ export default {
       if (!originAllowed(origin)) return new Response("Origin not allowed.", { status: 403 });
       const maps = await Promise.all(MAP_CATALOG.map(async (map) => {
         try {
-          const response = await env.DUSTY_ARENAS.getByName(map.arenaId).fetch(new Request("https://arena.internal/status"));
+          const response = await env.DUSTY_ARENAS.getByName(map.arenaId).fetch(new Request("https://arena.internal/status", {
+            headers: { "X-Poopcade-Arena-Id": map.arenaId },
+          }));
           if (!response.ok) throw new Error("status-unavailable");
           return { ...map, ...(await response.json() as Record<string, unknown>) };
         } catch {
