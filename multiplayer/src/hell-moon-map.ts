@@ -1,4 +1,4 @@
-import { BOUNDARY_COLLIDERS, ENVIRONMENT_INSTANCES, MAP_METADATA, PLAYER_SPAWNS, SATELLITE_CONNECTION, WORLD } from "../../games/game-03/maps/hell-moon/map.js";
+import { BOUNDARY_COLLIDERS, ENVIRONMENT_INSTANCES, MAP_METADATA, PLAYER_SPAWNS, SATELLITE_CONNECTION, SATELLITE_INSTANCES, WORLD } from "../../games/game-03/maps/hell-moon/map.js";
 import importedLava32Definition from "../../games/game-03/maps/hell-moon/objects/imported/lava3-2/lava3-2.json" with { type: "json" };
 import importedLava12Definition from "../../games/game-03/maps/hell-moon/objects/imported/lava1-2/lava1-2.json" with { type: "json" };
 import importedLava31Definition from "../../games/game-03/maps/hell-moon/objects/imported/lava3-1/lava3-1.json" with { type: "json" };
@@ -86,6 +86,15 @@ export const HELL_MOON_ENVIRONMENT_COLLIDERS = Object.freeze([
   ...BOUNDARY_ENVIRONMENT_COLLIDERS,
 ]);
 
+export const HELL_MOON_SATELLITES = Object.freeze(SATELLITE_INSTANCES.map((satelliteInstance) => {
+  const collider = HELL_MOON_ENVIRONMENT_COLLIDERS.find((item) => item.id === satelliteInstance.id);
+  if (!collider) throw new Error(`Missing Hell Moon satellite collider for ${satelliteInstance.id}.`);
+  return Object.freeze({
+    ...satelliteInstance,
+    polygon: collider.polygon as Polygon,
+  });
+}));
+
 const MOVEMENT_POLYGONS = Object.freeze(HELL_MOON_ENVIRONMENT_COLLIDERS.filter((item) => item.blocksMovement).map((item) => item.polygon)) as unknown as Polygon[];
 const PROJECTILE_POLYGONS = Object.freeze(HELL_MOON_ENVIRONMENT_COLLIDERS.filter((item) => item.blocksProjectiles).map((item) => item.polygon)) as unknown as Polygon[];
 
@@ -93,7 +102,7 @@ export const HELL_MOON_MAP_RUNTIME: MurderballMapRuntime = Object.freeze({
   map: HELL_MOON_MAP,
   polygons: MOVEMENT_POLYGONS,
   projectilePolygons: PROJECTILE_POLYGONS,
-  satellites: Object.freeze([]),
+  satellites: HELL_MOON_SATELLITES,
   satelliteConnectTolerance: SATELLITE_CONNECTION.connectTolerance,
   satelliteDisconnectTolerance: SATELLITE_CONNECTION.disconnectTolerance,
   spawns: PLAYER_SPAWNS as readonly Point[],

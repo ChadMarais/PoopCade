@@ -3,7 +3,7 @@ export const MAP_METADATA = Object.freeze({
   arenaId: "hell-moon-001",
   name: "HELL MOON",
   description: "Four fractured volcanic territories orbit a brutal central combat ring.",
-  previewUrl: "/games/game-03/maps/hell-moon/terrain/hell-moon-ground-tile.png",
+  previewUrl: "/games/game-03/maps/hell-moon/preview/hell-moon-lobby-preview.webp?v=20260815-1",
   moduleUrl: "/games/game-03/maps/hell-moon/map.js",
   maxPlayers: 15,
 });
@@ -117,7 +117,10 @@ export const RIM_FEATURE_INSTANCES = Object.freeze([
 export const CENTER_ARENA_INSTANCE = terrain("HELL MOON CENTRAL COMBAT RING", "hell-moon-center-arena", 2000, 1250, 820, 820, 0);
 
 export const ROCK_INSTANCES = Object.freeze([]);
-export const SATELLITE_INSTANCES = Object.freeze([]);
+export const SATELLITE_INSTANCES = Object.freeze([
+  Object.freeze({ id: "SAT 01", assetId: "sat", kind: "satellite", x: 560.5, y: 1196.5, width: 360, height: 360, rotation: 0 }),
+  Object.freeze({ id: "SAT-COPY 01", assetId: "sat-copy", kind: "satellite", x: 3436, y: 1224, width: 360, height: 360, rotation: 0 }),
+]);
 export const OUTPOST_INSTANCES = Object.freeze([]);
 export const SATELLITE_CONNECTION = Object.freeze({ connectTolerance: 6, disconnectTolerance: 9 });
 export const ENVIRONMENT_INSTANCES = Object.freeze([
@@ -134,8 +137,7 @@ export const ENVIRONMENT_INSTANCES = Object.freeze([
   Object.freeze({ id: "LAVA2-2 01", assetId: "lava2-2", kind: "imported", x: 2243, y: 1469, width: 360, height: 360, rotation: -179 }),
   Object.freeze({ id: "LAVA2-3 01", assetId: "lava2-3", kind: "imported", x: 1768.9, y: 1015, width: 360, height: 360, rotation: 0 }),
   Object.freeze({ id: "LAVA2-4 01", assetId: "lava2-4", kind: "imported", x: 2237.5, y: 1016, width: 360, height: 360, rotation: 89.5 }),
-  Object.freeze({ id: "SAT 01", assetId: "sat", kind: "imported", x: 560.5, y: 1196.5, width: 360, height: 360, rotation: 0 }),
-  Object.freeze({ id: "SAT-COPY 01", assetId: "sat-copy", kind: "imported", x: 3436, y: 1224, width: 360, height: 360, rotation: 0 }),
+  ...SATELLITE_INSTANCES,
 ]);
 
 export const PLAYER_SPAWNS = Object.freeze([
