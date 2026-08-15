@@ -152,12 +152,12 @@ export const ENVIRONMENT_INSTANCES = Object.freeze([
   Object.freeze({ id: "LAVA2-4 01", assetId: "lava2-4", kind: "imported", x: 2237.5, y: 1016, width: 360, height: 360, rotation: 89.5 }),
   ...SATELLITE_INSTANCES,
   Object.freeze({ id: "CORE1 01", assetId: "core1", kind: "imported", x: 2001.5, y: 1175, width: 360, height: 360, rotation: 0 }),
-  Object.freeze({ id: "BUILDING1 01", assetId: "building1", kind: "imported", x: 2094, y: 453, width: 360, height: 360, rotation: 0 }),
-  Object.freeze({ id: "BUNKER1 01", assetId: "bunker1", kind: "imported", x: 1748, y: 461, width: 360, height: 360, rotation: 0 }),
+  Object.freeze({ id: "BUILDING1 01", assetId: "building1", kind: "imported", x: 2495.7, y: 408.4, width: 360, height: 360, rotation: -0.5 }),
+  Object.freeze({ id: "BUNKER1 01", assetId: "bunker1", kind: "imported", x: 1491.4, y: 430.5, width: 360, height: 360, rotation: -0.7 }),
   Object.freeze({ id: "POWERGRID1 01", assetId: "powergrid1", kind: "imported", x: 3330, y: 749.2, width: 360, height: 360, rotation: 0 }),
   Object.freeze({ id: "POWERGRID1-2 01", assetId: "powergrid1-2", kind: "imported", x: 903, y: 1665.5, width: 360, height: 360, rotation: 0 }),
-  Object.freeze({ id: "PIPE1 01", assetId: "pipe1", kind: "imported", x: 2043, y: 2090, width: 360, height: 360, rotation: 0 }),
-  Object.freeze({ id: "CRATE1 01", assetId: "crate1", kind: "imported", x: 1613, y: 1962.5, width: 360, height: 360, rotation: 0.9 }),
+  Object.freeze({ id: "PIPE1 01", assetId: "pipe1", kind: "imported", x: 2467.7, y: 2008, width: 360, height: 360, rotation: 0.2 }),
+  Object.freeze({ id: "CRATE1 01", assetId: "crate1", kind: "imported", x: 1509.8, y: 2040.3, width: 360, height: 360, rotation: 0.9 }),
 ]);
 
 export const PLAYER_SPAWNS = Object.freeze([
