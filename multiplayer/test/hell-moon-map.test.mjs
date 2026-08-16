@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { readFile } from "node:fs/promises";
 import { HELL_MOON_CANONICAL_COLLISION, HELL_MOON_ENVIRONMENT_COLLIDERS, HELL_MOON_HEALING_STATIONS, HELL_MOON_MAP_RUNTIME, HELL_MOON_SATELLITES } from "../src/hell-moon-map.ts";
 import { dustyCollisionForArena, dustyMapRuntimeForArena } from "../src/dusty-maps.ts";
 import { DustyOrbitSimulation, DUSTY_FIXED_DT } from "../src/dusty-simulation.ts";
@@ -18,6 +19,17 @@ import {
   SATELLITE_INSTANCES,
   TERRAIN_VARIATION_TILES,
 } from "../../games/game-03/maps/hell-moon/map.js";
+import { SATELLITE_INSTANCES as LUNAR_LIABILITY_SATELLITES } from "../../games/game-03/maps/lunar-liability/map.js";
+
+test("satellite stations on both Murderball maps receive world labels and connection states", async () => {
+  const renderer = await readFile(new URL("../../games/game-03/renderer.js", import.meta.url), "utf8");
+  assert.equal(LUNAR_LIABILITY_SATELLITES.length, 2);
+  assert.equal(SATELLITE_INSTANCES.length, 2);
+  assert.equal([...LUNAR_LIABILITY_SATELLITES, ...SATELLITE_INSTANCES].every((item) => item.kind === "satellite"), true);
+  assert.match(renderer, /if \(item\.kind === "satellite"\) this\.drawSatelliteStationLabel\(item, satelliteState\)/);
+  assert.match(renderer, /ctx\.fillText\("SATELLITE STATION", 0, -7\)/);
+  assert.match(renderer, /"UPLINK CONNECTED" : active \? "UPLINK ACTIVE" : "MOVE CLOSE TO CONNECT"/);
+});
 
 test("Hell Moon has its own authoritative 4000 by 2500 runtime", () => {
   const runtime = dustyMapRuntimeForArena("hell-moon-001");

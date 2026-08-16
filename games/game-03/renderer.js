@@ -496,7 +496,10 @@ export class DustyOrbitMultiplayerRenderer {
       ...players.map((player) => ({ type: "player", depth: player.y, value: player })),
     ].sort((a, b) => a.depth - b.depth);
     for (const layer of layers) {
-      if (layer.type === "environment") this.drawEnvironmentObject(layer.value, snapshot?.activeSatelliteIds?.includes(layer.value.id) === true, {
+      if (layer.type === "environment") this.drawEnvironmentObject(layer.value, {
+        active: snapshot?.activeSatelliteIds?.includes(layer.value.id) === true,
+        connected: local?.connectedSatelliteId === layer.value.id,
+      }, {
         active: snapshot?.activeHealingStationIds?.includes(layer.value.id) === true,
         connected: local?.connectedHealingStationId === layer.value.id,
         inProgress: local?.connectedHealingStationId === layer.value.id && local?.healingInProgress === true,
@@ -719,7 +722,7 @@ export class DustyOrbitMultiplayerRenderer {
     drawNineSliceBoundary(ctx, overlay, -camera.x, -camera.y, assets.world.width, assets.world.height, overlay.inset);
   }
 
-  drawEnvironmentObject(item, satelliteActive, healingState = null) {
+  drawEnvironmentObject(item, satelliteState = null, healingState = null) {
     const x = item.x - this.camera.x;
     const y = item.y - this.camera.y;
     const cullRadius = Math.hypot(item.width, item.height) / 2;
@@ -730,9 +733,10 @@ export class DustyOrbitMultiplayerRenderer {
     if (rotation) this.ctx.rotate(rotation);
     if (item.definition.render?.flipX === true) this.ctx.scale(-1, 1);
     this.ctx.drawImage(item.image, -item.width / 2, -item.height / 2, item.width, item.height);
-    if (item.kind === "satellite" && satelliteActive) this.drawSatelliteActivePulse(item);
+    if (item.kind === "satellite" && satelliteState?.active) this.drawSatelliteActivePulse(item);
     if (item.kind === "healing-station" && healingState?.active) this.drawHealingStationActivePulse(item);
     this.ctx.restore();
+    if (item.kind === "satellite") this.drawSatelliteStationLabel(item, satelliteState);
     if (item.kind === "healing-station") this.drawHealingStationLabel(item, healingState);
   }
 
@@ -749,6 +753,33 @@ export class DustyOrbitMultiplayerRenderer {
     ctx.beginPath();
     ctx.ellipse(item.width * .035, -item.height * .18, item.width * (.08 + pulse * .018), item.height * (.025 + pulse * .008), -.15, 0, Math.PI * 2);
     ctx.stroke();
+    ctx.restore();
+  }
+
+  drawSatelliteStationLabel(item, state) {
+    const ctx = this.ctx;
+    const x = item.x - this.camera.x;
+    const y = item.y - this.camera.y - Math.min(item.height * .55, 200);
+    const connected = state?.connected === true;
+    const active = state?.active === true;
+    const status = connected ? "UPLINK CONNECTED" : active ? "UPLINK ACTIVE" : "MOVE CLOSE TO CONNECT";
+    const width = 184;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.fillStyle = connected ? "rgba(5,29,42,.92)" : "rgba(7,18,27,.82)";
+    ctx.strokeStyle = connected ? "rgba(95,247,255,.95)" : "rgba(95,247,255,.5)";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.roundRect(-width / 2, -18, width, 38, 8);
+    ctx.fill(); ctx.stroke();
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillStyle = "#8ffaff";
+    ctx.font = "1000 10px ui-monospace,monospace";
+    ctx.fillText("SATELLITE STATION", 0, -7);
+    ctx.fillStyle = connected ? "#effeff" : "rgba(218,252,255,.8)";
+    ctx.font = "900 8px ui-monospace,monospace";
+    ctx.fillText(status, 0, 8);
     ctx.restore();
   }
 
