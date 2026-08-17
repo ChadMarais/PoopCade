@@ -1,11 +1,16 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { distanceToPolygon, pointInPolygon } from "../../games/game-03/collision-geometry.js";
+import { DUSTY_GAMEPLAY } from "../src/dusty-gameplay.ts";
 import { DUSTY_CANONICAL_COLLISION, DUSTY_PLAYER_HIT_RADIUS, DUSTY_POLYGONS, DUSTY_SATELLITES } from "../src/dusty-map.ts";
 import { DustyOrbitSimulation, DUSTY_FIXED_DT, DUSTY_MAX_HIT_REWIND_MS, DUSTY_RESPAWN_MS, DUSTY_SPAWN_PROTECTION_MS } from "../src/dusty-simulation.ts";
 
 function input(seq: number, moveX: number, moveY: number, aimX: number, aimY: number, fire = false) {
   return { type: "input" as const, seq, moveX, moveY, aimX, aimY, fire };
+}
+
+function intentInput(seq: number, aimX: number, aimY: number, intents: Array<{ id: number; loadoutId: number; fireStateId: number; aimX: number; aimY: number }>, fire = true) {
+  return { type: "input" as const, seq, moveX: 0, moveY: 0, aimX, aimY, fire, fireMode: "intent-v1" as const, fireIntents: intents };
 }
 
 test("server imports canonical environment JSON for every live Lunar map instance", () => {
@@ -67,6 +72,379 @@ test("a reconnect neutralizes stale movement and fire without resetting its inpu
   assert.equal(player.input.fire, false);
   assert.equal(player.input.moveX, 0);
   assert.equal(player.vx, 0);
+});
+
+test("jittered held-fire intents keep every authoritative SMG round tied to its displayed aim", () => {
+  const simulation = new DustyOrbitSimulation();
+  const player = simulation.addPlayer("10000000-0000-4000-8000-000000000017", "Guest-0017", 1000);
+  player.weaponTier = 4;
+  player.protectedUntil = 0;
+
+  const samples = [
+    { seq: 1, receivedAt: 1000, aimX: 1, aimY: 0 },
+    { seq: 2, receivedAt: 1220, aimX: Math.SQRT1_2, aimY: -Math.SQRT1_2 },
+    { seq: 3, receivedAt: 1440, aimX: 0, aimY: -1 },
+  ];
+  for (const sample of samples) {
+    simulation.applyInput(player.id, intentInput(sample.seq, sample.aimX, sample.aimY, [
+      { id: sample.seq, loadoutId: 1, fireStateId: 1, aimX: sample.aimX, aimY: sample.aimY },
+    ]), sample.receivedAt);
+    // A normal 30Hz server tick processes the input after it was received. The
+    // network delay must not invalidate a cadence-correct intent.
+    simulation.step(DUSTY_FIXED_DT, sample.receivedAt + 34);
+  }
+
+  const events = simulation.drainEvents();
+  const shots = events.filter((event) => event.type === "shot") as Array<{
+    fireIntentId: number; aimX: number; aimY: number; projectile: { inputSeq: number; vx: number; vy: number; fireIntentId: number };
+  }>;
+  assert.equal(shots.length, 3);
+  assert.deepEqual(shots.map((shot) => shot.fireIntentId), [1, 2, 3]);
+  assert.deepEqual(shots.map((shot) => shot.projectile.inputSeq), [1, 2, 3]);
+  assert.ok(shots[0].projectile.vx > 699 && Math.abs(shots[0].projectile.vy) < .001);
+  assert.ok(shots[1].projectile.vx > 494 && shots[1].projectile.vy < -494);
+  assert.ok(shots[2].projectile.vy < -699 && Math.abs(shots[2].projectile.vx) < .001,
+    "the newest northbound round must not inherit either earlier held-fire aim");
+  const you = simulation.snapshot(player.id, 1474).you as any;
+  assert.equal(you.weapon.tier, 4);
+  assert.equal(you.weapon.cooldownMs, 220);
+  assert.equal(you.weaponState.lastFireIntentId, 3);
+  assert.equal(events.some((event) => event.type === "fire_intent_rejected"), false);
+});
+
+test("jittered Burst intents survive 30Hz processing delay and resample the barrel each round", () => {
+  const simulation = new DustyOrbitSimulation();
+  const player = simulation.addPlayer("10000000-0000-4000-8000-000000000019", "Guest-0019", 1000);
+  player.weaponTier = 3;
+  player.protectedUntil = 0;
+  const samples = [
+    { seq: 1, receivedAt: 1000, aimX: 1, aimY: 0 },
+    { seq: 2, receivedAt: 1090, aimX: 0, aimY: -1 },
+    { seq: 3, receivedAt: 1180, aimX: -1, aimY: 0 },
+  ];
+  for (const sample of samples) {
+    simulation.applyInput(player.id, intentInput(sample.seq, sample.aimX, sample.aimY, [
+      { id: sample.seq, loadoutId: 1, fireStateId: 1, aimX: sample.aimX, aimY: sample.aimY },
+    ]), sample.receivedAt);
+    simulation.step(DUSTY_FIXED_DT, sample.receivedAt + 34);
+  }
+
+  const events = simulation.drainEvents();
+  const shots = events.filter((event) => event.type === "shot") as Array<any>;
+  assert.deepEqual(shots.map((shot) => shot.fireIntentId), [1, 2, 3]);
+  assert.deepEqual(shots.map((shot) => shot.projectile.inputSeq), [1, 2, 3]);
+  assert.ok(shots[0].projectile.vx > 649 && Math.abs(shots[0].projectile.vy) < .001);
+  assert.ok(shots[1].projectile.vy < -649 && Math.abs(shots[1].projectile.vx) < .001);
+  assert.ok(shots[2].projectile.vx < -649 && Math.abs(shots[2].projectile.vy) < .001);
+  assert.equal(events.some((event) => event.type === "fire_intent_rejected"), false);
+});
+
+test("one Shotgun intent echoes stable pellet indices across the authoritative spread group", () => {
+  const simulation = new DustyOrbitSimulation();
+  const player = simulation.addPlayer("10000000-0000-4000-8000-000000000018", "Guest-0018", 1000);
+  player.weaponTier = 5;
+  player.protectedUntil = 0;
+  simulation.applyInput(player.id, intentInput(1, 1, 0, [{ id: 1, loadoutId: 1, fireStateId: 1, aimX: 1, aimY: 0 }]), 1000);
+  simulation.step(DUSTY_FIXED_DT, 1000);
+  const shots = simulation.drainEvents().filter((event) => event.type === "shot") as Array<any>;
+  assert.equal(shots.length, 3);
+  assert.deepEqual(shots.map((shot) => shot.fireIntentId), [1, 1, 1]);
+  assert.deepEqual(shots.map((shot) => shot.pelletIndex), [0, 1, 2]);
+  assert.ok(shots.every((shot) => shot.pelletCount === 3 && shot.projectile.fireIntentId === 1));
+});
+
+test("fire intents cannot cross loadouts or disagree with the visible barrel aim", () => {
+  const simulation = new DustyOrbitSimulation();
+  const player = simulation.addPlayer("10000000-0000-4000-8000-000000000020", "Guest-0020", 1000);
+  player.weaponTier = 4;
+  player.loadoutId = 4;
+  player.protectedUntil = 0;
+
+  simulation.applyInput(player.id, intentInput(1, 1, 0, [
+    { id: 1, loadoutId: 3, fireStateId: 1, aimX: 1, aimY: 0 },
+  ]), 1000);
+  simulation.applyInput(player.id, intentInput(2, 1, 0, [
+    { id: 2, loadoutId: 4, fireStateId: 1, aimX: 0, aimY: -1 },
+  ]), 1001);
+  simulation.step(DUSTY_FIXED_DT, 1034);
+
+  const events = simulation.drainEvents();
+  const rejected = events.filter((event) => event.type === "fire_intent_rejected") as Array<any>;
+  assert.deepEqual(rejected.map(({ fireIntentId, loadoutId, reason }) => ({ fireIntentId, loadoutId, reason })), [
+    { fireIntentId: 1, loadoutId: 4, reason: "loadout-changed" },
+    { fireIntentId: 2, loadoutId: 4, reason: "aim-mismatch" },
+  ]);
+  assert.equal(events.some((event) => event.type === "shot"), false);
+  assert.equal(player.pendingFireIntents.length, 0);
+  assert.equal(player.lastFireIntentId, 2);
+});
+
+test("a rejected fire intent advances the receive watermark and cannot amplify events by replay", () => {
+  const simulation = new DustyOrbitSimulation();
+  const player = simulation.addPlayer("10000000-0000-4000-8000-000000000025", "Guest-0025", 1000);
+  player.weaponTier = 4;
+  player.protectedUntil = 0;
+  simulation.drainEvents();
+
+  const rejectedIntent = { id: 1, loadoutId: 99, fireStateId: 1, aimX: 1, aimY: 0 };
+  simulation.applyInput(player.id, intentInput(1, 1, 0, [rejectedIntent]), 1000);
+  const firstEvents = simulation.drainEvents();
+  assert.deepEqual(firstEvents.filter((event) => event.type === "fire_intent_rejected").map((event: any) => ({
+    fireIntentId: event.fireIntentId,
+    reason: event.reason,
+  })), [{ fireIntentId: 1, reason: "loadout-changed" }]);
+  assert.equal(player.lastFireIntentId, 1);
+
+  simulation.applyInput(player.id, intentInput(2, 1, 0, [rejectedIntent]), 1001);
+  assert.deepEqual(simulation.drainEvents(), [], "replaying a rejected ID must be a silent no-op");
+  assert.equal(player.lastFireIntentId, 1);
+
+  simulation.applyInput(player.id, intentInput(3, 0, -1, [
+    { id: 2, loadoutId: 1, fireStateId: 1, aimX: 0, aimY: -1 },
+  ]), 1002);
+  simulation.step(DUSTY_FIXED_DT, 1034);
+  const nextEvents = simulation.drainEvents();
+  const shot = nextEvents.find((event: any) => event.type === "shot" && event.fireIntentId === 2) as any;
+  assert.ok(shot, "the next fresh ID remains usable after the rejected watermark");
+  assert.ok(shot.projectile.vy < -699 && Math.abs(shot.projectile.vx) < .001);
+});
+
+test("dead players reject fire intents instead of queueing them for respawn", () => {
+  const simulation = new DustyOrbitSimulation();
+  const player = simulation.addPlayer("10000000-0000-4000-8000-000000000021", "Guest-0021", 1000);
+  player.alive = false;
+  player.hp = 0;
+  player.respawnAt = 5000;
+
+  simulation.applyInput(player.id, intentInput(1, 1, 0, [
+    { id: 1, loadoutId: 1, fireStateId: 1, aimX: 1, aimY: 0 },
+  ]), 1000);
+
+  const events = simulation.drainEvents();
+  assert.ok(events.some((event: any) => event.type === "fire_intent_rejected" &&
+    event.fireIntentId === 1 && event.reason === "player-inactive"));
+  assert.equal(player.pendingFireIntents.length, 0);
+  assert.equal(simulation.projectiles.length, 0);
+});
+
+test("reconnect invalidates fire-state intents captured by the previous connection", () => {
+  const simulation = new DustyOrbitSimulation();
+  const player = simulation.addPlayer("10000000-0000-4000-8000-000000000023", "Guest-0023", 1000);
+  player.protectedUntil = 0;
+  simulation.prepareConnection(player.id, 1100);
+  assert.equal(player.fireStateId, 2);
+
+  simulation.applyInput(player.id, intentInput(1, 1, 0, [
+    { id: 1, loadoutId: 1, fireStateId: 1, aimX: 1, aimY: 0 },
+  ]), 1101);
+  simulation.step(DUSTY_FIXED_DT, 1134);
+
+  const events = simulation.drainEvents();
+  assert.ok(events.some((event: any) => event.type === "fire_intent_rejected" &&
+    event.fireIntentId === 1 && event.fireStateId === 2 && event.reason === "fire-state-changed"));
+  assert.equal(events.some((event) => event.type === "shot"), false);
+  assert.equal(player.pendingFireIntents.length, 0);
+});
+
+test("blocked mole emergence and release discard stale aim before a clean repress", () => {
+  const simulation = new DustyOrbitSimulation();
+  for (const pickup of simulation.pickups) { pickup.active = false; pickup.respawnAt = 9999; }
+  const player = simulation.addPlayer("10000000-0000-4000-8000-000000000022", "Guest-0022", 1000);
+  player.weaponTier = 4;
+  player.protectedUntil = 0;
+  const safe = { x: player.x, y: player.y };
+  const blocked = DUSTY_POLYGONS[0].reduce((sum, point) => ({ x: sum.x + point.x, y: sum.y + point.y }), { x: 0, y: 0 });
+  player.x = blocked.x / DUSTY_POLYGONS[0].length;
+  player.y = blocked.y / DUSTY_POLYGONS[0].length;
+  player.moleMode = true;
+  player.moleUntil = 5000;
+  player.lastFireInput = false;
+
+  simulation.applyInput(player.id, intentInput(1, 1, 0, [
+    { id: 1, loadoutId: 1, fireStateId: 1, aimX: 1, aimY: 0 },
+  ]), 1000);
+  simulation.step(DUSTY_FIXED_DT, 1034);
+  simulation.applyInput(player.id, intentInput(2, -1, 0, [], false), 1068);
+  simulation.step(DUSTY_FIXED_DT, 1102);
+  simulation.applyInput(player.id, intentInput(3, -1, 0, [
+    { id: 2, loadoutId: 1, fireStateId: 2, aimX: -1, aimY: 0 },
+  ]), 1136);
+  // A release can supersede the unprocessed press before the next server tick.
+  // Its queued west-facing intent must be explicitly discarded.
+  simulation.applyInput(player.id, intentInput(4, -1, 0, [], false), 1170);
+  simulation.step(DUSTY_FIXED_DT, 1204);
+
+  player.x = safe.x;
+  player.y = safe.y;
+  simulation.applyInput(player.id, intentInput(5, 0, -1, [
+    { id: 3, loadoutId: 1, fireStateId: 3, aimX: 0, aimY: -1 },
+  ]), 1238);
+  simulation.step(DUSTY_FIXED_DT, 1272);
+
+  const events = simulation.drainEvents();
+  const rejected = events.filter((event) => event.type === "fire_intent_rejected") as Array<any>;
+  assert.ok(rejected.some((event) => event.fireIntentId === 1 && event.reason === "mole-emergence-blocked"));
+  assert.ok(rejected.some((event) => event.fireIntentId === 2 && event.reason === "mole-fire-released"));
+  const shots = events.filter((event) => event.type === "shot") as Array<any>;
+  assert.equal(shots.length, 1);
+  assert.equal(shots[0].fireIntentId, 3);
+  assert.equal(shots[0].projectile.inputSeq, 5);
+  assert.ok(shots[0].projectile.vy < -699 && Math.abs(shots[0].projectile.vx) < .001,
+    "the clean repress must use its north-facing aim, not either discarded mole aim");
+  assert.equal(player.moleMode, false);
+  assert.equal(player.pendingFireIntents.length, 0);
+});
+
+test("packet-bunched held input preserves the mole emergence intent from the preceding sequence", () => {
+  const simulation = new DustyOrbitSimulation();
+  for (const pickup of simulation.pickups) { pickup.active = false; pickup.respawnAt = 9999; }
+  const player = simulation.addPlayer("10000000-0000-4000-8000-000000000024", "Guest-0024", 1000);
+  player.weaponTier = 4;
+  player.protectedUntil = 0;
+  player.moleMode = true;
+  player.moleUntil = 5000;
+  player.lastFireInput = false;
+
+  simulation.applyInput(player.id, intentInput(1, 1, 0, [
+    { id: 1, loadoutId: 1, fireStateId: 1, aimX: 1, aimY: 0 },
+  ]), 1000);
+  // A subsequent 60Hz held-fire sample can arrive before the 30Hz Worker
+  // step. It carries no new cadence intent and must not expire seq 1.
+  simulation.applyInput(player.id, intentInput(2, 0, -1, []), 1001);
+  simulation.step(DUSTY_FIXED_DT, 1034);
+
+  const events = simulation.drainEvents();
+  const shots = events.filter((event) => event.type === "shot") as Array<any>;
+  assert.equal(events.some((event) => event.type === "fire_intent_rejected"), false);
+  assert.equal(shots.length, 1);
+  assert.equal(shots[0].fireIntentId, 1);
+  assert.equal(shots[0].projectile.inputSeq, 1);
+  assert.ok(shots[0].projectile.vx > 699 && Math.abs(shots[0].projectile.vy) < .001,
+    "the emergence shot must preserve seq 1's captured east-facing barrel");
+  assert.equal(player.moleMode, false);
+  assert.equal(player.pendingFireIntents.length, 0);
+});
+
+test("packet-bunched stale fire-state rejection leaves mole emergence underground and retryable", () => {
+  const simulation = new DustyOrbitSimulation();
+  for (const pickup of simulation.pickups) { pickup.active = false; pickup.respawnAt = 9999; }
+  const player = simulation.addPlayer("10000000-0000-4000-8000-000000000026", "Guest-0026", 1000);
+  player.weaponTier = 4;
+  player.protectedUntil = 0;
+  player.moleMode = true;
+  player.moleUntil = 5000;
+  player.lastFireInput = false;
+  player.fireStateId = 2;
+  simulation.drainEvents();
+
+  simulation.applyInput(player.id, intentInput(1, 1, 0, [
+    { id: 1, loadoutId: 1, fireStateId: 1, aimX: 1, aimY: 0 },
+  ]), 1000);
+  // A held sample with no new cadence intent can overtake the rejected rising
+  // edge before the Worker step. It must not cause a shotless emergence.
+  simulation.applyInput(player.id, intentInput(2, 1, 0, []), 1001);
+  simulation.step(DUSTY_FIXED_DT, 1034);
+
+  const rejectedEvents = simulation.drainEvents();
+  assert.deepEqual(rejectedEvents.filter((event) => event.type === "fire_intent_rejected").map((event: any) => ({
+    fireIntentId: event.fireIntentId,
+    fireStateId: event.fireStateId,
+    reason: event.reason,
+  })), [{ fireIntentId: 1, fireStateId: 2, reason: "fire-state-changed" }]);
+  assert.equal(rejectedEvents.some((event) => event.type === "shot" || event.type === "mole_emerged"), false);
+  assert.equal(player.moleMode, true, "the stale rejected press must leave the player underground");
+  assert.equal(player.lastFireInput, false, "the held emergence edge must remain retryable after resync");
+  assert.equal(player.pendingFireIntents.length, 0);
+
+  simulation.applyInput(player.id, intentInput(3, 0, -1, [
+    { id: 2, loadoutId: 1, fireStateId: 2, aimX: 0, aimY: -1 },
+  ]), 1068);
+  simulation.step(DUSTY_FIXED_DT, 1102);
+
+  const retryEvents = simulation.drainEvents();
+  assert.equal(retryEvents.some((event) => event.type === "fire_intent_rejected"), false);
+  assert.ok(retryEvents.some((event: any) => event.type === "mole_emerged" && event.reason === "manual"));
+  const shot = retryEvents.find((event: any) => event.type === "shot" && event.fireIntentId === 2) as any;
+  assert.ok(shot, "a fresh intent carrying fire state 2 must emerge and fire while the control remains held");
+  assert.equal(shot.projectile.inputSeq, 3);
+  assert.ok(shot.projectile.vy < -699 && Math.abs(shot.projectile.vx) < .001);
+  assert.equal(player.moleMode, false);
+  assert.equal(player.pendingFireIntents.length, 0);
+});
+
+test("full projectile capacity keeps a valid Shotgun mole ambush underground until all pellets fit", () => {
+  const simulation = new DustyOrbitSimulation();
+  for (const pickup of simulation.pickups) { pickup.active = false; pickup.respawnAt = 9999; }
+  const player = simulation.addPlayer("10000000-0000-4000-8000-000000000027", "Guest-0027", 1000);
+  player.weaponTier = 5;
+  player.protectedUntil = 0;
+  player.moleMode = true;
+  player.moleUntil = 5000;
+  player.lastFireInput = false;
+  simulation.drainEvents();
+  for (let index = 0; index < DUSTY_GAMEPLAY.maxProjectiles; index++) {
+    simulation.projectiles.push({
+      id: 1000 + index, ownerId: player.id, tier: 1,
+      x: player.x, y: player.y, vx: 0, vy: 0,
+      radius: 3, damage: 1, spawnedAt: 0, expiresAt: 9999,
+    });
+  }
+  assert.equal(simulation.projectiles.length, 300);
+
+  simulation.applyInput(player.id, intentInput(1, 1, 0, [
+    { id: 1, loadoutId: 1, fireStateId: 1, aimX: 1, aimY: 0 },
+  ]), 1000);
+  simulation.step(DUSTY_FIXED_DT, 1034);
+
+  const blockedEvents = simulation.drainEvents();
+  assert.equal(blockedEvents.some((event) => event.type === "shot" || event.type === "mole_emerged" || event.type === "fire_intent_rejected"), false);
+  assert.equal(player.moleMode, true);
+  assert.equal(player.lastFireInput, false);
+  assert.equal(player.pendingFireIntents.length, 1, "the valid ambush intent must remain queued, not consumed");
+  assert.equal(simulation.projectiles.length, 300);
+
+  simulation.projectiles.splice(0, 3);
+  simulation.step(DUSTY_FIXED_DT, 1068);
+  const firedEvents = simulation.drainEvents();
+  const shots = firedEvents.filter((event: any) => event.type === "shot" && event.fireIntentId === 1) as Array<any>;
+  assert.ok(firedEvents.some((event: any) => event.type === "mole_emerged" && event.reason === "manual"));
+  assert.equal(shots.length, 3, "all three Shotgun pellets must fit and launch atomically");
+  assert.deepEqual(shots.map((shot) => shot.pelletIndex), [0, 1, 2]);
+  assert.equal(player.moleMode, false);
+  assert.equal(player.pendingFireIntents.length, 0);
+  assert.equal(simulation.projectiles.length, 300);
+});
+
+test("cooldown drift preserves a valid mole ambush edge until its authoritative trigger time", () => {
+  const simulation = new DustyOrbitSimulation();
+  for (const pickup of simulation.pickups) { pickup.active = false; pickup.respawnAt = 9999; }
+  const player = simulation.addPlayer("10000000-0000-4000-8000-000000000028", "Guest-0028", 1000);
+  player.weaponTier = 4;
+  player.protectedUntil = 0;
+  player.moleMode = true;
+  player.moleUntil = 5000;
+  player.lastFireInput = false;
+  player.lastFireAt = 1000;
+  simulation.drainEvents();
+
+  simulation.applyInput(player.id, intentInput(1, 0, -1, [
+    { id: 1, loadoutId: 1, fireStateId: 1, aimX: 0, aimY: -1 },
+  ]), 1100);
+  simulation.step(DUSTY_FIXED_DT, 1134);
+  const coolingEvents = simulation.drainEvents();
+  assert.equal(coolingEvents.some((event) => event.type === "shot" || event.type === "mole_emerged" || event.type === "fire_intent_rejected"), false);
+  assert.equal(player.moleMode, true);
+  assert.equal(player.lastFireInput, false);
+  assert.equal(player.pendingFireIntents.length, 1);
+
+  simulation.step(DUSTY_FIXED_DT, 1220);
+  const readyEvents = simulation.drainEvents();
+  assert.ok(readyEvents.some((event: any) => event.type === "mole_emerged" && event.reason === "manual"));
+  const shot = readyEvents.find((event: any) => event.type === "shot" && event.fireIntentId === 1) as any;
+  assert.ok(shot);
+  assert.ok(shot.projectile.vy < -699 && Math.abs(shot.projectile.vx) < .001);
+  assert.equal(player.moleMode, false);
+  assert.equal(player.pendingFireIntents.length, 0);
 });
 
 test("server swept projectile collision stops Pea Shooter shots at canonical rocks", () => {

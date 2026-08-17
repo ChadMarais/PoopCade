@@ -65,6 +65,36 @@ test("input protocol carries a finite visual timeline for bounded hit rewind", (
   assert.equal("viewAt" in invalid, false);
 });
 
+test("input protocol validates bounded monotonic fire intents with immutable aim", () => {
+  const message = {
+    type: "input", seq: 10, moveX: 1, moveY: 0, aimX: 0, aimY: -1, fire: true,
+    fireMode: "intent-v1", fireIntents: [
+      { id: 41, loadoutId: 7, fireStateId: 3, aimX: 1, aimY: 0 },
+      { id: 42, loadoutId: 7, fireStateId: 3, aimX: 0, aimY: -1 },
+    ],
+  };
+  assert.deepEqual(parseClientMessage(JSON.stringify(message)), { ...message, nuke: false });
+  assert.equal(parseClientMessage(JSON.stringify({ ...message, fireIntents: [{ id: 42, loadoutId: 7, fireStateId: 3, aimX: 1, aimY: 0 }, { id: 41, loadoutId: 7, fireStateId: 3, aimX: 0, aimY: 1 }] })), null);
+  assert.equal(parseClientMessage(JSON.stringify({ ...message, fireIntents: Array.from({ length: 5 }, (_, index) => ({ id: index + 1, loadoutId: 7, fireStateId: 3, aimX: 1, aimY: 0 })) })), null);
+  assert.equal(parseClientMessage(JSON.stringify({ ...message, fireIntents: [{ id: 43, loadoutId: 7, fireStateId: 3, aimX: 0, aimY: 0 }] })), null);
+  assert.equal(parseClientMessage(JSON.stringify({ ...message, fireIntents: [{ id: 43, fireStateId: 3, aimX: 1, aimY: 0 }] })), null);
+  assert.equal(parseClientMessage(JSON.stringify({ ...message, fireIntents: [{ id: 43, loadoutId: 0, fireStateId: 3, aimX: 1, aimY: 0 }] })), null);
+  assert.equal(parseClientMessage(JSON.stringify({ ...message, fireIntents: [{ id: 43, loadoutId: 7, aimX: 1, aimY: 0 }] })), null);
+  assert.equal(parseClientMessage(JSON.stringify({ ...message, fireIntents: [{ id: 43, loadoutId: 7, fireStateId: 0, aimX: 1, aimY: 0 }] })), null);
+});
+
+test("fire-intent rejection events are routed only to the owning active player", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const source = await readFile(new URL("../src/dusty-arena.ts", import.meta.url), "utf8");
+  const flushEvents = source.slice(source.indexOf("  private flushEvents()"), source.indexOf("  private sendLobbyState("));
+  assert.match(flushEvents, /if \(event\.type === "fire_intent_rejected"[^}]+this\.sendGameplayToPlayer\(event\.playerId, event\);\s*continue;/s,
+    "rejections must leave the broadcast path through the targeted sender");
+  const targetedSender = source.slice(source.indexOf("  private sendGameplayToPlayer("), source.indexOf("\n}", source.indexOf("  private sendGameplayToPlayer(")));
+  assert.match(targetedSender, /session\.playerId !== playerId \|\| session\.role !== "active"/,
+    "the targeted sender must exclude every other player and lobby socket");
+  assert.equal(targetedSender.includes("broadcastGameplay"), false);
+});
+
 test("authoritative capacity accepts 15 active players, rejects player 16, then releases a deliberate leave", () => {
   const simulation = new DustyOrbitSimulation(() => .5);
   assert.equal(DUSTY_MAX_PLAYERS, 15);

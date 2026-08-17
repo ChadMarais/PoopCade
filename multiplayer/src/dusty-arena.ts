@@ -271,9 +271,16 @@ export class DustyOrbitArena extends DurableObject<Env> {
       return;
     }
     if (session.role !== "active") return;
-    this.simulation.noteMessage(session.playerId, now);
-    if (message.type === "debug_powerup") { if (session.debug) this.simulation.debugGrantPowerup(session.playerId, message.powerup, now); return; }
-    if (message.type === "debug_nuke") { if (session.debug) this.simulation.debugArmNuke(session.playerId); return; }
+    if (message.type === "debug_powerup") {
+      this.simulation.noteMessage(session.playerId, now);
+      if (session.debug) this.simulation.debugGrantPowerup(session.playerId, message.powerup, now);
+      return;
+    }
+    if (message.type === "debug_nuke") {
+      this.simulation.noteMessage(session.playerId, now);
+      if (session.debug) this.simulation.debugArmNuke(session.playerId);
+      return;
+    }
     this.simulation.applyInput(session.playerId, message, now);
   }
 
@@ -309,9 +316,14 @@ export class DustyOrbitArena extends DurableObject<Env> {
       map: this.simulation.mapRuntime.map,
       collision: this.collision,
       rates: { tick: DUSTY_TICK_RATE, snapshot: DUSTY_SNAPSHOT_RATE, interpolationMs: 100 },
+      fireProtocol: "intent-v1",
       weapons: DUSTY_WEAPONS,
       gameplay: DUSTY_GAMEPLAY,
-      player: { id: player.id, x: player.x, y: player.y, lastInputSeq: player.lastInputSeq, skinId: player.skinId, joinedAt: player.joinedAt },
+      player: {
+        id: player.id, x: player.x, y: player.y, lastInputSeq: player.lastInputSeq,
+        lastFireIntentId: player.lastFireIntentId, loadoutId: player.loadoutId, fireStateId: player.fireStateId,
+        skinId: player.skinId, joinedAt: player.joinedAt,
+      },
       maxPlayers: this.simulation.maxPlayers,
     }));
   }
@@ -383,6 +395,10 @@ export class DustyOrbitArena extends DurableObject<Env> {
         }
         continue;
       }
+      if (event.type === "fire_intent_rejected" && typeof event.playerId === "string") {
+        this.sendGameplayToPlayer(event.playerId, event);
+        continue;
+      }
       this.broadcastGameplay(event);
     }
     if (rosterChanged) this.broadcastLobbyState();
@@ -420,6 +436,14 @@ export class DustyOrbitArena extends DurableObject<Env> {
     const encoded = encode(message);
     for (const [socket, session] of this.sessions) {
       if (session.role !== "active" || socket.readyState !== 1) continue;
+      try { socket.send(encoded); } catch {}
+    }
+  }
+
+  private sendGameplayToPlayer(playerId: string, message: unknown): void {
+    const encoded = encode(message);
+    for (const [socket, session] of this.sessions) {
+      if (session.playerId !== playerId || session.role !== "active" || socket.readyState !== 1) continue;
       try { socket.send(encoded); } catch {}
     }
   }

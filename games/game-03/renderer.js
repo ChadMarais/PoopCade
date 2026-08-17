@@ -177,6 +177,12 @@ export class DustyOrbitMultiplayerRenderer {
     this.effects = [];
     this.localProjectiles = new Map();
     this.pendingLocalShotConfirmations = [];
+    this.localInputPoses = new Map();
+    this.predictedShotGroups = new Map();
+    this.preparedLocalInputs = new Map();
+    this.nextPredictedProjectileId = -1;
+    this.nextFireIntentId = 0;
+    this.localFirePrediction = null;
     this.lastLocalLaunch = null;
     this.hitUntil = new Map();
     this.spawnAnimations = new Map();
@@ -229,10 +235,271 @@ export class DustyOrbitMultiplayerRenderer {
     this.effects.push({ x: event.x, y: event.y, born: performance.now(), life: 280 });
   }
 
-  clearLocalShotHistory() {
+  clearLocalShotHistory(lastFireIntentId = 0) {
     this.localProjectiles.clear();
     this.pendingLocalShotConfirmations.length = 0;
+    this.localInputPoses.clear();
+    this.predictedShotGroups.clear();
+    this.preparedLocalInputs.clear();
+    this.nextPredictedProjectileId = -1;
+    this.nextFireIntentId = Number.isSafeInteger(lastFireIntentId) ? Math.max(0, lastFireIntentId) : 0;
+    this.localFirePrediction = null;
     this.lastLocalLaunch = null;
+  }
+
+  captureLocalInputPose(input, now = performance.now()) {
+    if (!Number.isSafeInteger(input?.seq)) return null;
+    const pose = this.weaponPoses.get(this.localPlayerId);
+    if (!pose?.muzzleWorld || !pose?.forward) return null;
+    const captured = {
+      ...pose,
+      muzzleWorld: { ...pose.muzzleWorld },
+      pivotWorld: pose.pivotWorld ? { ...pose.pivotWorld } : undefined,
+      forward: { ...pose.forward },
+      perpendicular: pose.perpendicular ? { ...pose.perpendicular } : undefined,
+      inputSeq: input.seq,
+      capturedAt: now,
+    };
+    this.localInputPoses.set(input.seq, captured);
+    while (this.localInputPoses.size > 180) this.localInputPoses.delete(this.localInputPoses.keys().next().value);
+    return captured;
+  }
+
+  resetLocalFirePrediction(lastFireIntentId = this.nextFireIntentId, dropUnconfirmed = true) {
+    if (dropUnconfirmed) {
+      for (const group of this.predictedShotGroups.values()) for (const predicted of group.projectiles) {
+        if (!predicted.confirmed) this.localProjectiles.delete(predicted.tempId);
+      }
+      this.predictedShotGroups.clear();
+    }
+    this.preparedLocalInputs?.clear();
+    this.nextFireIntentId = Math.max(this.nextFireIntentId, Number.isSafeInteger(lastFireIntentId) ? lastFireIntentId : 0);
+    this.localFirePrediction = null;
+  }
+
+  localWeaponPredictionKey(weapon, weaponState) {
+    const spreads = Array.isArray(weapon?.spreadDegrees) ? weapon.spreadDegrees.join(",") : "0";
+    return [weaponState?.loadoutId ?? "legacy", weaponState?.fireStateId ?? "legacy-fire", weapon?.tier, weapon?.visualTier, weapon?.name,
+      weapon?.cooldownMs, weapon?.speed, weapon?.lifetimeMs, weapon?.count, weapon?.burstSpacingMs, spreads].join(":");
+  }
+
+  configureLocalFirePrediction(weapon, weaponState, serverNow) {
+    const key = this.localWeaponPredictionKey(weapon, weaponState);
+    const acknowledgedIntent = Number.isSafeInteger(weaponState?.lastFireIntentId) ? weaponState.lastFireIntentId : 0;
+    this.nextFireIntentId = Math.max(this.nextFireIntentId, acknowledgedIntent);
+    if (this.localFirePrediction?.key === key) {
+      // Server ticks can accept a locally predicted trigger a fraction later
+      // than the render frame that displayed it. Move the mirrored gates only
+      // forward when snapshots reveal that delay; never rewind and duplicate
+      // an intent that the client has already emitted.
+      if (Number.isFinite(weaponState?.nextTriggerAt)) {
+        this.localFirePrediction.nextTriggerAt = Math.max(this.localFirePrediction.nextTriggerAt, weaponState.nextTriggerAt);
+      }
+      if (this.localFirePrediction.burstRemaining > 0 && Number.isFinite(weaponState?.nextBurstAt)) {
+        this.localFirePrediction.nextBurstAt = Math.max(this.localFirePrediction.nextBurstAt, weaponState.nextBurstAt);
+      }
+      return this.localFirePrediction;
+    }
+    this.resetLocalFirePrediction(acknowledgedIntent, true);
+    this.localFirePrediction = {
+      key,
+      loadoutId: Number.isSafeInteger(weaponState?.loadoutId) ? weaponState.loadoutId : 1,
+      fireStateId: Number.isSafeInteger(weaponState?.fireStateId) ? weaponState.fireStateId : 1,
+      nextTriggerAt: Number.isFinite(weaponState?.nextTriggerAt) ? Math.max(serverNow, weaponState.nextTriggerAt) : serverNow,
+      burstRemaining: Math.max(0, Math.round(Number(weaponState?.burstRemaining) || 0)),
+      nextBurstAt: Number.isFinite(weaponState?.nextBurstAt) ? weaponState.nextBurstAt : serverNow,
+    };
+    return this.localFirePrediction;
+  }
+
+  pruneLocalShotPredictions(now = performance.now()) {
+    for (const [intentId, group] of this.predictedShotGroups) {
+      const allConfirmed = group.projectiles.every((projectile) => projectile.confirmed);
+      if ((allConfirmed && now - group.createdAt > 750) || now - group.createdAt > 1800) {
+        for (const predicted of group.projectiles) if (!predicted.confirmed) this.localProjectiles.delete(predicted.tempId);
+        this.predictedShotGroups.delete(intentId);
+      }
+    }
+  }
+
+  prepareLocalInput(input, player, weapon, options = {}) {
+    const localNow = Number.isFinite(options.localNow) ? options.localNow : performance.now();
+    const serverNow = Number.isFinite(options.serverNow) ? options.serverNow : Date.now();
+    const pose = this.captureLocalInputPose(input, localNow);
+    this.pruneLocalShotPredictions(localNow);
+    if (!player?.alive || !weapon || !Number.isFinite(weapon.cooldownMs) || !Number.isFinite(weapon.speed)) return [];
+    const state = this.configureLocalFirePrediction(weapon, options.weaponState, serverNow);
+    const intents = [];
+    const predictions = [];
+    const before = {
+      nextFireIntentId: this.nextFireIntentId,
+      nextTriggerAt: state.nextTriggerAt,
+      burstRemaining: state.burstRemaining,
+      nextBurstAt: state.nextBurstAt,
+    };
+    const finish = () => {
+      if (intents.length) this.preparedLocalInputs.set(input.seq, {
+        key: state.key,
+        before,
+        afterFireIntentId: this.nextFireIntentId,
+        predictions,
+      });
+      return intents;
+    };
+    const count = clamp(Math.round(Number(weapon.count) || 1), 1, 24);
+    const burstSpacingMs = Math.max(0, Number(weapon.burstSpacingMs) || 0);
+    const cooldownMs = Math.max(50, Number(weapon.cooldownMs) || 50);
+    const spreadDegrees = Array.isArray(weapon.spreadDegrees) && weapon.spreadDegrees.length ? weapon.spreadDegrees : [0];
+    const speedMultiplier = Number.isFinite(options.speedMultiplier) ? Math.max(.1, options.speedMultiplier) : 1;
+    const createIntent = (spreads) => {
+      if (intents.length >= 4) return false;
+      const rawLength = Math.hypot(input.aimX || 0, input.aimY || 0);
+      const aim = rawLength > .001 ? { x: input.aimX / rawLength, y: input.aimY / rawLength } : pose?.forward;
+      if (!aim) return false;
+      const intent = {
+        id: ++this.nextFireIntentId, loadoutId: state.loadoutId, fireStateId: state.fireStateId,
+        aimX: aim.x, aimY: aim.y,
+      };
+      intents.push(intent);
+      if (pose) predictions.push({ intent, inputSeq: input.seq, pose, weapon, spreads, speedMultiplier, localNow });
+      return true;
+    };
+
+    if (state.burstRemaining > 0 && state.nextBurstAt < serverNow - 250) state.nextBurstAt = serverNow;
+    while (state.burstRemaining > 0 && serverNow >= state.nextBurstAt && intents.length < 4) {
+      if (!createIntent([0])) break;
+      state.burstRemaining--;
+      state.nextBurstAt += burstSpacingMs;
+    }
+    if (state.burstRemaining > 0 || !input.fire || intents.length >= 4) return finish();
+    if (state.nextTriggerAt < serverNow - 250) state.nextTriggerAt = serverNow;
+    if (serverNow < state.nextTriggerAt) return finish();
+
+    state.nextTriggerAt = serverNow + cooldownMs;
+    if (burstSpacingMs > 0 && count > 1) {
+      state.burstRemaining = count;
+      state.nextBurstAt = serverNow;
+      while (state.burstRemaining > 0 && serverNow >= state.nextBurstAt && intents.length < 4) {
+        if (!createIntent([0])) break;
+        state.burstRemaining--;
+        state.nextBurstAt += burstSpacingMs;
+      }
+    } else createIntent(spreadDegrees);
+    return finish();
+  }
+
+  commitLocalInput(inputSeq) {
+    const prepared = this.preparedLocalInputs?.get(inputSeq);
+    if (!prepared) return 0;
+    this.preparedLocalInputs.delete(inputSeq);
+    for (const prediction of prepared.predictions) this.predictLocalShot(prediction);
+    return prepared.predictions.length;
+  }
+
+  rollbackLocalInput(inputSeq) {
+    const prepared = this.preparedLocalInputs?.get(inputSeq);
+    if (!prepared) return;
+    this.preparedLocalInputs.delete(inputSeq);
+    const state = this.localFirePrediction;
+    if (state?.key === prepared.key && this.nextFireIntentId === prepared.afterFireIntentId) {
+      state.nextTriggerAt = prepared.before.nextTriggerAt;
+      state.burstRemaining = prepared.before.burstRemaining;
+      state.nextBurstAt = prepared.before.nextBurstAt;
+      this.nextFireIntentId = prepared.before.nextFireIntentId;
+    }
+    this.localInputPoses?.delete(inputSeq);
+  }
+
+  rejectLocalFireIntent(intentId) {
+    if (!Number.isSafeInteger(intentId)) return;
+    const group = this.predictedShotGroups?.get(intentId);
+    if (!group) return;
+    for (const predicted of group.projectiles) if (!predicted.confirmed) this.localProjectiles.delete(predicted.tempId);
+    this.predictedShotGroups.delete(intentId);
+  }
+
+  predictLocalShot({ intent, inputSeq, pose, weapon, spreads, speedMultiplier, localNow }) {
+    const visualTier = Number.isFinite(weapon.visualTier) ? weapon.visualTier : Number.isFinite(weapon.tier) ? weapon.tier : 1;
+    const speed = Math.max(1, Number(weapon.speed) || 1) * speedMultiplier;
+    const life = clamp((Math.max(100, Number(weapon.lifetimeMs) || 100) / speedMultiplier), 100, 3000);
+    const radius = Math.max(.5, Number(weapon.radius) || 3);
+    const group = {
+      intentId: intent.id,
+      inputSeq,
+      createdAt: localNow,
+      pose: { ...pose, muzzleWorld: { ...pose.muzzleWorld }, forward: { ...pose.forward } },
+      projectiles: [],
+    };
+    for (let pelletIndex = 0; pelletIndex < spreads.length; pelletIndex++) {
+      const radians = (Number(spreads[pelletIndex]) || 0) * Math.PI / 180;
+      const cosine = Math.cos(radians), sine = Math.sin(radians);
+      const direction = {
+        x: intent.aimX * cosine - intent.aimY * sine,
+        y: intent.aimX * sine + intent.aimY * cosine,
+      };
+      const tempId = this.nextPredictedProjectileId--;
+      this.localProjectiles.set(tempId, {
+        id: tempId, ownerId: this.localPlayerId, tier: visualTier,
+        vx: direction.x * speed, vy: direction.y * speed, radius,
+        startX: pose.muzzleWorld.x, startY: pose.muzzleWorld.y,
+        previousX: pose.muzzleWorld.x, previousY: pose.muzzleWorld.y,
+        born: localNow, life, firstFrame: true,
+        fireIntentId: intent.id, inputSeq, pelletIndex, pelletCount: spreads.length,
+        predicted: true,
+      });
+      group.projectiles.push({ tempId, pelletIndex, direction, confirmed: false });
+    }
+    this.predictedShotGroups.set(intent.id, group);
+    const visual = weaponVisualForTier(visualTier);
+    this.weaponRecoil.set(this.localPlayerId, { born: localNow, life: visual.recoilMs, distance: visual.recoilDistance });
+    this.effects.push({
+      type: "weapon-muzzle", tier: visualTier, x: pose.muzzleWorld.x, y: pose.muzzleWorld.y,
+      angle: Math.atan2(intent.aimY, intent.aimX), size: visual.flashSize, born: localNow,
+      life: visualTier === 6 ? 175 : visualTier === 1 ? 85 : 115,
+    });
+    this.emitWeaponAudioCue({ playerId: this.localPlayerId, fireIntentId: intent.id, projectile: { tier: visualTier } }, pose.muzzleWorld);
+    const first = group.projectiles[0];
+    if (first) this.lastLocalLaunch = {
+      projectileId: first.tempId,
+      fireIntentId: intent.id,
+      muzzleWorld: { ...pose.muzzleWorld },
+      direction: { x: intent.aimX, y: intent.aimY },
+      firstRenderError: null,
+      predicted: true,
+    };
+  }
+
+  reconcilePredictedShot(event) {
+    const projectile = event?.projectile;
+    const intentId = Number.isSafeInteger(event?.fireIntentId) ? event.fireIntentId : projectile?.fireIntentId;
+    if (!Number.isSafeInteger(intentId)) return false;
+    const group = this.predictedShotGroups?.get(intentId);
+    if (!group) return false;
+    const pelletIndex = Number.isSafeInteger(event?.pelletIndex) ? event.pelletIndex
+      : Number.isSafeInteger(projectile?.pelletIndex) ? projectile.pelletIndex : 0;
+    const predicted = group.projectiles.find((item) => item.pelletIndex === pelletIndex);
+    if (!predicted) return false;
+    if (predicted.confirmed) return true;
+    predicted.confirmed = true;
+    const visualProjectile = this.localProjectiles.get(predicted.tempId);
+    if (!visualProjectile) return true;
+    this.localProjectiles.delete(predicted.tempId);
+    const life = clamp((projectile.expiresAt || 0) - (projectile.spawnedAt || 0), 100, 3000);
+    const reconciled = {
+      ...visualProjectile,
+      ...projectile,
+      startX: visualProjectile.startX,
+      startY: visualProjectile.startY,
+      previousX: visualProjectile.previousX,
+      previousY: visualProjectile.previousY,
+      born: visualProjectile.born,
+      firstFrame: visualProjectile.firstFrame,
+      life,
+      predicted: false,
+    };
+    this.localProjectiles.set(projectile.id, reconciled);
+    if (this.lastLocalLaunch?.projectileId === predicted.tempId) this.lastLocalLaunch.projectileId = projectile.id;
+    return true;
   }
 
   confirmShot(event, local = false) {
@@ -242,16 +509,21 @@ export class DustyOrbitMultiplayerRenderer {
     const speed = Math.hypot(projectile.vx, projectile.vy);
     if (speed < .001) return;
     if (local) {
-      // A WebSocket callback can run between animation frames, when
-      // weaponPoses still describes the previous frame. Defer local launch
-      // until render() has calculated this frame's exact visible nozzle.
-      this.pendingLocalShotConfirmations.push(event);
+      // Intent-based shots already left the exact visible muzzle before the
+      // network round trip. Confirmation adopts that projectile in place.
+      if (this.reconcilePredictedShot(event)) return;
+      // Legacy/unmatched events may be delayed, but must still use the pose
+      // captured for their own input sequence. Never splice an old direction
+      // onto whichever way the gun happens to point on receipt.
+      const historicalPose = this.localInputPoses?.get(projectile.inputSeq);
+      this.materializeShot(event, true, historicalPose || null);
       return;
     }
-    this.materializeShot(event, false, this.weaponPoses.get(event.playerId));
+    this.materializeShot(event, false, null);
   }
 
   shotGroupKey(event) {
+    if (Number.isSafeInteger(event?.fireIntentId)) return `intent:${event.fireIntentId}`;
     if (Number.isSafeInteger(event?.shotId)) return `shot:${event.shotId}`;
     const projectile = event?.projectile || {};
     return `legacy:${event?.playerId}:${projectile.inputSeq}:${projectile.spawnedAt}`;
@@ -329,14 +601,11 @@ export class DustyOrbitMultiplayerRenderer {
 
   flushLocalShotConfirmations() {
     if (!this.pendingLocalShotConfirmations.length) return;
-    const currentPose = this.weaponPoses.get(this.localPlayerId);
-    if (!currentPose) return;
-    // Only one barrel discharge is materialized per render frame. If several
-    // confirmations arrive between frames, sample the current rendered muzzle
-    // independently for each discharge rather than reusing an older pose.
-    const group = this.pendingLocalLaunchGroup();
-    const confirmations = this.pendingLocalShotConfirmations.splice(0, group.length);
-    for (const event of confirmations) this.materializeShot(event, true, currentPose);
+    const confirmations = this.pendingLocalShotConfirmations.splice(0);
+    for (const event of confirmations) {
+      const historicalPose = this.localInputPoses?.get(event?.projectile?.inputSeq);
+      this.materializeShot(event, true, historicalPose || null);
+    }
   }
 
   playerHit(id) { this.hitUntil.set(id, performance.now() + 180); }
@@ -427,7 +696,7 @@ export class DustyOrbitMultiplayerRenderer {
     this.uplink = { active, phase: active ? "linked" : "lost", changedAt: performance.now() };
   }
 
-  render(snapshot, localId, predicted, delta, inputVisual) {
+  render(snapshot, localId, predicted, delta, inputVisual, onLocalPoseReady = null) {
     const { ctx } = this;
     const { width, height, dpr } = this.viewport;
     const now = performance.now();
@@ -494,6 +763,11 @@ export class DustyOrbitMultiplayerRenderer {
     // Labels are a world-space readability layer so nearby players and rocks
     // cannot cover the name while deciding whether to collect a power-up.
     for (const pickup of snapshot?.pickups || []) this.drawPickupLabel(pickup);
+    // Prediction and transmission run at this exact point: drawPlayer() has
+    // produced the visible muzzle, while muzzle light and projectiles have not
+    // been painted yet. A locally predicted round therefore appears at that
+    // nozzle in the same animation frame as its immutable fire intent.
+    if (typeof onLocalPoseReady === "function") onLocalPoseReady(this.weaponPoses.get(localId) || null);
     // drawPlayer() above has just produced the exact visible gun pose for this
     // frame. Only now may a local projectile acquire its start coordinate.
     this.flushLocalShotConfirmations();

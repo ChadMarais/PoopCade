@@ -232,6 +232,24 @@ test("a quick drag-release preserves its shot direction until acknowledgement", 
   assert.ok(queued.aimX < -.85); assert.equal(queued.fire, true);
 });
 
+test("acknowledging one mobile shot preserves aim readiness while the fire pointer is still held", () => {
+  const controller = Object.create(InputController.prototype);
+  Object.assign(controller, {
+    mouseFireQueuedUntil: 100,
+    touchFireQueuedUntil: 100,
+    touchFireAimGraceUntil: 100,
+    touchFireAimReady: true,
+    firePointerId: 9,
+    moveTouch: { x: 0, y: 0 },
+    aimTouch: { x: 0, y: -1, firing: true },
+  });
+  controller.acknowledgeFire();
+  assert.equal(controller.touchFireAimReady, true, "held auto-fire must remain armed after every confirmed round");
+  controller.firePointerId = null;
+  controller.acknowledgeFire();
+  assert.equal(controller.touchFireAimReady, false, "readiness resets once the press has ended");
+});
+
 test("collision editing neutralizes movement and fire until the editor is closed", () => {
   class FakeElement {
     constructor() {

@@ -3,8 +3,8 @@ import { CollisionEditor } from "./collision-editor.js?v=20260815-15";
 import { loadDustyOrbitAssets } from "./assets.js?v=20260817-2";
 import { PRODUCTION_ARENA_WSS } from "./config.js?v=20260812";
 import { MAP_CATALOG, mapCatalogEntry } from "./maps/catalog.js?v=20260814-2";
-import { DustyOrbitMultiplayerRenderer } from "./renderer.js?v=20260817-3";
-import { InputController } from "./input.js?v=20260813-3";
+import { DustyOrbitMultiplayerRenderer } from "./renderer.js?v=20260817-5";
+import { InputController } from "./input.js?v=20260817-1";
 import { claimSessionIdentity, resolvePoopcadePlayerIdentity } from "./identity.js?v=20260813-2";
 import { ArenaNetwork } from "./network.js?v=20260814-2";
 import { consumeFixedStep, convergeVisualPosition } from "./timing.js?v=20260813-2";
@@ -181,6 +181,9 @@ let fpsWindow = performance.now();
 const inputStepTimes = [];
 let serverRates = { tick: 30, snapshot: 15, interpolationMs: 100 };
 let weaponDefinitions = [{ tier: 1, name: "PEA SHOOTER" }];
+let fireProtocol = null;
+let localGeneratedWeapon = null;
+let localGeneratedWeaponState = null;
 let gameplay = { baseMovementSpeed: FALLBACK_PLAYER_SPEED, speedMultiplier: 2, nukeRequirement: 10 };
 let latestAim = { x: 1, y: 0 };
 let reconciliationError = 0;
@@ -317,6 +320,7 @@ network = new ArenaNetwork({
     if (state !== "online") {
       resumeAfterReconnect = interruptedGameplay && state !== "failed";
       joined = false;
+      fireProtocol = null;
       input.reset();
       pending = [];
       renderer.clearLocalShotHistory();
@@ -387,11 +391,14 @@ network = new ArenaNetwork({
       preloadCharacterSkin(message.player?.skinId);
       localId = message.playerId;
       serverRates = message.rates || serverRates;
+      fireProtocol = message.fireProtocol === "intent-v1" ? "intent-v1" : null;
       weaponDefinitions = Array.isArray(message.weapons) && message.weapons.length ? message.weapons : weaponDefinitions;
+      localGeneratedWeapon = null;
+      localGeneratedWeaponState = null;
       gameplay = { ...gameplay, ...(message.gameplay || {}) };
       seq = Number.isSafeInteger(message.player?.lastInputSeq) ? message.player.lastInputSeq : 0;
       pending = [];
-      renderer.clearLocalShotHistory();
+      renderer.clearLocalShotHistory(message.player?.lastFireIntentId);
       sendAccumulator = 0;
       inputStepTimes.length = 0;
       localSpeedBoostUntil = 0;
@@ -411,6 +418,9 @@ network = new ArenaNetwork({
     if (message.type === "snapshot") {
       for (const player of message.players || []) preloadCharacterSkin(player.skinId);
       latestSnapshot = message;
+      const localPlayer = message.players?.find((item) => item.id === localId);
+      localGeneratedWeapon = localPlayer?.randomWeapon && message.you?.weapon?.generated ? message.you.weapon : null;
+      localGeneratedWeaponState = localGeneratedWeapon ? message.you?.weaponState : null;
       highscoreTracker.observe(message.players?.find((item) => item.id === localId));
       reconcile(message); return;
     }
@@ -443,8 +453,15 @@ network = new ArenaNetwork({
     }
     if (message.type === "weapon_generation_started" && message.playerId === localId) addEvent("RANDOM WEAPON GENERATOR · CREATING WEAPON · 5.0s");
     if (message.type === "weapon_generation_cancelled" && message.playerId === localId) addEvent("WEAPON GENERATION CANCELLED · STAY CLOSE");
+    if (message.type === "fire_intent_rejected" && message.playerId === localId) {
+      renderer.rejectLocalFireIntent(message.fireIntentId);
+      return;
+    }
     if (message.type === "weapon_generated" && message.playerId === localId) {
       const weapon = message.weapon || {};
+      localGeneratedWeapon = weapon;
+      localGeneratedWeaponState = message.weaponState || null;
+      renderer.resetLocalFirePrediction();
       const callout = `${weapon.name || "GENERATED"} · ${weapon.rarity || "AVERAGE"} WEAPON`;
       showWeaponReveal(weapon);
       addEvent(`${callout} · GENERATOR COOLING DOWN 10s`);
@@ -463,6 +480,9 @@ network = new ArenaNetwork({
       audio.death(message);
       if (message.victimId === localId) {
         localSpeedBoostUntil = 0;
+        localGeneratedWeapon = null;
+        localGeneratedWeaponState = null;
+        renderer.resetLocalFirePrediction();
         addEvent(message.randomWeaponLost ? `RANDOM WEAPON LOST · RESTORING T${message.restoredWeaponTier}` : "YOU ARE DOWN · RESPAWNING IN 2s");
       }
     }
@@ -537,11 +557,37 @@ function reconcile(snapshot) {
   }
 }
 
-function sendInput(sample) {
+function currentWeaponDefinition(player) {
+  if (localGeneratedWeapon) return localGeneratedWeapon;
+  if (latestSnapshot?.you?.weapon) return latestSnapshot.you.weapon;
+  if (player?.randomWeapon?.cooldownMs) return player.randomWeapon;
+  return weaponDefinitions.find((item) => item.tier === player?.weaponTier) || weaponDefinitions[0];
+}
+
+function sendInput(sample, player) {
   const interpolationMs = Number.isFinite(serverRates.interpolationMs) ? serverRates.interpolationMs : 100;
   const viewAt = Math.max(0, Math.round(Date.now() - network.clockOffsetMs - interpolationMs));
   const message = { type: "input", seq: ++seq, moveX: finiteAxis(sample.moveX), moveY: finiteAxis(sample.moveY), aimX: finiteAxis(sample.aimX, 1), aimY: finiteAxis(sample.aimY), fire: Boolean(sample.fire), nuke: performance.now() < nukeQueuedUntil, viewAt };
-  if (!network.sendInput(message)) return null;
+  if (fireProtocol === "intent-v1") {
+    message.fireMode = "intent-v1";
+    message.fireIntents = renderer.prepareLocalInput(message, player, currentWeaponDefinition(player), {
+      localNow: performance.now(),
+      serverNow: Date.now() - network.clockOffsetMs,
+      speedMultiplier: turboActive(player) ? gameplay.speedMultiplier : 1,
+      weaponState: localGeneratedWeaponState || latestSnapshot?.you?.weaponState,
+    });
+  } else renderer.captureLocalInputPose(message);
+  if (!network.sendInput(message)) {
+    if (fireProtocol === "intent-v1") renderer.rollbackLocalInput(message.seq);
+    return null;
+  }
+  if (fireProtocol === "intent-v1") {
+    renderer.commitLocalInput(message.seq);
+    // Clear a released mouse/touch tap as soon as its one trigger intent is
+    // actually on the wire. A physically held pointer remains armed, so true
+    // autofire continues without turning an 800 ms tap buffer into a burst.
+    if (message.fireIntents.length) input.acknowledgeFire();
+  }
   pending.push(message);
   if (pending.length > 90) pending.shift();
   return message;
@@ -626,9 +672,11 @@ function frame(now) {
   previousFrame = now;
   const snapshot = network.interpolatedSnapshot(Date.now(), localId);
   let frameSample = null;
+  let framePlayer = null;
   let sendFrameInput = false;
   if (connectionState === "online" && joined && !document.hidden && snapshot) {
     const player = latestSnapshot?.players?.find((item) => item.id === localId);
+    framePlayer = player;
     if (!finitePoint(predicted) && finitePoint(player)) predicted = { x: player.x, y: player.y };
     input.setAimOrigin(renderer.getDebugState().playerScreen);
     const sample = input.sample(now);
@@ -668,15 +716,18 @@ function frame(now) {
     const visualIntegrated = applyMovement(visualPredicted || visualTarget, sample, delta, player);
     visualPredicted = convergeVisualPosition(visualIntegrated, visualTarget, delta, turboActive(player) ? 6 : 8);
   }
-  if (applicationState === "PLAYING") renderer.render(snapshot || latestSnapshot, localId, visualPredicted || predicted, delta, input.getVisualState());
-  // Render the current input before transmitting it so the visible gun never
-  // lags behind the aim sample that the server will process.
-  if (sendFrameInput && frameSample) {
-    const sent = sendInput(frameSample);
-    if (sent) {
-      inputStepTimes.push(now);
-    }
-  }
+  if (applicationState === "PLAYING") renderer.render(
+    snapshot || latestSnapshot,
+    localId,
+    visualPredicted || predicted,
+    delta,
+    input.getVisualState(),
+    sendFrameInput && frameSample ? () => {
+      // drawPlayer() has produced the exact current muzzle before this callback;
+      // prediction, transmission, flash, and the projectile now share one pose.
+      if (sendInput(frameSample, framePlayer)) inputStepTimes.push(now);
+    } : null,
+  );
   fpsFrames++;
   if (now - fpsWindow >= 500) { fps = Math.round(fpsFrames * 1000 / (now - fpsWindow)); fpsFrames = 0; fpsWindow = now; updateHud(latestSnapshot); }
   requestAnimationFrame(frame);

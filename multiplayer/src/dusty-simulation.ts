@@ -9,7 +9,7 @@ import {
   type Point,
 } from "./dusty-map.ts";
 import { DUSTY_GAMEPLAY, DUSTY_WEAPONS, POWERUP_TYPES, generateRandomWeapon, weaponForTier, type GeneratedWeaponDefinition, type PowerupType, type WeaponDefinition } from "./dusty-gameplay.ts";
-import type { ClientInput } from "./protocol.ts";
+import type { ClientFireIntent, ClientInput } from "./protocol.ts";
 import { DEFAULT_CHARACTER_SKIN_ID, characterSkinById, validCharacterSkinId } from "../../games/game-03/character-skins.js";
 
 export const DUSTY_TICK_RATE = 30;
@@ -49,6 +49,7 @@ export type DustyPlayer = {
   lastInputAt: number; lastMessageAt: number; lastInputSeq: number; lastFireAt: number;
   lastFireInput: boolean; suppressFireUntilRelease: boolean; lastNukeInput: boolean;
   burstRemaining: number; burstIndex: number; nextBurstAt: number;
+  usesFireIntents: boolean; lastFireIntentId: number; pendingFireIntents: DustyFireIntent[]; loadoutId: number; fireStateId: number;
   disconnectedAt: number; color: string; lastProcessedInputSeq: number;
   input: ClientInput; pendingInput: ClientInput | null;
 };
@@ -56,9 +57,11 @@ export type DustyPlayer = {
 export type DustyProjectile = {
   id: number; ownerId: string; tier: number; x: number; y: number; vx: number; vy: number;
   radius: number; damage: number; spawnedAt: number; expiresAt: number; inputSeq?: number; rewindMs?: number;
+  fireIntentId?: number; pelletIndex?: number; pelletCount?: number;
 };
 
 type DustyPositionSample = { at: number; x: number; y: number };
+type DustyFireIntent = ClientFireIntent & { inputSeq: number; receivedAt: number; viewAt?: number };
 type DustyWeaponStationState = { userId: string | null; startedAt: number; cooldownUntil: number };
 
 export type DustyPickup = {
@@ -163,6 +166,22 @@ export class DustyOrbitSimulation {
     this.maintainPickups(0);
   }
 
+  private rejectFireIntent(player: DustyPlayer, intent: DustyFireIntent, reason: string): void {
+    this.events.push({
+      type: "fire_intent_rejected", playerId: player.id, fireIntentId: intent.id,
+      loadoutId: player.loadoutId, fireStateId: player.fireStateId, reason,
+    });
+  }
+
+  private clearFireIntentState(player: DustyPlayer, reason: string, notify = false, advanceFireState = true): void {
+    if (advanceFireState) player.fireStateId++;
+    if (notify) for (const intent of player.pendingFireIntents) this.rejectFireIntent(player, intent, reason);
+    player.pendingFireIntents.length = 0;
+    player.burstRemaining = 0;
+    player.burstIndex = 0;
+    player.nextBurstAt = 0;
+  }
+
   addPlayer(id: string, name: string, now: number, options: { skinId?: string; joinedAt?: number } = {}): DustyPlayer {
     const existing = this.players.get(id);
     if (existing) {
@@ -185,7 +204,7 @@ export class DustyOrbitSimulation {
       protectedUntil: now + DUSTY_SPAWN_PROTECTION_MS, lastInputAt: now, lastMessageAt: now,
       lastInputSeq: 0, lastFireAt: Number.NEGATIVE_INFINITY, lastFireInput: false,
       suppressFireUntilRelease: false, lastNukeInput: false, burstRemaining: 0, burstIndex: 0,
-      nextBurstAt: 0, disconnectedAt: 0,
+      nextBurstAt: 0, usesFireIntents: false, lastFireIntentId: 0, pendingFireIntents: [], loadoutId: 1, fireStateId: 1, disconnectedAt: 0,
       lastProcessedInputSeq: 0, color: COLORS[this.players.size % COLORS.length], input: { ...EMPTY_INPUT }, pendingInput: null,
     };
     this.players.set(id, player);
@@ -198,7 +217,8 @@ export class DustyOrbitSimulation {
   markDisconnected(id: string, now: number): void {
     const player = this.players.get(id);
     if (!player) return;
-    player.disconnectedAt = now; player.pendingInput = null;
+    player.disconnectedAt = now; player.pendingInput = null; player.usesFireIntents = false;
+    this.clearFireIntentState(player, "disconnect");
     player.connectedSatelliteId = null; player.connectedHealingStationId = null; player.healingNextAt = 0;
     this.releaseWeaponStation(player, "disconnect");
     player.input = { ...player.input, moveX: 0, moveY: 0, fire: false, nuke: false };
@@ -225,6 +245,54 @@ export class DustyOrbitSimulation {
       ...input, moveX: move.length > 1 ? move.x : input.moveX, moveY: move.length > 1 ? move.y : input.moveY,
       aimX: aim.length ? aim.x : player.aimX, aimY: aim.length ? aim.y : player.aimY, nuke: input.nuke === true,
     };
+    const usesFireIntents = input.fireMode === "intent-v1";
+    if (usesFireIntents !== player.usesFireIntents) {
+      this.clearFireIntentState(player, "fire-mode-changed", true, player.usesFireIntents);
+      player.usesFireIntents = usesFireIntents;
+    }
+    if (usesFireIntents) {
+      for (const intent of input.fireIntents ?? []) {
+        if (intent.id <= player.lastFireIntentId || intent.id > player.lastFireIntentId + 1000) continue;
+        // This is a receive watermark, not merely a fired-shot counter. Move
+        // it before validation so a rejected ID cannot be replayed forever to
+        // amplify rejection traffic across the arena.
+        player.lastFireIntentId = intent.id;
+        const intentAim = normalized(intent.aimX, intent.aimY);
+        const receivedIntent: DustyFireIntent = { ...intent, inputSeq: input.seq, receivedAt: now };
+        if (!player.alive) {
+          this.rejectFireIntent(player, receivedIntent, "player-inactive");
+          continue;
+        }
+        if (player.moleMode && (!input.fire || player.lastFireInput)) {
+          this.rejectFireIntent(player, receivedIntent, "mole-waiting-for-emergence");
+          continue;
+        }
+        if (intent.loadoutId !== player.loadoutId) {
+          this.rejectFireIntent(player, receivedIntent, "loadout-changed");
+          continue;
+        }
+        if (intent.fireStateId !== player.fireStateId) {
+          this.rejectFireIntent(player, receivedIntent, "fire-state-changed");
+          continue;
+        }
+        // The top-level input is the authoritative visible facing for this
+        // frame. Never allow a crafted sub-intent to shoot sideways while the
+        // player snapshot shows a different gun direction.
+        if (!aim.length || !intentAim.length || intentAim.x * aim.x + intentAim.y * aim.y < .999) {
+          this.rejectFireIntent(player, receivedIntent, "aim-mismatch");
+          continue;
+        }
+        if (player.pendingFireIntents.length >= 16) {
+          this.rejectFireIntent(player, receivedIntent, "queue-full");
+          continue;
+        }
+        player.pendingFireIntents.push({
+          id: intent.id, loadoutId: intent.loadoutId, fireStateId: intent.fireStateId,
+          aimX: aim.x, aimY: aim.y, inputSeq: input.seq, receivedAt: now,
+          ...(Number.isFinite(input.viewAt) ? { viewAt: input.viewAt } : {}),
+        });
+      }
+    }
     player.lastInputSeq = input.seq; player.lastInputAt = now; player.lastMessageAt = now; player.disconnectedAt = 0;
     return true;
   }
@@ -236,6 +304,8 @@ export class DustyOrbitSimulation {
     if (!player) return;
     this.releaseWeaponStation(player, "reconnect");
     player.pendingInput = null;
+    player.usesFireIntents = false;
+    this.clearFireIntentState(player, "reconnect");
     player.input = { ...EMPTY_INPUT, seq: player.lastInputSeq, aimX: player.aimX, aimY: player.aimY };
     player.lastProcessedInputSeq = player.lastInputSeq;
     player.lastInputAt = now;
@@ -243,7 +313,6 @@ export class DustyOrbitSimulation {
     player.lastFireInput = false;
     player.lastNukeInput = false;
     player.suppressFireUntilRelease = false;
-    player.burstRemaining = 0;
     player.vx = 0;
     player.vy = 0;
     player.disconnectedAt = 0;
@@ -433,6 +502,7 @@ export class DustyOrbitSimulation {
 
   private consumePendingInput(player: DustyPlayer, now: number): void {
     if (now - player.lastInputAt > DUSTY_STALE_INPUT_MS) {
+      if (player.pendingFireIntents.length || player.burstRemaining) this.clearFireIntentState(player, "input-stale", true);
       player.pendingInput = null; player.input = { ...player.input, moveX: 0, moveY: 0, fire: false, nuke: false };
     } else if (player.pendingInput) {
       player.input = player.pendingInput; player.lastProcessedInputSeq = player.pendingInput.seq; player.pendingInput = null;
@@ -452,29 +522,71 @@ export class DustyOrbitSimulation {
     }
   }
 
+  private discardStaleFireIntents(player: DustyPlayer, now: number): void {
+    while (player.pendingFireIntents[0]?.receivedAt < now - DUSTY_STALE_INPUT_MS) {
+      this.rejectFireIntent(player, player.pendingFireIntents.shift()!, "intent-stale");
+    }
+  }
+
+  private canStartIntentTrigger(player: DustyPlayer, weapon: WeaponDefinition, now: number): boolean {
+    const projectileCount = weapon.burstSpacingMs <= 0 && weapon.spreadDegrees.length > 1
+      ? weapon.spreadDegrees.length
+      : 1;
+    return player.burstRemaining === 0 &&
+      player.pendingFireIntents.length > 0 &&
+      now >= player.lastFireAt + weapon.cooldownMs &&
+      this.projectiles.length + projectileCount <= DUSTY_GAMEPLAY.maxProjectiles;
+  }
+
   private processActions(player: DustyPlayer, now: number): void {
     const fire = player.input.fire;
+    let preserveMoleFireEdge = false;
     if (player.moleMode) {
       if (fire && !player.lastFireInput) {
-        if (this.isValidNormalPosition(player)) {
+        const newestIntentInputSeq = player.pendingFireIntents.at(-1)?.inputSeq;
+        while (Number.isSafeInteger(newestIntentInputSeq) && player.pendingFireIntents[0] &&
+               player.pendingFireIntents[0].inputSeq < newestIntentInputSeq!) {
+          this.rejectFireIntent(player, player.pendingFireIntents.shift()!, "mole-aim-expired");
+        }
+        const weapon = player.randomWeapon ?? weaponForTier(player.weaponTier);
+        if (player.usesFireIntents) this.discardStaleFireIntents(player, now);
+        const awaitingFireableIntent = player.usesFireIntents && !this.canStartIntentTrigger(player, weapon, now);
+        if (awaitingFireableIntent) {
+          // Intent-mode emergence is an ambush shot, so it may only consume
+          // the control edge once its validated shot can fire atomically. This
+          // survives packet bunching, cooldown drift, a full projectile pool,
+          // and stale-intent rejection without ever surfacing the player while
+          // the requested ambush round remains unfired.
+          preserveMoleFireEdge = true;
+        }
+        else if (this.isValidNormalPosition(player)) {
           // The emergence press is also the ambush shot. Process the weapon in
           // this exact tick and leave held fire active for its normal cadence.
           this.emerge(player, now, "manual");
           this.processWeapon(player, now);
         }
-        else { player.emergeBlockedUntil = now + 700; this.events.push({ type: "mole_blocked", playerId: player.id }); }
+        else {
+          player.emergeBlockedUntil = now + 700;
+          this.clearFireIntentState(player, "mole-emergence-blocked", true);
+          this.events.push({ type: "mole_blocked", playerId: player.id });
+        }
       }
+      else if (!fire && player.pendingFireIntents.length) this.clearFireIntentState(player, "mole-fire-released", true);
     } else {
       if (!fire) player.suppressFireUntilRelease = false;
       if (!player.suppressFireUntilRelease) this.processWeapon(player, now);
     }
     const nukePressed = player.input.nuke === true;
     if (nukePressed && !player.lastNukeInput) this.activateNuke(player, now);
-    player.lastFireInput = fire; player.lastNukeInput = nukePressed;
+    player.lastFireInput = preserveMoleFireEdge ? false : fire; player.lastNukeInput = nukePressed;
   }
 
   private processWeapon(player: DustyPlayer, now: number): void {
     const weapon = player.randomWeapon ?? weaponForTier(player.weaponTier);
+    if (player.usesFireIntents) {
+      this.processIntentWeapon(player, weapon, now);
+      return;
+    }
     // Fire direction is sampled from the exact input being processed on this
     // simulation tick. Never reuse the facing from an earlier round.
     const liveAim = normalized(player.input.aimX, player.input.aimY);
@@ -486,7 +598,9 @@ export class DustyOrbitSimulation {
       this.spawnProjectile(player, weapon, aimX, aimY, now, ++this.shotId);
       player.burstRemaining--; player.burstIndex++; player.nextBurstAt += weapon.burstSpacingMs;
     }
-    if (!player.input.fire || player.burstRemaining > 0 || now - player.lastFireAt < weapon.cooldownMs || this.projectiles.length >= DUSTY_GAMEPLAY.maxProjectiles) return;
+    const triggerProjectileCount = weapon.burstSpacingMs <= 0 && weapon.spreadDegrees.length > 1 ? weapon.spreadDegrees.length : 1;
+    if (!player.input.fire || player.burstRemaining > 0 || now - player.lastFireAt < weapon.cooldownMs ||
+        this.projectiles.length + triggerProjectileCount > DUSTY_GAMEPLAY.maxProjectiles) return;
     player.protectedUntil = 0; player.lastFireAt = now;
     if (weapon.burstSpacingMs > 0 && weapon.count > 1) {
       player.burstIndex = 0;
@@ -504,7 +618,50 @@ export class DustyOrbitSimulation {
     this.spawnProjectile(player, weapon, aimX, aimY, now, ++this.shotId);
   }
 
-  private spawnProjectile(player: DustyPlayer, weapon: WeaponDefinition, aimX: number, aimY: number, now: number, shotId: number, spreadDegrees = 0): void {
+  private processIntentWeapon(player: DustyPlayer, weapon: WeaponDefinition, now: number): void {
+    this.discardStaleFireIntents(player, now);
+    const fireBurstRounds = (): void => {
+      while (player.burstRemaining > 0 && now >= player.nextBurstAt && player.pendingFireIntents.length &&
+             this.projectiles.length < DUSTY_GAMEPLAY.maxProjectiles) {
+        const intent = player.pendingFireIntents.shift()!;
+        this.spawnProjectile(player, weapon, intent.aimX, intent.aimY, now, ++this.shotId, 0, intent, 0, 1);
+        player.burstRemaining--;
+        player.burstIndex++;
+        player.nextBurstAt += weapon.burstSpacingMs;
+      }
+    };
+
+    fireBurstRounds();
+    if (player.burstRemaining > 0) {
+      if (!player.pendingFireIntents.length && now > player.nextBurstAt + DUSTY_STALE_INPUT_MS) {
+        this.clearFireIntentState(player, "burst-incomplete", true);
+      }
+      return;
+    }
+    const readyAt = player.lastFireAt + weapon.cooldownMs;
+    const spreads = weapon.burstSpacingMs <= 0 && weapon.spreadDegrees.length > 1 ? weapon.spreadDegrees : [0];
+    if (!player.pendingFireIntents.length || now < readyAt ||
+        this.projectiles.length + spreads.length > DUSTY_GAMEPLAY.maxProjectiles) return;
+
+    player.protectedUntil = 0;
+    player.lastFireAt = now;
+    if (weapon.burstSpacingMs > 0 && weapon.count > 1) {
+      player.burstIndex = 0;
+      player.burstRemaining = weapon.count;
+      player.nextBurstAt = now;
+      fireBurstRounds();
+      return;
+    }
+
+    const intent = player.pendingFireIntents.shift()!;
+    const shotId = ++this.shotId;
+    for (let pelletIndex = 0; pelletIndex < spreads.length; pelletIndex++) {
+      this.spawnProjectile(player, weapon, intent.aimX, intent.aimY, now, shotId, spreads[pelletIndex] ?? 0, intent, pelletIndex, spreads.length);
+    }
+  }
+
+  private spawnProjectile(player: DustyPlayer, weapon: WeaponDefinition, aimX: number, aimY: number, now: number, shotId: number, spreadDegrees = 0,
+      fireIntent: DustyFireIntent | null = null, pelletIndex = 0, pelletCount = 1): void {
     if (this.projectiles.length >= DUSTY_GAMEPLAY.maxProjectiles) return;
     const liveAim = normalized(aimX, aimY);
     if (!liveAim.length) return;
@@ -519,11 +676,12 @@ export class DustyOrbitSimulation {
     const projectileSpeed = weapon.speed * (player.speedUntil > now ? DUSTY_GAMEPLAY.speedMultiplier : 1);
     const x = muzzle.x, y = muzzle.y;
     const projectile: DustyProjectile = {
-      id: ++this.projectileId, ownerId: player.id, tier: projectileTier, x, y, inputSeq: player.input.seq,
+      id: ++this.projectileId, ownerId: player.id, tier: projectileTier, x, y, inputSeq: fireIntent?.inputSeq ?? player.input.seq,
       vx: direction.x * projectileSpeed, vy: direction.y * projectileSpeed, radius: weapon.radius,
       damage: weapon.damage, spawnedAt: now,
-      rewindMs: Number.isFinite(player.input.viewAt)
-        ? clamp(now - Number(player.input.viewAt), 0, DUSTY_MAX_HIT_REWIND_MS)
+      ...(fireIntent ? { fireIntentId: fireIntent.id, pelletIndex, pelletCount } : {}),
+      rewindMs: Number.isFinite(fireIntent?.viewAt ?? player.input.viewAt)
+        ? clamp(now - Number(fireIntent?.viewAt ?? player.input.viewAt), 0, DUSTY_MAX_HIT_REWIND_MS)
         : 0,
       // Turbo changes speed, not the gun's maximum range. Shorten lifetime by
       // the same multiplier so speed * lifetime remains weapon-authored.
@@ -533,7 +691,11 @@ export class DustyOrbitSimulation {
     // A shot event carries the exact barrel direction separately from pellet
     // spread. The client uses this immutable launch pose instead of attaching
     // a delayed confirmation to whichever way the gun points on arrival.
-    this.events.push({ type: "shot", shotId, playerId: player.id, x, y, aimX: liveAim.x, aimY: liveAim.y, projectile: { ...projectile } });
+    this.events.push({
+      type: "shot", shotId, playerId: player.id, x, y, aimX: liveAim.x, aimY: liveAim.y,
+      ...(fireIntent ? { fireIntentId: fireIntent.id, pelletIndex, pelletCount } : {}),
+      projectile: { ...projectile },
+    });
   }
 
   private updateProjectiles(dt: number, now: number): void {
@@ -600,6 +762,7 @@ export class DustyOrbitSimulation {
     victim.spyUntil = 0; victim.speedUntil = 0; victim.shieldHits = 0; victim.moleMode = false; victim.connectedSatelliteId = null;
     victim.connectedHealingStationId = null; victim.healingNextAt = 0;
     victim.moleUntil = 0; victim.moleForceAt = 0; victim.burstRemaining = 0; victim.suppressFireUntilRelease = false;
+    victim.loadoutId++; this.clearFireIntentState(victim, "death", true);
     victim.input = { ...victim.input, moveX: 0, moveY: 0, fire: false, nuke: false };
     victim.pendingInput = null; victim.lastProcessedInputSeq = victim.lastInputSeq;
     victim.respawnAt = now + DUSTY_RESPAWN_MS; victim.protectedUntil = 0;
@@ -613,7 +776,14 @@ export class DustyOrbitSimulation {
     killer.highScore = Math.max(killer.highScore, killer.killScore);
     // Generated weapons are fixed rolls. Their hidden standard fallback does
     // not upgrade until the generated loadout has been lost on death.
-    if (!killer.randomWeapon) killer.weaponTier = Math.min(DUSTY_GAMEPLAY.maxWeaponTier, killer.weaponTier + 1);
+    if (!killer.randomWeapon) {
+      const nextTier = Math.min(DUSTY_GAMEPLAY.maxWeaponTier, killer.weaponTier + 1);
+      if (nextTier !== killer.weaponTier) {
+        killer.weaponTier = nextTier;
+        killer.loadoutId++;
+        this.clearFireIntentState(killer, "weapon-upgraded", true);
+      }
+    }
     if (!killer.nukeReady) {
       killer.nukeProgress = Math.min(DUSTY_GAMEPLAY.nukeRequirement, killer.nukeProgress + 1);
       if (killer.nukeProgress >= DUSTY_GAMEPLAY.nukeRequirement) killer.nukeReady = true;
@@ -666,7 +836,7 @@ export class DustyOrbitSimulation {
       }
       case "mole":
         player.moleMode = true; player.moleUntil = now + DUSTY_GAMEPLAY.moleMaxDurationMs; player.moleForceAt = 0;
-        player.burstRemaining = 0; player.lastFireInput = player.input.fire;
+        this.clearFireIntentState(player, "mole-mode", true); player.lastFireInput = player.input.fire;
         this.resetPositionHistory(player, now);
         this.events.push({ type: "mole_burrowed", playerId: player.id, ...moleBurrowOrigin(player), vx: player.vx, vy: player.vy, at: now });
         return true;
@@ -782,7 +952,8 @@ export class DustyOrbitSimulation {
 
       const weapon = generateRandomWeapon(this.random);
       player.randomWeapon = weapon;
-      player.burstRemaining = 0;
+      player.loadoutId++;
+      this.clearFireIntentState(player, "weapon-generated", true);
       player.lastFireAt = Number.NEGATIVE_INFINITY;
       player.connectedWeaponStationId = null;
       player.weaponGenerationStartedAt = 0;
@@ -791,7 +962,16 @@ export class DustyOrbitSimulation {
       state.cooldownUntil = now + this.mapRuntime.weaponStationCooldownMs;
       this.events.push({
         type: "weapon_generated", stationId: station.id, playerId: player.id, x: player.x, y: player.y,
-        weapon: { name: weapon.name, rarity: weapon.rarity, powerScore: weapon.powerScore },
+        weapon: {
+          tier: weapon.tier, name: weapon.name, rarity: weapon.rarity, powerScore: weapon.powerScore, visualTier: weapon.visualTier,
+          cooldownMs: weapon.cooldownMs, speed: weapon.speed, lifetimeMs: weapon.lifetimeMs, damage: weapon.damage,
+          radius: weapon.radius, count: weapon.count, spreadDegrees: [...weapon.spreadDegrees], burstSpacingMs: weapon.burstSpacingMs,
+        },
+        weaponState: {
+          loadoutId: player.loadoutId, fireStateId: player.fireStateId,
+          nextTriggerAt: now, burstRemaining: 0, nextBurstAt: 0,
+          lastFireIntentId: player.lastFireIntentId,
+        },
         cooldownUntil: state.cooldownUntil,
       });
       return;
@@ -927,6 +1107,13 @@ export class DustyOrbitSimulation {
 
   snapshot(viewerId: string, now = Date.now()): Record<string, unknown> {
     const viewer = this.players.get(viewerId);
+    const viewerWeapon = viewer ? (viewer.randomWeapon ?? weaponForTier(viewer.weaponTier)) : null;
+    const serializeWeapon = (weapon: WeaponDefinition) => ({
+      tier: weapon.tier, name: weapon.name, cooldownMs: weapon.cooldownMs, speed: weapon.speed,
+      lifetimeMs: weapon.lifetimeMs, damage: weapon.damage, radius: weapon.radius, count: weapon.count,
+      spreadDegrees: [...weapon.spreadDegrees], burstSpacingMs: weapon.burstSpacingMs, muzzleDistance: weapon.muzzleDistance,
+      ...(weapon.generated ? { generated: true, rarity: weapon.rarity, powerScore: weapon.powerScore, visualTier: weapon.visualTier } : {}),
+    });
     const serializePlayer = (player: DustyPlayer) => ({
       id: player.id, name: player.name, x: round(player.x), y: round(player.y), vx: Math.round(player.vx), vy: Math.round(player.vy),
       aimX: round(player.aimX, 1000), aimY: round(player.aimY, 1000), hp: player.hp, kills: player.kills,
@@ -966,9 +1153,24 @@ export class DustyOrbitSimulation {
           const gap = Math.max(0, distanceToPolygon(viewer, satellite.polygon) - DUSTY_PLAYER_RADIUS);
           return gap < nearest.gap ? { id: satellite.id, gap } : nearest;
         }, { id: null as string | null, gap: Number.POSITIVE_INFINITY }).id : null,
+        weapon: viewerWeapon ? serializeWeapon(viewerWeapon) : null,
+        weaponState: viewer && viewerWeapon ? {
+          loadoutId: viewer.loadoutId, fireStateId: viewer.fireStateId,
+          nextTriggerAt: Number.isFinite(viewer.lastFireAt) ? Math.max(now, viewer.lastFireAt + viewerWeapon.cooldownMs) : now,
+          burstRemaining: viewer.burstRemaining,
+          nextBurstAt: viewer.burstRemaining > 0 ? viewer.nextBurstAt : 0,
+          lastFireIntentId: viewer.lastFireIntentId,
+        } : null,
       },
       players: visiblePlayers.map(serializePlayer),
-      projectiles: this.projectiles.map((projectile) => ({ id: projectile.id, ownerId: projectile.ownerId, tier: projectile.tier, x: round(projectile.x), y: round(projectile.y), vx: Math.round(projectile.vx), vy: Math.round(projectile.vy), radius: projectile.radius, spawnedAt: projectile.spawnedAt, expiresAt: projectile.expiresAt, inputSeq: projectile.inputSeq })),
+      projectiles: this.projectiles.map((projectile) => ({
+        id: projectile.id, ownerId: projectile.ownerId, tier: projectile.tier, x: round(projectile.x), y: round(projectile.y),
+        vx: Math.round(projectile.vx), vy: Math.round(projectile.vy), radius: projectile.radius,
+        spawnedAt: projectile.spawnedAt, expiresAt: projectile.expiresAt, inputSeq: projectile.inputSeq,
+        ...(Number.isSafeInteger(projectile.fireIntentId) ? {
+          fireIntentId: projectile.fireIntentId, pelletIndex: projectile.pelletIndex, pelletCount: projectile.pelletCount,
+        } : {}),
+      })),
       pickups: this.pickups.filter((pickup) => pickup.active).map(({ id, type, x, y, active }) => ({ id, type, x, y, active })),
       fartClouds: this.fartClouds.map((cloud) => ({ ...cloud })),
       nukes: this.nukes.map((nuke) => ({ ...nuke })),

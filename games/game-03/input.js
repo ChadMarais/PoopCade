@@ -375,9 +375,9 @@ export class InputController {
   acknowledgeFire() {
     this.mouseFireQueuedUntil = 0;
     this.touchFireQueuedUntil = 0;
-    this.touchFireAimReady = false;
     this.touchFireAimGraceUntil = 0;
     if (this.firePointerId === null) {
+      this.touchFireAimReady = false;
       const movement = normalizedVector(this.moveTouch.x, this.moveTouch.y);
       if (movement.length) this.aimTouch = { ...this.aimTouch, x: movement.x, y: movement.y };
     }

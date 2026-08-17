@@ -9,6 +9,31 @@ function close(actual, expected, tolerance = .001) {
   assert.ok(Math.abs(actual - expected) <= tolerance, `${actual} should be within ${tolerance} of ${expected}`);
 }
 
+const SMG = Object.freeze({ tier: 4, name: "SMG", cooldownMs: 220, speed: 700, lifetimeMs: 900, radius: 3, count: 1, spreadDegrees: [0], burstSpacingMs: 0 });
+const BURST = Object.freeze({ tier: 3, name: "BURST", cooldownMs: 800, speed: 650, lifetimeMs: 800, radius: 3.2, count: 3, spreadDegrees: [0, 0, 0], burstSpacingMs: 90 });
+const SHOTGUN = Object.freeze({ tier: 5, name: "SHOTGUN", cooldownMs: 850, speed: 700, lifetimeMs: 550, radius: 3, count: 3, spreadDegrees: [-8, 0, 8], burstSpacingMs: 0 });
+const GENERATED_BURST = Object.freeze({ tier: 6, visualTier: 7, name: "WARP SPITTER", cooldownMs: 240, speed: 1600, lifetimeMs: 1050, radius: 6, count: 12, spreadDegrees: [0], burstSpacingMs: 22, generated: true });
+const GENERATED_SCATTER = Object.freeze({ tier: 6, visualTier: 7, name: "TRASH COMPACTOR", cooldownMs: 900, speed: 900, lifetimeMs: 800, radius: 5, count: 9, spreadDegrees: [-32, -24, -16, -8, 0, 8, 16, 24, 32], burstSpacingMs: 0, generated: true });
+
+function localRenderer(pose = null) {
+  const renderer = Object.create(DustyOrbitMultiplayerRenderer.prototype);
+  renderer.localPlayerId = "local";
+  renderer.pendingLocalShotConfirmations = [];
+  renderer.localInputPoses = new Map();
+  renderer.preparedLocalInputs = new Map();
+  renderer.predictedShotGroups = new Map();
+  renderer.localProjectiles = new Map();
+  renderer.weaponPoses = new Map(pose ? [["local", pose]] : []);
+  renderer.weaponRecoil = new Map();
+  renderer.effects = [];
+  renderer.nextPredictedProjectileId = -1;
+  renderer.nextFireIntentId = 0;
+  renderer.localFirePrediction = null;
+  renderer.lastLocalLaunch = null;
+  renderer.canvas = null;
+  return renderer;
+}
+
 test("weapon visual table maps all standard tiers and the generated loadout to production art", () => {
   assert.deepEqual(Object.keys(WEAPON_VISUALS), ["1", "2", "3", "4", "5", "6", "7"]);
   assert.equal(WEAPON_VISUALS[1].id, "pea-shooter");
@@ -93,19 +118,20 @@ test("character drawing always completes before the shoulder weapon foreground p
   assert.equal(source.includes("modulePose.depthOffset"), false);
 });
 
-test("local confirmed shots stay on the currently rendered muzzle line without convergence", () => {
+test("an unmatched local confirmation uses the muzzle captured for its own input", () => {
   const renderer = Object.create(DustyOrbitMultiplayerRenderer.prototype);
   renderer.localPlayerId = "local";
   renderer.pendingLocalShotConfirmations = [];
   renderer.weaponPoses = new Map([["local", { muzzleWorld: { x: 411, y: 277 }, forward: { x: 1, y: 0 } }]]);
+  renderer.localInputPoses = new Map([[40, { muzzleWorld: { x: 411, y: 277 }, forward: { x: 1, y: 0 } }]]);
   renderer.weaponRecoil = new Map();
   renderer.effects = [];
   renderer.localProjectiles = new Map();
   renderer.confirmShot({
     playerId: "local",
-    projectile: { id: 7, tier: 1, x: 400, y: 266, vx: 500, vy: 0, spawnedAt: 1000, expiresAt: 1500 },
+    projectile: { id: 7, inputSeq: 40, tier: 1, x: 400, y: 266, vx: 500, vy: 0, spawnedAt: 1000, expiresAt: 1500 },
   }, true);
-  assert.equal(renderer.localProjectiles.size, 0, "the network callback must not use a cached muzzle pose");
+  assert.equal(renderer.localProjectiles.size, 1);
   renderer.flushLocalShotConfirmations();
   const shot = renderer.localProjectiles.get(7);
   assert.deepEqual({ x: shot.startX, y: shot.startY }, { x: 411, y: 277 });
@@ -119,6 +145,7 @@ test("local Shotgun pellets preserve all three authoritative spread directions",
   renderer.localPlayerId = "local";
   renderer.pendingLocalShotConfirmations = [];
   renderer.weaponPoses = new Map([["local", { muzzleWorld: { x: 411, y: 277 }, forward: { x: 1, y: 0 } }]]);
+  renderer.localInputPoses = new Map([[40, { muzzleWorld: { x: 411, y: 277 }, forward: { x: 1, y: 0 } }]]);
   renderer.weaponRecoil = new Map();
   renderer.effects = [];
   renderer.localProjectiles = new Map();
@@ -126,7 +153,7 @@ test("local Shotgun pellets preserve all three authoritative spread directions",
     const angle = degrees * Math.PI / 180;
     renderer.confirmShot({
       playerId: "local",
-      projectile: { id: 80 + index, tier: 5, x: 400, y: 266, vx: Math.cos(angle) * 700, vy: Math.sin(angle) * 700, spawnedAt: 1000, expiresAt: 1550 },
+      projectile: { id: 80 + index, inputSeq: 40, tier: 5, x: 400, y: 266, vx: Math.cos(angle) * 700, vy: Math.sin(angle) * 700, spawnedAt: 1000, expiresAt: 1550 },
     }, true);
   }
   renderer.flushLocalShotConfirmations();
@@ -135,11 +162,12 @@ test("local Shotgun pellets preserve all three authoritative spread directions",
   assert.ok([...renderer.localProjectiles.values()].every((shot) => shot.startX === 411 && shot.startY === 277));
 });
 
-test("Shotgun spread stays on its authoritative direction after the gun turns", () => {
+test("a delayed Shotgun confirmation stays on its historical muzzle and spread after the gun turns", () => {
   const renderer = Object.create(DustyOrbitMultiplayerRenderer.prototype);
   renderer.localPlayerId = "local";
   renderer.pendingLocalShotConfirmations = [];
   renderer.weaponPoses = new Map([["local", { muzzleWorld: { x: 500, y: 350 }, forward: { x: 0, y: 1 } }]]);
+  renderer.localInputPoses = new Map([[40, { muzzleWorld: { x: 500, y: 350 }, forward: { x: 1, y: 0 } }]]);
   renderer.weaponRecoil = new Map();
   renderer.effects = [];
   renderer.localProjectiles = new Map();
@@ -147,7 +175,7 @@ test("Shotgun spread stays on its authoritative direction after the gun turns", 
     const angle = degrees * Math.PI / 180;
     renderer.confirmShot({
       playerId: "local", shotId: 90, aimX: 1, aimY: 0,
-      projectile: { id: 90 + index, tier: 5, vx: Math.cos(angle) * 700, vy: Math.sin(angle) * 700, spawnedAt: 1000, expiresAt: 1550 },
+      projectile: { id: 90 + index, inputSeq: 40, tier: 5, vx: Math.cos(angle) * 700, vy: Math.sin(angle) * 700, spawnedAt: 1000, expiresAt: 1550 },
     }, true);
   }
   renderer.flushLocalShotConfirmations();
@@ -160,6 +188,7 @@ test("network transit never fast-forwards a bullet away from its muzzle", () => 
   renderer.localPlayerId = "local";
   renderer.pendingLocalShotConfirmations = [];
   renderer.weaponPoses = new Map([["local", { muzzleWorld: { x: 411, y: 277 }, forward: { x: 1, y: 0 } }]]);
+  renderer.localInputPoses = new Map([[40, { muzzleWorld: { x: 411, y: 277 }, forward: { x: 1, y: 0 } }]]);
   renderer.weaponRecoil = new Map();
   renderer.effects = [];
   renderer.localProjectiles = new Map();
@@ -167,7 +196,7 @@ test("network transit never fast-forwards a bullet away from its muzzle", () => 
   const oldServerTime = Date.now() - 500;
   renderer.confirmShot({
     playerId: "local",
-    projectile: { id: 70, tier: 1, x: 400, y: 266, vx: 500, vy: 0, spawnedAt: oldServerTime, expiresAt: oldServerTime + 750 },
+    projectile: { id: 70, inputSeq: 40, tier: 1, x: 400, y: 266, vx: 500, vy: 0, spawnedAt: oldServerTime, expiresAt: oldServerTime + 750 },
   }, true);
   renderer.flushLocalShotConfirmations();
   const shot = renderer.localProjectiles.get(70);
@@ -226,7 +255,8 @@ test("an impact arriving before the next render cannot resurrect a local project
     aimY: 0,
     projectile: { id: 73, tier: 6, x: 400, y: 266, vx: 1200, vy: 0, spawnedAt: 1000, expiresAt: 2000 },
   }, true);
-  assert.equal(renderer.pendingLocalShotConfirmations.length, 1);
+  assert.equal(renderer.localProjectiles.has(73), true);
+  assert.equal(renderer.pendingLocalShotConfirmations.length, 0);
 
   renderer.impact({ projectileId: 73, x: 430, y: 266, target: "player" });
   assert.equal(renderer.pendingLocalShotConfirmations.length, 0, "the authoritative impact cancels the deferred launch");
@@ -235,7 +265,7 @@ test("an impact arriving before the next render cannot resurrect a local project
   assert.equal(renderer.localProjectiles.has(73), false, "the dead projectile must stay dead on the next frame");
 });
 
-test("movement during confirmation delay still launches from the currently visible aligned muzzle", () => {
+test("movement during confirmation delay cannot move a historical shot onto a newer muzzle", () => {
   const renderer = Object.create(DustyOrbitMultiplayerRenderer.prototype);
   renderer.localPlayerId = "local";
   renderer.pendingLocalShotConfirmations = [];
@@ -247,6 +277,9 @@ test("movement during confirmation delay still launches from the currently visib
     angle: 0,
     forward: { x: 1, y: 0 },
     muzzleWorld: { x: 321, y: 456 },
+  }]]);
+  renderer.localInputPoses = new Map([[40, {
+    tier: 1, angle: 0, forward: { x: 1, y: 0 }, muzzleWorld: { x: 321, y: 456 },
   }]]);
   renderer.confirmShot({
     playerId: "local",
@@ -262,7 +295,7 @@ test("movement during confirmation delay still launches from the currently visib
   });
   renderer.flushLocalShotConfirmations();
   const shot = renderer.localProjectiles.get(71);
-  assert.deepEqual({ x: shot.startX, y: shot.startY }, { x: 421, y: 456 });
+  assert.deepEqual({ x: shot.startX, y: shot.startY }, { x: 321, y: 456 });
   assert.deepEqual({ vx: shot.vx, vy: shot.vy }, { vx: 500, vy: 0 });
 });
 
@@ -271,6 +304,7 @@ test("turning toward a new target cannot redirect an older confirmed shot", () =
   renderer.localPlayerId = "local";
   renderer.pendingLocalShotConfirmations = [];
   renderer.weaponPoses = new Map([["local", { muzzleWorld: { x: 411, y: 277 }, forward: { x: 0, y: -1 } }]]);
+  renderer.localInputPoses = new Map([[40, { muzzleWorld: { x: 411, y: 277 }, forward: { x: 1, y: 0 } }]]);
   renderer.weaponRecoil = new Map();
   renderer.effects = [];
   renderer.localProjectiles = new Map();
@@ -279,7 +313,7 @@ test("turning toward a new target cannot redirect an older confirmed shot", () =
     shotId: 8,
     aimX: 1,
     aimY: 0,
-    projectile: { id: 8, tier: 2, x: 395, y: 266, vx: 600, vy: 0, spawnedAt: 1000, expiresAt: 1750 },
+    projectile: { id: 8, inputSeq: 40, tier: 2, x: 395, y: 266, vx: 600, vy: 0, spawnedAt: 1000, expiresAt: 1750 },
   }, true);
   renderer.flushLocalShotConfirmations();
   const shot = renderer.localProjectiles.get(8);
@@ -289,20 +323,24 @@ test("turning toward a new target cannot redirect an older confirmed shot", () =
   assert.equal(renderer.pendingLocalShotConfirmations.length, 0);
 });
 
-test("queued launch groups each receive their own aligned gun frame", () => {
+test("multiple delayed confirmations use their own captured input poses without a render-frame backlog", () => {
   const renderer = Object.create(DustyOrbitMultiplayerRenderer.prototype);
   renderer.localPlayerId = "local";
   renderer.pendingLocalShotConfirmations = [];
   renderer.weaponPoses = new Map([["local", { muzzleWorld: { x: 410, y: 270 }, forward: { x: 1, y: 0 } }]]);
+  renderer.localInputPoses = new Map([
+    [20, { muzzleWorld: { x: 410, y: 270 }, forward: { x: 1, y: 0 } }],
+    [21, { muzzleWorld: { x: 420, y: 290 }, forward: { x: 0, y: 1 } }],
+  ]);
   renderer.weaponRecoil = new Map();
   renderer.effects = [];
   renderer.localProjectiles = new Map();
-  renderer.confirmShot({ playerId: "local", shotId: 20, aimX: 1, aimY: 0, projectile: { id: 20, tier: 4, vx: 700, vy: 0, spawnedAt: 1000, expiresAt: 1900 } }, true);
-  renderer.confirmShot({ playerId: "local", shotId: 21, aimX: 0, aimY: 1, projectile: { id: 21, tier: 4, vx: 0, vy: 700, spawnedAt: 1020, expiresAt: 1920 } }, true);
+  renderer.confirmShot({ playerId: "local", shotId: 20, aimX: 1, aimY: 0, projectile: { id: 20, inputSeq: 20, tier: 4, vx: 700, vy: 0, spawnedAt: 1000, expiresAt: 1900 } }, true);
+  renderer.confirmShot({ playerId: "local", shotId: 21, aimX: 0, aimY: 1, projectile: { id: 21, inputSeq: 21, tier: 4, vx: 0, vy: 700, spawnedAt: 1020, expiresAt: 1920 } }, true);
 
   renderer.flushLocalShotConfirmations();
-  assert.deepEqual([...renderer.localProjectiles.keys()], [20]);
-  assert.equal(renderer.pendingLocalShotConfirmations.length, 1);
+  assert.deepEqual([...renderer.localProjectiles.keys()], [20, 21]);
+  assert.equal(renderer.pendingLocalShotConfirmations.length, 0);
 
   renderer.weaponPoses.set("local", { muzzleWorld: { x: 420, y: 290 }, forward: { x: 0, y: 1 } });
   renderer.flushLocalShotConfirmations();
@@ -323,6 +361,9 @@ test("a confirmed local bullet uses the exact nozzle produced in its render fram
     forward: { x: 0, y: 1 },
     muzzleWorld: { x: 321, y: 456 },
   }]]);
+  renderer.localInputPoses = new Map([[41, {
+    tier: 2, angle: Math.PI / 2, forward: { x: 0, y: 1 }, muzzleWorld: { x: 321, y: 456 },
+  }]]);
   const now = Date.now();
   renderer.confirmShot({
     playerId: "local",
@@ -334,14 +375,215 @@ test("a confirmed local bullet uses the exact nozzle produced in its render fram
   assert.deepEqual({ vx: shot.vx, vy: shot.vy }, { vx: 0, vy: 600 });
 });
 
-test("render flushes local confirmations only after drawing the current gun pose", async () => {
+test("render predicts after drawing the current gun pose and before painting the muzzle/projectile", async () => {
   const { readFile } = await import("node:fs/promises");
   const source = await readFile(new URL("../../games/game-03/renderer.js", import.meta.url), "utf8");
   const render = source.slice(source.indexOf("  render(snapshot"), source.indexOf("  drawTerrain()"));
-  assert.ok(render.indexOf("this.drawPlayer(") < render.indexOf("this.flushLocalShotConfirmations()"));
+  assert.ok(render.indexOf("this.drawPlayer(") < render.indexOf("onLocalPoseReady("));
+  assert.ok(render.indexOf("onLocalPoseReady(") < render.indexOf("this.flushLocalShotConfirmations()"));
   assert.ok(render.indexOf("this.flushLocalShotConfirmations()") < render.indexOf('this.drawEffects("muzzle")'));
   assert.ok(render.indexOf('this.drawEffects("muzzle")') < render.indexOf("this.drawLocalProjectiles()"));
   assert.ok(render.indexOf("this.drawLocalProjectiles()") < render.indexOf('this.drawEffects("foreground")'));
+});
+
+test("local prediction launches immediately from the exact visible muzzle and aim", () => {
+  const pose = { muzzleWorld: { x: 411, y: 277 }, forward: { x: 1, y: 0 } };
+  const renderer = localRenderer(pose);
+  const intents = renderer.prepareLocalInput(
+    { seq: 1, aimX: 1, aimY: 0, fire: true },
+    { alive: true, speedRemaining: 0 },
+    SMG,
+    { localNow: 100, serverNow: 1000, weaponState: { loadoutId: 4, fireStateId: 6, nextTriggerAt: 1000, lastFireIntentId: 0 } },
+  );
+  assert.equal(intents.length, 1);
+  assert.deepEqual({ loadoutId: intents[0].loadoutId, fireStateId: intents[0].fireStateId }, { loadoutId: 4, fireStateId: 6 });
+  assert.equal(renderer.localProjectiles.size, 0, "an unsent prepared input must not paint a bullet");
+  assert.equal(renderer.commitLocalInput(1), 1);
+  const shot = [...renderer.localProjectiles.values()][0];
+  assert.deepEqual({ x: shot.startX, y: shot.startY }, pose.muzzleWorld);
+  close(shot.vx / Math.hypot(shot.vx, shot.vy), pose.forward.x);
+  close(shot.vy / Math.hypot(shot.vx, shot.vy), pose.forward.y);
+  assert.equal(shot.fireIntentId, intents[0].id);
+});
+
+test("a delayed confirmation adopts the predicted projectile instead of firing sideways from a newer gun pose", () => {
+  const firingPose = { muzzleWorld: { x: 411, y: 277 }, forward: { x: 1, y: 0 } };
+  const renderer = localRenderer(firingPose);
+  const [intent] = renderer.prepareLocalInput(
+    { seq: 10, aimX: 1, aimY: 0, fire: true }, { alive: true }, SMG,
+    { localNow: 100, serverNow: 1000, weaponState: { loadoutId: 1, fireStateId: 1, nextTriggerAt: 1000 } },
+  );
+  renderer.commitLocalInput(10);
+  const predictedId = [...renderer.localProjectiles.keys()][0];
+  renderer.weaponPoses.set("local", { muzzleWorld: { x: 520, y: 420 }, forward: { x: 0, y: -1 } });
+  renderer.confirmShot({
+    playerId: "local", shotId: 80, fireIntentId: intent.id, pelletIndex: 0,
+    projectile: { id: 80, fireIntentId: intent.id, pelletIndex: 0, tier: 4, inputSeq: 10, x: 400, y: 266, vx: 700, vy: 0, spawnedAt: 1000, expiresAt: 1900 },
+  }, true);
+  assert.equal(renderer.localProjectiles.has(predictedId), false);
+  assert.equal(renderer.localProjectiles.size, 1, "confirmation must not create a second delayed bullet");
+  const shot = renderer.localProjectiles.get(80);
+  assert.deepEqual({ x: shot.startX, y: shot.startY }, firingPose.muzzleWorld);
+  assert.deepEqual({ vx: shot.vx, vy: shot.vy }, { vx: 700, vy: 0 });
+  assert.equal(renderer.effects.filter((effect) => effect.type === "weapon-muzzle").length, 1);
+});
+
+test("held SMG fire stays muzzle-aligned while moving and turning between rounds", () => {
+  const renderer = localRenderer();
+  const samples = [
+    { seq: 1, serverNow: 1000, pose: { muzzleWorld: { x: 100, y: 200 }, forward: { x: 1, y: 0 } } },
+    { seq: 2, serverNow: 1234, pose: { muzzleWorld: { x: 130, y: 180 }, forward: { x: Math.SQRT1_2, y: -Math.SQRT1_2 } } },
+    { seq: 3, serverNow: 1468, pose: { muzzleWorld: { x: 165, y: 160 }, forward: { x: 0, y: -1 } } },
+  ];
+  for (const sample of samples) {
+    renderer.weaponPoses.set("local", sample.pose);
+    const intents = renderer.prepareLocalInput(
+      { seq: sample.seq, aimX: sample.pose.forward.x, aimY: sample.pose.forward.y, fire: true },
+      { alive: true }, SMG,
+      { localNow: sample.serverNow - 900, serverNow: sample.serverNow, weaponState: { loadoutId: 1, fireStateId: 1, nextTriggerAt: 1000 } },
+    );
+    assert.equal(intents.length, 1);
+    renderer.commitLocalInput(sample.seq);
+    const group = renderer.predictedShotGroups.get(intents[0].id);
+    const shot = renderer.localProjectiles.get(group.projectiles[0].tempId);
+    const speed = Math.hypot(shot.vx, shot.vy);
+    assert.deepEqual({ x: shot.startX, y: shot.startY }, sample.pose.muzzleWorld);
+    close(shot.vx / speed, sample.pose.forward.x);
+    close(shot.vy / speed, sample.pose.forward.y);
+  }
+});
+
+test("timed burst prediction gives every round a new intent and re-samples the live barrel", () => {
+  const renderer = localRenderer();
+  const directions = [{ x: 1, y: 0 }, { x: 0, y: -1 }, { x: -1, y: 0 }];
+  const times = [1000, 1100, 1200];
+  const intentIds = [];
+  for (let index = 0; index < times.length; index++) {
+    const pose = { muzzleWorld: { x: 300 + index * 10, y: 250 }, forward: directions[index] };
+    renderer.weaponPoses.set("local", pose);
+    const intents = renderer.prepareLocalInput(
+      { seq: index + 1, aimX: pose.forward.x, aimY: pose.forward.y, fire: true }, { alive: true }, BURST,
+      { localNow: 100 + index * 100, serverNow: times[index], weaponState: { loadoutId: 2, fireStateId: 1, nextTriggerAt: 1000 } },
+    );
+    assert.equal(intents.length, 1);
+    renderer.commitLocalInput(index + 1);
+    intentIds.push(intents[0].id);
+    const group = renderer.predictedShotGroups.get(intents[0].id);
+    close(group.projectiles[0].direction.x, pose.forward.x);
+    close(group.projectiles[0].direction.y, pose.forward.y);
+  }
+  assert.equal(new Set(intentIds).size, 3);
+});
+
+test("Shotgun prediction uses one intent, one muzzle, and authoritative pellet indices", () => {
+  const pose = { muzzleWorld: { x: 500, y: 350 }, forward: { x: 1, y: 0 } };
+  const renderer = localRenderer(pose);
+  const [intent] = renderer.prepareLocalInput(
+    { seq: 7, aimX: 1, aimY: 0, fire: true }, { alive: true }, SHOTGUN,
+    { localNow: 100, serverNow: 1000, weaponState: { loadoutId: 3, fireStateId: 1, nextTriggerAt: 1000 } },
+  );
+  renderer.commitLocalInput(7);
+  assert.equal(renderer.predictedShotGroups.get(intent.id).projectiles.length, 3);
+  assert.deepEqual([...renderer.localProjectiles.values()].map((shot) => Math.round(Math.atan2(shot.vy, shot.vx) * 180 / Math.PI)), [-8, 0, 8]);
+  for (const [pelletIndex, degrees] of [-8, 0, 8].entries()) {
+    const radians = degrees * Math.PI / 180;
+    renderer.confirmShot({
+      playerId: "local", shotId: 90, fireIntentId: intent.id, pelletIndex,
+      projectile: { id: 90 + pelletIndex, fireIntentId: intent.id, pelletIndex, pelletCount: 3, tier: 5, inputSeq: 7, vx: Math.cos(radians) * 700, vy: Math.sin(radians) * 700, spawnedAt: 1000, expiresAt: 1550 },
+    }, true);
+  }
+  assert.deepEqual([...renderer.localProjectiles.keys()], [90, 91, 92]);
+  assert.ok([...renderer.localProjectiles.values()].every((shot) => shot.startX === 500 && shot.startY === 350));
+});
+
+test("prepared prediction is transactional across send commit and rollback", () => {
+  const pose = { muzzleWorld: { x: 411, y: 277 }, forward: { x: 1, y: 0 } };
+  const renderer = localRenderer(pose);
+  const options = {
+    localNow: 100,
+    serverNow: 1000,
+    weaponState: { loadoutId: 4, fireStateId: 7, nextTriggerAt: 1000, lastFireIntentId: 0 },
+  };
+
+  const [unsent] = renderer.prepareLocalInput(
+    { seq: 1, aimX: 1, aimY: 0, fire: true }, { alive: true }, SMG, options,
+  );
+  assert.equal(unsent.id, 1);
+  assert.equal(unsent.loadoutId, 4);
+  assert.equal(unsent.fireStateId, 7);
+  assert.equal(renderer.preparedLocalInputs.has(1), true);
+  assert.equal(renderer.localProjectiles.size, 0);
+  assert.equal(renderer.effects.length, 0);
+
+  renderer.rollbackLocalInput(1);
+  assert.equal(renderer.preparedLocalInputs.has(1), false);
+  assert.equal(renderer.localInputPoses.has(1), false);
+  assert.equal(renderer.nextFireIntentId, 0);
+  assert.equal(renderer.localProjectiles.size, 0);
+
+  const [retry] = renderer.prepareLocalInput(
+    { seq: 2, aimX: 1, aimY: 0, fire: true }, { alive: true }, SMG, options,
+  );
+  assert.equal(retry.id, 1, "a failed send must not burn an intent id or cadence slot");
+  assert.equal(renderer.commitLocalInput(2), 1);
+  assert.equal(renderer.commitLocalInput(2), 0, "commit is idempotent after the transaction is consumed");
+  assert.equal(renderer.localProjectiles.size, 1);
+  assert.equal(renderer.effects.filter((effect) => effect.type === "weapon-muzzle").length, 1);
+});
+
+test("server rejection removes every unconfirmed pellet in the predicted intent group", () => {
+  const renderer = localRenderer({ muzzleWorld: { x: 500, y: 350 }, forward: { x: 1, y: 0 } });
+  const [intent] = renderer.prepareLocalInput(
+    { seq: 8, aimX: 1, aimY: 0, fire: true }, { alive: true }, SHOTGUN,
+    { localNow: 100, serverNow: 1000, weaponState: { loadoutId: 3, fireStateId: 1, nextTriggerAt: 1000 } },
+  );
+  renderer.commitLocalInput(8);
+  assert.equal(renderer.predictedShotGroups.get(intent.id).projectiles.length, 3);
+  assert.equal(renderer.localProjectiles.size, 3);
+
+  renderer.rejectLocalFireIntent(intent.id);
+  assert.equal(renderer.predictedShotGroups.has(intent.id), false);
+  assert.equal(renderer.localProjectiles.size, 0);
+  renderer.rejectLocalFireIntent(intent.id);
+  assert.equal(renderer.localProjectiles.size, 0, "duplicate rejection remains harmless");
+});
+
+test("generated visual-tier-7 burst and scatter keep their strange authored cadence and spread", () => {
+  const burstRenderer = localRenderer({ muzzleWorld: { x: 200, y: 300 }, forward: { x: 1, y: 0 } });
+  const firstBurst = burstRenderer.prepareLocalInput(
+    { seq: 20, aimX: 1, aimY: 0, fire: true }, { alive: true }, GENERATED_BURST,
+    { localNow: 100, serverNow: 1000, weaponState: { loadoutId: 9, fireStateId: 4, nextTriggerAt: 1000 } },
+  );
+  assert.equal(firstBurst.length, 1);
+  burstRenderer.commitLocalInput(20);
+
+  const northPose = { muzzleWorld: { x: 230, y: 260 }, forward: { x: 0, y: -1 } };
+  burstRenderer.weaponPoses.set("local", northPose);
+  const catchUpBurst = burstRenderer.prepareLocalInput(
+    { seq: 21, aimX: 0, aimY: -1, fire: true }, { alive: true }, GENERATED_BURST,
+    { localNow: 166, serverNow: 1066, weaponState: { loadoutId: 9, fireStateId: 4, nextTriggerAt: 1000 } },
+  );
+  assert.equal(catchUpBurst.length, 3, "22ms generated bursts may emit three due rounds in one render input");
+  burstRenderer.commitLocalInput(21);
+  assert.equal(burstRenderer.localProjectiles.size, 4);
+  assert.ok([...burstRenderer.localProjectiles.values()].every((shot) => shot.tier === 7));
+  for (const intent of catchUpBurst) {
+    const predicted = burstRenderer.predictedShotGroups.get(intent.id).projectiles[0];
+    close(predicted.direction.x, 0);
+    close(predicted.direction.y, -1);
+  }
+
+  const scatterRenderer = localRenderer({ muzzleWorld: { x: 500, y: 350 }, forward: { x: 1, y: 0 } });
+  const [scatterIntent] = scatterRenderer.prepareLocalInput(
+    { seq: 30, aimX: 1, aimY: 0, fire: true }, { alive: true }, GENERATED_SCATTER,
+    { localNow: 200, serverNow: 2000, weaponState: { loadoutId: 10, fireStateId: 5, nextTriggerAt: 2000 } },
+  );
+  scatterRenderer.commitLocalInput(30);
+  const scatter = scatterRenderer.predictedShotGroups.get(scatterIntent.id);
+  assert.equal(scatter.projectiles.length, 9);
+  assert.ok([...scatterRenderer.localProjectiles.values()].every((shot) => shot.tier === 7));
+  assert.deepEqual(scatter.projectiles.map((shot) => Math.round(Math.atan2(shot.direction.y, shot.direction.x) * 180 / Math.PI)),
+    [-32, -24, -16, -8, 0, 8, 16, 24, 32]);
 });
 
 test("fart clouds animate from server snapshot time despite a skewed PC clock", () => {

@@ -17,6 +17,14 @@ export type ClientJoin = {
 
 export type ClientLeave = { type: "leave" };
 
+export type ClientFireIntent = {
+  id: number;
+  loadoutId: number;
+  fireStateId: number;
+  aimX: number;
+  aimY: number;
+};
+
 export type ClientInput = {
   type: "input";
   seq: number;
@@ -27,6 +35,8 @@ export type ClientInput = {
   fire: boolean;
   nuke?: boolean;
   viewAt?: number;
+  fireMode?: "intent-v1";
+  fireIntents?: ClientFireIntent[];
 };
 
 export type ClientPing = { type: "ping"; nonce: string };
@@ -89,6 +99,24 @@ export function parseClientMessage(raw: string | ArrayBuffer): ClientMessage | n
     if (!Number.isSafeInteger(value.seq) || Number(value.seq) < 0) return null;
     if (![value.moveX, value.moveY, value.aimX, value.aimY].every(finiteUnit)) return null;
     if (typeof value.fire !== "boolean") return null;
+    let fireIntents: ClientFireIntent[] | undefined;
+    if (value.fireMode !== undefined && value.fireMode !== "intent-v1") return null;
+    if (value.fireIntents !== undefined) {
+      if (value.fireMode !== "intent-v1" || !Array.isArray(value.fireIntents) || value.fireIntents.length > 4) return null;
+      fireIntents = [];
+      let previousId = 0;
+      for (const rawIntent of value.fireIntents) {
+        if (!isObject(rawIntent) || !Number.isSafeInteger(rawIntent.id) || Number(rawIntent.id) <= previousId ||
+            !Number.isSafeInteger(rawIntent.loadoutId) || Number(rawIntent.loadoutId) < 1 ||
+            !Number.isSafeInteger(rawIntent.fireStateId) || Number(rawIntent.fireStateId) < 1 ||
+            !finiteUnit(rawIntent.aimX) || !finiteUnit(rawIntent.aimY) || Math.hypot(Number(rawIntent.aimX), Number(rawIntent.aimY)) < .001) return null;
+        previousId = Number(rawIntent.id);
+        fireIntents.push({
+          id: previousId, loadoutId: Number(rawIntent.loadoutId), fireStateId: Number(rawIntent.fireStateId),
+          aimX: Number(rawIntent.aimX), aimY: Number(rawIntent.aimY),
+        });
+      }
+    }
     return {
       type: "input",
       seq: Number(value.seq),
@@ -99,6 +127,7 @@ export function parseClientMessage(raw: string | ArrayBuffer): ClientMessage | n
       fire: value.fire,
       nuke: value.nuke === true,
       ...(typeof value.viewAt === "number" && Number.isFinite(value.viewAt) && value.viewAt >= 0 ? { viewAt: value.viewAt } : {}),
+      ...(value.fireMode === "intent-v1" ? { fireMode: "intent-v1" as const, fireIntents: fireIntents ?? [] } : {}),
     };
   }
 
