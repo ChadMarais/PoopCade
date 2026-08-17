@@ -1,5 +1,5 @@
 import * as DEFAULT_MAP from "./maps/lunar-liability/map.js?v=20260817";
-import { collisionBlocksMovement, depthSortY, transformNormalizedPolygon } from "./collision-geometry.js?v=20260817-4";
+import { collisionBlocksMovement, collisionBlocksProjectiles, depthSortY, transformNormalizedPolygon } from "./collision-geometry.js?v=20260817-4";
 import { DEFAULT_CHARACTER_SKIN_ID, characterSkinById } from "./character-skins.js?v=20260814-2";
 
 const ASSET_VERSION = "20260817-2";
@@ -134,6 +134,10 @@ export async function loadDustyOrbitAssets(mapDefinition = DEFAULT_MAP, onProgre
     environment,
     polygons: [
       ...environment.filter((item) => collisionBlocksMovement(item.definition)).map((item) => item.polygon),
+      ...BOUNDARY_COLLIDERS.map((item) => item.polygon),
+    ],
+    projectilePolygons: [
+      ...environment.filter((item) => collisionBlocksProjectiles(item.definition)).map((item) => item.polygon),
       ...BOUNDARY_COLLIDERS.map((item) => item.polygon),
     ],
     boundaryPolygons: BOUNDARY_COLLIDERS.map((item) => item.polygon),

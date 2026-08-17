@@ -43,6 +43,18 @@ test("local projectiles are excluded from snapshots while remote projectiles ret
   assert.equal(remote.x, 100);
 });
 
+test("an impact removes its projectile from every buffered interpolation snapshot", () => {
+  const network = networkWithSnapshots([
+    { type: "snapshot", t: 1000, players: [], projectiles: [{ id: 7, ownerId: "remote", x: 100, y: 50, vx: 680, vy: 0 }] },
+    { type: "snapshot", t: 1066, players: [], projectiles: [{ id: 7, ownerId: "remote", x: 145, y: 50, vx: 680, vy: 0 }] },
+  ]);
+
+  network.discardProjectile(7);
+
+  assert.equal(network.interpolatedSnapshot(1116, "local").projectiles.length, 0);
+  assert.ok(network.snapshots.every((snapshot) => snapshot.projectiles.length === 0));
+});
+
 test("server clock offset is applied before choosing the interpolation window", () => {
   const network = networkWithSnapshots([
     { type: "snapshot", t: 1000, players: [{ id: "remote", x: 0, y: 0, vx: 100, vy: 0, aimX: 1, aimY: 0, alive: true }], projectiles: [] },

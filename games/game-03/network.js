@@ -121,6 +121,18 @@ export class ArenaNetwork {
     if (this.snapshots.length > 30) this.snapshots.shift();
   }
 
+  discardProjectile(projectileId) {
+    if (!Number.isSafeInteger(projectileId)) return;
+    // Impact events lead the next authoritative snapshot, while rendering is
+    // intentionally 100 ms behind for interpolation. Remove the dead round
+    // from that buffered history immediately so it cannot be replayed beyond
+    // the impact point after the hit has already registered.
+    for (const snapshot of this.snapshots) {
+      if (!Array.isArray(snapshot.projectiles)) continue;
+      snapshot.projectiles = snapshot.projectiles.filter((projectile) => projectile.id !== projectileId);
+    }
+  }
+
   interpolatedSnapshot(now = Date.now(), localPlayerId = null) {
     const latest = this.snapshots.at(-1);
     if (!latest) return null;

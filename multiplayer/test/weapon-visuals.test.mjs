@@ -265,6 +265,24 @@ test("an impact arriving before the next render cannot resurrect a local project
   assert.equal(renderer.localProjectiles.has(73), false, "the dead projectile must stay dead on the next frame");
 });
 
+test("a predicted local projectile stops visually when it crosses a static collider", () => {
+  const renderer = localRenderer();
+  renderer.assets = { projectilePolygons: [[
+    { x: 10, y: -10 }, { x: 20, y: -10 }, { x: 20, y: 10 }, { x: 10, y: 10 },
+  ]] };
+  renderer.localProjectiles.set(-1, {
+    id: -1, tier: 1, radius: 2, startX: 0, startY: 0, previousX: 0, previousY: 0,
+    vx: 1000, vy: 0, born: performance.now() - 25, life: 500, firstFrame: false,
+  });
+  let drawn = null;
+  renderer.drawProjectiles = (projectiles) => { drawn = projectiles; };
+
+  renderer.drawLocalProjectiles();
+
+  assert.deepEqual(drawn, []);
+  assert.equal(renderer.localProjectiles.has(-1), false);
+});
+
 test("movement during confirmation delay cannot move a historical shot onto a newer muzzle", () => {
   const renderer = Object.create(DustyOrbitMultiplayerRenderer.prototype);
   renderer.localPlayerId = "local";

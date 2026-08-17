@@ -1,5 +1,6 @@
 import { weaponPose, weaponVisualForTier } from "./weapon-visuals.js?v=20260817-1";
 import { fartCloudGrowth } from "./effect-timing.js?v=20260813";
+import { sweptCircleIntersectsPolygon } from "./collision-geometry.js?v=20260817-4";
 import {
   NUKE_EFFECT_DURATION_MS,
   createNukeBurst,
@@ -1668,13 +1669,28 @@ export class DustyOrbitMultiplayerRenderer {
         this.localProjectiles.delete(id);
         continue;
       }
-      projectiles.push({
+      const rendered = {
         ...projectile,
         x: projectile.startX + projectile.vx * age / 1000,
         y: projectile.startY + projectile.vy * age / 1000,
         trailStartX: projectile.previousX,
         trailStartY: projectile.previousY,
-      });
+      };
+      // Local shots are predicted ahead of the authoritative server response.
+      // Stop that visual prediction at the same static colliders used by the
+      // simulation so network latency can never paint a round through a wall.
+      const blocked = (this.assets?.projectilePolygons || []).some((polygon) =>
+        sweptCircleIntersectsPolygon(
+          { x: projectile.previousX, y: projectile.previousY },
+          { x: rendered.x, y: rendered.y },
+          projectile.radius || 3.5,
+          polygon,
+        ));
+      if (blocked) {
+        this.localProjectiles.delete(id);
+        continue;
+      }
+      projectiles.push(rendered);
       if (projectile.firstFrame && this.lastLocalLaunch?.projectileId === id) {
         this.lastLocalLaunch.firstRenderError = Math.hypot(
           projectiles.at(-1).x - projectile.startX,
