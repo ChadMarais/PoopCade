@@ -155,6 +155,7 @@ export class DustyOrbitSimulation {
   private readonly validWorldPoints: Point[];
   private readonly movementBroadphase: ReturnType<typeof createPolygonBroadphase>;
   private readonly boundaryBroadphase: ReturnType<typeof createPolygonBroadphase>;
+  private readonly projectileBroadphase: ReturnType<typeof createPolygonBroadphase>;
   threatLeaderId: string | null = null;
   threatLeaderIds: string[] = [];
   tick = 0;
@@ -166,6 +167,7 @@ export class DustyOrbitSimulation {
     this.mapRuntime = mapRuntime;
     this.movementBroadphase = createPolygonBroadphase(mapRuntime.polygons);
     this.boundaryBroadphase = createPolygonBroadphase(mapRuntime.boundaryPolygons);
+    this.projectileBroadphase = createPolygonBroadphase(mapRuntime.projectilePolygons);
     this.validWorldPoints = this.buildValidWorldPoints();
     this.maintainPickups(0);
   }
@@ -698,6 +700,7 @@ export class DustyOrbitSimulation {
     // a delayed confirmation to whichever way the gun points on arrival.
     this.events.push({
       type: "shot", shotId, playerId: player.id, x, y, aimX: liveAim.x, aimY: liveAim.y,
+      ...(weapon.generated ? { weaponRarity: weapon.rarity } : {}),
       ...(fireIntent ? { fireIntentId: fireIntent.id, pelletIndex, pelletCount } : {}),
       projectile: { ...projectile },
     });
@@ -711,7 +714,8 @@ export class DustyOrbitSimulation {
       const end = { x: projectile.x + projectile.vx * dt, y: projectile.y + projectile.vy * dt };
       let hit: { t: number; kind: "rock" | "player" | "boundary"; id?: string } | null = null;
       if (end.x < 0 || end.y < 0 || end.x > this.mapRuntime.map.width || end.y > this.mapRuntime.map.height) hit = { t: 1, kind: "boundary" };
-      for (const polygon of this.mapRuntime.projectilePolygons) {
+      const projectilePolygons = this.projectileBroadphase.querySegment(start, end, projectile.radius);
+      for (const polygon of projectilePolygons) {
         const t = sweptPolygonTime(start, end, projectile.radius, polygon);
         if (t !== null && (!hit || t < hit.t)) hit = { t, kind: "rock" };
       }

@@ -1,4 +1,4 @@
-import { closestPointOnSegment, collisionBlocksMovement, collisionBlocksProjectiles, depthSortY, pointInPolygon, polygonSignedArea, transformNormalizedPolygon } from "./collision-geometry.js?v=20260817-4";
+import { closestPointOnSegment, collisionBlocksMovement, collisionBlocksProjectiles, depthSortY, pointInPolygon, polygonSignedArea, transformNormalizedPolygon } from "./collision-geometry.js?v=20260817-5";
 
 const HANDLE_RADIUS = 7;
 const HANDLE_HIT_RADIUS = 14;
@@ -443,6 +443,7 @@ export class CollisionEditor {
       this.assets.environment.push(item);
       this.assets.polygons.push(item.polygon);
       this.assets.movementBroadphase?.invalidate();
+      this.assets.projectileBroadphase?.invalidate();
       this.originalByInstanceId.set(item.id, placementForInstance(item));
       const points = normalizedCollisionPoints(item.definition);
       this.originalByAssetId.set(item.assetId, clonePoints(points));
@@ -706,6 +707,7 @@ export class CollisionEditor {
     if (!selected) return;
     applyCollisionDraft(selected.assetId, this.draft, this.assets.environment);
     this.assets.movementBroadphase?.invalidate();
+    this.assets.projectileBroadphase?.invalidate();
     this.dirtyAssetIds.add(selected.assetId);
     this.renderer.minimapSurfaces.clear();
     this.renderer.invalidateStaticScene();
@@ -717,6 +719,7 @@ export class CollisionEditor {
     if (!selected) return;
     applyPlacementDraft(selected, placement);
     this.assets.movementBroadphase?.invalidate();
+    this.assets.projectileBroadphase?.invalidate();
     this.dirtyInstanceIds.add(selected.id);
     this.renderer.minimapSurfaces.clear();
     this.renderer.invalidateStaticScene();
@@ -774,6 +777,7 @@ export class CollisionEditor {
       const result = await deleteObjectFile(this.assets.map.id, selected.id);
       const removal = removeEnvironmentInstance(this.assets, selected.id);
       this.assets.movementBroadphase?.invalidate();
+      this.assets.projectileBroadphase?.invalidate();
       [...this.select.options].find((option) => option.value === selected.id)?.remove();
       this.originalByInstanceId.delete(selected.id);
       if (result.assetRemoved) {
@@ -813,6 +817,7 @@ export class CollisionEditor {
     if (this.mode === "transform") {
       applyPlacementDraft(selected, this.originalByInstanceId.get(selected.id));
       this.assets.movementBroadphase?.invalidate();
+      this.assets.projectileBroadphase?.invalidate();
       this.dirtyInstanceIds.delete(selected.id);
       this.renderer.minimapSurfaces.clear();
       this.renderer.invalidateStaticScene();
@@ -825,6 +830,7 @@ export class CollisionEditor {
     this.draftBehaviorByAssetId.set(selected.assetId, originalBehavior);
     applyCollisionDraft(selected.assetId, original, this.assets.environment);
     this.assets.movementBroadphase?.invalidate();
+    this.assets.projectileBroadphase?.invalidate();
     applyCollisionBehaviorDraft(selected.assetId, originalBehavior, this.assets.environment);
     this.dirtyAssetIds.delete(selected.assetId);
     this.selectedPoint = null;

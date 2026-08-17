@@ -41,9 +41,10 @@ function fresh(options = {}) {
 }
 
 test("all supplied production audio files are packaged with the game", () => {
-  const urls = [DUSTY_AUDIO_FILES.nuke, DUSTY_AUDIO_FILES.death, DUSTY_AUDIO_FILES.teleport,
-    ...Object.values(DUSTY_AUDIO_FILES.powerups), ...Object.values(DUSTY_AUDIO_FILES.weapons)];
-  assert.equal(urls.length, 16);
+  const urls = [...new Set([DUSTY_AUDIO_FILES.nuke, DUSTY_AUDIO_FILES.death, DUSTY_AUDIO_FILES.teleport,
+    ...Object.values(DUSTY_AUDIO_FILES.powerups), ...Object.values(DUSTY_AUDIO_FILES.weapons),
+    ...Object.values(DUSTY_AUDIO_FILES.randomWeapons)])];
+  assert.equal(urls.length, 18);
   for (const url of urls) {
     const file = new URL(url); file.search = "";
     assert.equal(existsSync(file), true, url);
@@ -61,29 +62,47 @@ test("Murderball mixes every sound effect at half of its previous maximum volume
   assert.deepEqual(FakeAudio.volumes, Array(5).fill(.35));
 });
 
-test("every standard weapon and the random weapon use their supplied production sound", () => {
+test("every standard weapon and the common random weapon use their supplied production sound", () => {
   const audio = fresh();
-  for (let tier = 1; tier <= 7; tier++) audio.weaponFired({ playerId: "pilot", groupKey: `shot:${tier}`, tier });
+  for (let tier = 1; tier <= 6; tier++) audio.weaponFired({ playerId: "pilot", groupKey: `shot:${tier}`, tier });
+  audio.weaponFired({ playerId: "pilot", groupKey: "shot:7", tier: 7, rarity: "AVERAGE" });
   assert.deepEqual(FakeAudio.played, Object.values(DUSTY_AUDIO_FILES.weapons));
   assert.deepEqual(FakeAudio.volumes, [
     ...Array(6).fill(DUSTY_AUDIO_MAX_VOLUME),
     DUSTY_AUDIO_MAX_VOLUME * RANDOM_WEAPON_VOLUME_SCALE,
   ]);
-  assert.match(DUSTY_AUDIO_FILES.weapons[7], /weapon-random\.mp3\?v=20260817-3$/);
+  assert.match(DUSTY_AUDIO_FILES.weapons[7], /weapon-random\.mp3\?v=20260817-4$/);
 });
 
-test("random weapon is trimmed six decibels in both browser audio paths", async () => {
+test("dud, common, and legendary random weapons use distinct sounds at one normalized gain", () => {
+  const audio = fresh();
+  for (const rarity of ["DUD", "AVERAGE", "LEGENDARY"]) {
+    audio.weaponFired({ playerId: "pilot", groupKey: `rarity:${rarity}`, tier: 7, rarity });
+  }
+  assert.deepEqual(FakeAudio.played, [
+    DUSTY_AUDIO_FILES.randomWeapons.DUD,
+    DUSTY_AUDIO_FILES.randomWeapons.AVERAGE,
+    DUSTY_AUDIO_FILES.randomWeapons.LEGENDARY,
+  ]);
+  assert.deepEqual(FakeAudio.volumes, Array(3).fill(DUSTY_AUDIO_MAX_VOLUME * RANDOM_WEAPON_VOLUME_SCALE));
+});
+
+test("every random-weapon rarity is trimmed six decibels in both browser audio paths", async () => {
   const fallbackAudio = fresh();
-  fallbackAudio.weaponFired({ playerId: "pilot", groupKey: "fallback-random", tier: 7 });
-  assert.equal(FakeAudio.volumes[0], DUSTY_AUDIO_MAX_VOLUME * .5);
+  for (const rarity of ["DUD", "AVERAGE", "LEGENDARY"]) {
+    fallbackAudio.weaponFired({ playerId: "pilot", groupKey: `fallback:${rarity}`, tier: 7, rarity });
+  }
+  assert.deepEqual(FakeAudio.volumes, Array(3).fill(DUSTY_AUDIO_MAX_VOLUME * .5));
 
   const webAudio = fresh({
     AudioContextCtor: FakeAudioContext,
     fetchFn: async () => ({ ok: true, arrayBuffer: async () => new ArrayBuffer(8) }),
   });
   await webAudio.ready();
-  webAudio.weaponFired({ playerId: "pilot", groupKey: "web-random", tier: 7 });
-  assert.equal(FakeAudioContext.latest.gains.at(-1).gain.value, DUSTY_AUDIO_MAX_VOLUME * .5);
+  for (const rarity of ["DUD", "AVERAGE", "LEGENDARY"]) {
+    webAudio.weaponFired({ playerId: "pilot", groupKey: `web:${rarity}`, tier: 7, rarity });
+  }
+  assert.deepEqual(FakeAudioContext.latest.gains.slice(-3).map((node) => node.gain.value), Array(3).fill(DUSTY_AUDIO_MAX_VOLUME * .5));
 });
 
 test("three shotgun pellets sharing one authoritative discharge play one sound", () => {
@@ -100,6 +119,16 @@ test("weapon audio is emitted from the exact muzzle-materialization path", async
   assert.ok(materialize.indexOf('type: "weapon-muzzle"') < materialize.indexOf("this.emitWeaponAudioCue(event, visualOrigin)"));
 });
 
+test("random-weapon rarity reaches both predicted and authoritative audio cues", async () => {
+  const [renderer, simulation] = await Promise.all([
+    readFile(new URL("../../games/game-03/renderer.js", import.meta.url), "utf8"),
+    readFile(new URL("../src/dusty-simulation.ts", import.meta.url), "utf8"),
+  ]);
+  assert.match(renderer, /weaponRarity: weapon\.rarity/);
+  assert.match(renderer, /rarity: event\.weaponRarity/);
+  assert.match(simulation, /weapon\.generated \? \{ weaponRarity: weapon\.rarity \}/);
+});
+
 test("power-ups, teleport, death, and nuke map to their production files", () => {
   const audio = fresh();
   for (const type of ["fart", "health", "mole", "shield", "speed", "spy"]) audio.powerupCollected(type);
@@ -114,16 +143,16 @@ test("power-ups, teleport, death, and nuke map to their production files", () =>
 
 test("power-up playback cannot exhaust or interrupt the reusable weapon voice pool", () => {
   const audio = fresh();
-  // Sixteen templates plus one power-up voice and five weapon voices. The old
+  // Eighteen templates plus one power-up voice and five weapon voices. The old
   // clone-per-shot implementation exceeded this simulated browser limit on
   // the seventh discharge and then lost gun audio until resources recovered.
-  FakeAudio.constructionLimit = 22;
+  FakeAudio.constructionLimit = 24;
   audio.powerupCollected("speed");
   for (let shot = 0; shot < 100; shot++) {
     assert.equal(audio.weaponFired({ playerId: "pilot", groupKey: `shot:${shot}`, tier: 4 }), true);
   }
   assert.equal(FakeAudio.played.filter((url) => url === DUSTY_AUDIO_FILES.weapons[4]).length, 100);
-  assert.equal(FakeAudio.created, 22);
+  assert.equal(FakeAudio.created, 24);
 });
 
 test("Web Audio unlocks on interaction and mixes effects with sustained gunfire", async () => {
@@ -145,7 +174,7 @@ test("teleport uses the one supplied power-up sound exactly once", () => {
   assert.equal(audio.powerupCollected("teleport"), false);
   assert.equal(audio.teleport(), true);
   assert.deepEqual(FakeAudio.played, [DUSTY_AUDIO_FILES.teleport]);
-  assert.match(DUSTY_AUDIO_FILES.teleport, /powerup-teleport\.mp3\?v=20260817-3$/);
+  assert.match(DUSTY_AUDIO_FILES.teleport, /powerup-teleport\.mp3\?v=20260817-4$/);
   assert.equal(existsSync(new URL("../../games/game-03/assets/audio/teleport.mp3", import.meta.url)), false);
 });
 

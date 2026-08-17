@@ -160,15 +160,15 @@ export function createPolygonBroadphase(polygons, cellSize = 384) {
 
   return {
     invalidate() { cells = null; polygonCount = -1; },
-    queryCircle(center, radius) {
+    queryBounds(minX, minY, maxX, maxY) {
       if (!cells || polygonCount !== polygons.length) rebuild();
       stamp += 1;
       if (stamp >= 2_000_000_000) { seen.fill(0); stamp = 1; }
       const indices = [];
-      const firstColumn = Math.floor((center.x - radius) / safeCellSize);
-      const lastColumn = Math.floor((center.x + radius) / safeCellSize);
-      const firstRow = Math.floor((center.y - radius) / safeCellSize);
-      const lastRow = Math.floor((center.y + radius) / safeCellSize);
+      const firstColumn = Math.floor(minX / safeCellSize);
+      const lastColumn = Math.floor(maxX / safeCellSize);
+      const firstRow = Math.floor(minY / safeCellSize);
+      const lastRow = Math.floor(maxY / safeCellSize);
       for (let row = firstRow; row <= lastRow; row += 1) for (let column = firstColumn; column <= lastColumn; column += 1) {
         for (const index of cells.get(`${column},${row}`) || []) {
           if (seen[index] === stamp) continue;
@@ -178,6 +178,17 @@ export function createPolygonBroadphase(polygons, cellSize = 384) {
       }
       indices.sort((a, b) => a - b);
       return indices.map((index) => polygons[index]);
+    },
+    queryCircle(center, radius) {
+      return this.queryBounds(center.x - radius, center.y - radius, center.x + radius, center.y + radius);
+    },
+    querySegment(start, end, radius = 0) {
+      return this.queryBounds(
+        Math.min(start.x, end.x) - radius,
+        Math.min(start.y, end.y) - radius,
+        Math.max(start.x, end.x) + radius,
+        Math.max(start.y, end.y) + radius,
+      );
     },
   };
 }

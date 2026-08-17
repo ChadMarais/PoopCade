@@ -149,7 +149,9 @@ test("generated single-shot weapons preserve the exact live muzzle direction", (
   simulation.applyInput(player.id, { type: "input", seq: 1, moveX: 0, moveY: 0, aimX: .6, aimY: .8, fire: true }, 1000);
   simulation.step(DUSTY_FIXED_DT, 1000);
   const projectile = simulation.projectiles[0];
+  const shot = simulation.drainEvents().find((event) => event.type === "shot");
   assert.ok(projectile);
+  assert.equal(shot?.weaponRarity, "DUD");
   assert.ok(Math.abs(projectile.vx / dud.speed - .6) < 1e-9);
   assert.ok(Math.abs(projectile.vy / dud.speed - .8) < 1e-9);
 });

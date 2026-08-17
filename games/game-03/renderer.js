@@ -1,6 +1,6 @@
 import { weaponPose, weaponVisualForTier } from "./weapon-visuals.js?v=20260817-1";
 import { fartCloudGrowth } from "./effect-timing.js?v=20260813";
-import { sweptCircleIntersectsPolygon } from "./collision-geometry.js?v=20260817-4";
+import { sweptCircleIntersectsPolygon } from "./collision-geometry.js?v=20260817-5";
 import {
   NUKE_EFFECT_DURATION_MS,
   createNukeBurst,
@@ -16,6 +16,13 @@ const MAX_RENDER_SCALE = 1;
 const STATIC_CHUNK_SIZE = 512;
 const STATIC_CHUNK_SCALE = .75;
 const MAX_STATIC_CHUNKS = 48;
+const EFFECT_QUALITY_LEVELS = [.4, .7, 1];
+export function nextEffectsQuality(current, frameTimeMs, elapsedMs) {
+  const index = Math.max(0, EFFECT_QUALITY_LEVELS.indexOf(current));
+  if (frameTimeMs > 17.5 && elapsedMs > 650) return EFFECT_QUALITY_LEVELS[Math.max(0, index - 1)];
+  if (frameTimeMs < 14.5 && elapsedMs > 4500) return EFFECT_QUALITY_LEVELS[Math.min(EFFECT_QUALITY_LEVELS.length - 1, index + 1)];
+  return current;
+}
 export function renderScaleForViewport(width, height, nativeScale = 1, qualityScale = 1) {
   const safeWidth = Math.max(1, Number(width) || 1);
   const safeHeight = Math.max(1, Number(height) || 1);
@@ -274,8 +281,11 @@ export class DustyOrbitMultiplayerRenderer {
     this.collisionEditor = null;
     this.uplink = { active: false, phase: null, changedAt: 0 };
     this.renderQuality = 1;
+    this.effectsQuality = 1;
     this.frameTimeEma = 1000 / 60;
     this.lastQualityChange = 0;
+    this.lastEffectsQualityChange = 0;
+    this.effectPasses = { underlay: [], foreground: [] };
     this.staticWorldChunks = new Map();
     this.staticChunkUse = 0;
     this.fartCloudSprites = buildFartCloudSprites();
@@ -302,6 +312,12 @@ export class DustyOrbitMultiplayerRenderer {
     const frameMs = delta * 1000;
     this.frameTimeEma += (frameMs - this.frameTimeEma) * .04;
     const elapsed = now - this.lastQualityChange;
+    const effectsElapsed = now - this.lastEffectsQualityChange;
+    const nextEffects = nextEffectsQuality(this.effectsQuality, this.frameTimeEma, effectsElapsed);
+    if (nextEffects !== this.effectsQuality) {
+      this.effectsQuality = nextEffects;
+      this.lastEffectsQualityChange = now;
+    }
     let nextQuality = this.renderQuality;
     if (this.frameTimeEma > 20 && elapsed > 1400) nextQuality = Math.max(.7, this.renderQuality - .1);
     else if (this.frameTimeEma < 15.5 && elapsed > 5000) nextQuality = Math.min(1, this.renderQuality + .05);
@@ -309,6 +325,59 @@ export class DustyOrbitMultiplayerRenderer {
     this.renderQuality = nextQuality;
     this.lastQualityChange = now;
     this.resize();
+  }
+
+  dynamicShadowBlur(value) {
+    if (this.effectsQuality <= .4) return 0;
+    return this.effectsQuality < 1 ? value * .5 : value;
+  }
+
+  dynamicComposite(operation = "screen") {
+    return this.effectsQuality <= .4 ? "source-over" : operation;
+  }
+
+  effectParticleStep() {
+    return this.effectsQuality <= .4 ? 3 : this.effectsQuality < 1 ? 2 : 1;
+  }
+
+  isWorldCircleVisible(x, y, radius = 0, margin = 24) {
+    const screenX = x - this.camera.x;
+    const screenY = y - this.camera.y;
+    const extent = Math.max(0, radius) + margin;
+    return screenX + extent >= 0 && screenX - extent <= this.viewport.width
+      && screenY + extent >= 0 && screenY - extent <= this.viewport.height;
+  }
+
+  isWorldSegmentVisible(startX, startY, endX, endY, margin = 24) {
+    const left = this.camera.x - margin;
+    const top = this.camera.y - margin;
+    const right = this.camera.x + this.viewport.width + margin;
+    const bottom = this.camera.y + this.viewport.height + margin;
+    return Math.max(startX, endX) >= left && Math.min(startX, endX) <= right
+      && Math.max(startY, endY) >= top && Math.min(startY, endY) <= bottom;
+  }
+
+  isEffectVisible(effect) {
+    if (effect.type === "blocked") return true;
+    if (!Number.isFinite(effect.x) || !Number.isFinite(effect.y)) return false;
+    const radius = effect.type === "nuke-blast" ? effect.radius
+      : effect.type === "death" || effect.type === "respawn" ? 150
+        : effect.type === "dirt" ? 110 : effect.type === "weapon-muzzle" || effect.type === "muzzle" ? 70 : 60;
+    return this.isWorldCircleVisible(effect.x, effect.y, radius);
+  }
+
+  prepareEffectFrame(now) {
+    const active = [];
+    const underlay = [];
+    const foreground = [];
+    for (const effect of this.effects) {
+      if (now - effect.born >= effect.life) continue;
+      active.push(effect);
+      if (effect.type === "nuke-blast") underlay.push(effect);
+      if (effect.type !== "weapon-muzzle" && effect.type !== "muzzle") foreground.push(effect);
+    }
+    this.effects = active;
+    this.effectPasses = { underlay, foreground };
   }
 
   buildStaticWorldChunk(column, row) {
@@ -639,7 +708,7 @@ export class DustyOrbitMultiplayerRenderer {
       angle: Math.atan2(intent.aimY, intent.aimX), size: visual.flashSize, born: localNow,
       life: visualTier === 6 ? 175 : visualTier === 1 ? 85 : 115,
     });
-    this.emitWeaponAudioCue({ playerId: this.localPlayerId, fireIntentId: intent.id, projectile: { tier: visualTier } }, pose.muzzleWorld);
+    this.emitWeaponAudioCue({ playerId: this.localPlayerId, fireIntentId: intent.id, weaponRarity: weapon.rarity, projectile: { tier: visualTier } }, pose.muzzleWorld);
     const first = group.projectiles[0];
     if (first) this.lastLocalLaunch = {
       projectileId: first.tempId,
@@ -775,6 +844,7 @@ export class DustyOrbitMultiplayerRenderer {
         groupKey: this.shotGroupKey(event),
         shotId: event.shotId,
         tier: event.projectile?.tier,
+        rarity: event.weaponRarity,
         x: muzzle.x,
         y: muzzle.y,
       },
@@ -897,6 +967,7 @@ export class DustyOrbitMultiplayerRenderer {
     this.camera.y += (targetY - this.camera.y) * blend;
     const shake = this.getNukeScreenShake(now);
     this.playerScreen = { x: focus.x - this.camera.x + shake.x, y: focus.y - this.camera.y + shake.y };
+    this.prepareEffectFrame(now);
 
     ctx.fillStyle = "#371447";
     ctx.fillRect(0, 0, width, height);
@@ -916,20 +987,30 @@ export class DustyOrbitMultiplayerRenderer {
     });
     this.renderedPlayers.clear();
     for (const player of players) this.renderedPlayers.set(player.id, { x: player.x, y: player.y, vx: player.vx || 0, vy: player.vy || 0 });
+    const visiblePlayers = players.filter((player) => player.id === localId || this.isWorldCircleVisible(player.x, player.y, 105));
+    const visiblePickups = (snapshot?.pickups || []).filter((pickup) => this.isWorldCircleVisible(pickup.x, pickup.y, 75));
+    const visibleEnvironment = this.environmentLayers.filter((layer) => this.isWorldCircleVisible(
+      layer.value.x,
+      layer.value.y,
+      Math.hypot(layer.value.width, layer.value.height) / 2,
+    ));
+    const activeSatelliteIds = new Set(snapshot?.activeSatelliteIds || []);
+    const activeHealingStationIds = new Set(snapshot?.activeHealingStationIds || []);
+    const weaponStations = new Map((snapshot?.weaponStations || []).map((station) => [station.id, station]));
     const layers = [
-      ...this.environmentLayers,
-      ...(snapshot?.pickups || []).map((pickup) => ({ type: "pickup", depth: pickup.y, value: pickup })),
-      ...players.map((player) => ({ type: "player", depth: player.y, value: player })),
+      ...visibleEnvironment,
+      ...visiblePickups.map((pickup) => ({ type: "pickup", depth: pickup.y, value: pickup })),
+      ...visiblePlayers.map((player) => ({ type: "player", depth: player.y, value: player })),
     ].sort((a, b) => a.depth - b.depth);
     for (const layer of layers) {
       if (layer.type === "environment") {
-        const weaponStation = snapshot?.weaponStations?.find((station) => station.id === layer.value.id)
+        const weaponStation = weaponStations.get(layer.value.id)
           || (layer.value.kind === "weapon-station" ? { id: layer.value.id, state: "READY", userId: null, generationRemaining: 0, cooldownRemaining: 0 } : null);
         this.drawEnvironmentObject(layer.value, {
-        active: snapshot?.activeSatelliteIds?.includes(layer.value.id) === true,
+        active: activeSatelliteIds.has(layer.value.id),
         connected: local?.connectedSatelliteId === layer.value.id,
       }, {
-        active: snapshot?.activeHealingStationIds?.includes(layer.value.id) === true,
+        active: activeHealingStationIds.has(layer.value.id),
         connected: local?.connectedHealingStationId === layer.value.id,
         inProgress: local?.connectedHealingStationId === layer.value.id && local?.healingInProgress === true,
         remaining: Number(local?.healingRemaining) || 0,
@@ -944,7 +1025,7 @@ export class DustyOrbitMultiplayerRenderer {
     }
     // Labels are a world-space readability layer so nearby players and rocks
     // cannot cover the name while deciding whether to collect a power-up.
-    for (const pickup of snapshot?.pickups || []) this.drawPickupLabel(pickup);
+    for (const pickup of visiblePickups) this.drawPickupLabel(pickup);
     // Prediction and transmission run at this exact point: drawPlayer() has
     // produced the visible muzzle, while muzzle light and projectiles have not
     // been painted yet. A locally predicted round therefore appears at that
@@ -1172,9 +1253,9 @@ export class DustyOrbitMultiplayerRenderer {
     if (rotation) this.ctx.rotate(rotation);
     if (item.definition.render?.flipX === true) this.ctx.scale(-1, 1);
     this.ctx.drawImage(item.image, -item.width / 2, -item.height / 2, item.width, item.height);
-    if (item.kind === "satellite" && satelliteState?.active) this.drawSatelliteActivePulse(item);
-    if (item.kind === "healing-station" && healingState?.active) this.drawHealingStationActivePulse(item);
-    if (item.kind === "weapon-station" && weaponState && weaponState.state !== "READY") this.drawWeaponStationPulse(item, weaponState);
+    if (this.effectsQuality > .4 && item.kind === "satellite" && satelliteState?.active) this.drawSatelliteActivePulse(item);
+    if (this.effectsQuality > .4 && item.kind === "healing-station" && healingState?.active) this.drawHealingStationActivePulse(item);
+    if (this.effectsQuality > .4 && item.kind === "weapon-station" && weaponState && weaponState.state !== "READY") this.drawWeaponStationPulse(item, weaponState);
     this.ctx.restore();
     if (item.kind === "satellite" && satelliteState) this.drawSatelliteStationLabel(item, satelliteState);
     if (item.kind === "healing-station" && healingState) this.drawHealingStationLabel(item, healingState);
@@ -1185,11 +1266,11 @@ export class DustyOrbitMultiplayerRenderer {
     const pulse = .5 + .5 * Math.sin(performance.now() / 180);
     const ctx = this.ctx;
     ctx.save();
-    ctx.globalCompositeOperation = "screen";
+    ctx.globalCompositeOperation = this.dynamicComposite("screen");
     ctx.globalAlpha = .25 + pulse * .3;
     ctx.strokeStyle = "#5ff7ff";
     ctx.shadowColor = "#42eaff";
-    ctx.shadowBlur = 12;
+    ctx.shadowBlur = this.dynamicShadowBlur(12);
     ctx.lineWidth = 1.5;
     ctx.beginPath();
     ctx.ellipse(item.width * .035, -item.height * .18, item.width * (.08 + pulse * .018), item.height * (.025 + pulse * .008), -.15, 0, Math.PI * 2);
@@ -1228,7 +1309,7 @@ export class DustyOrbitMultiplayerRenderer {
     const pulse = .5 + .5 * Math.sin(performance.now() / 170);
     const ctx = this.ctx;
     ctx.save();
-    ctx.globalCompositeOperation = "screen";
+    ctx.globalCompositeOperation = this.dynamicComposite("screen");
     ctx.globalAlpha = .3 + pulse * .42;
     const glow = ctx.createRadialGradient(0, item.height * .08, 0, 0, item.height * .08, item.width * .4);
     glow.addColorStop(0, "rgba(150,255,174,.58)");
@@ -1240,7 +1321,7 @@ export class DustyOrbitMultiplayerRenderer {
     ctx.fill();
     ctx.strokeStyle = "#7dff87";
     ctx.shadowColor = "#4dff79";
-    ctx.shadowBlur = 18;
+    ctx.shadowBlur = this.dynamicShadowBlur(18);
     ctx.lineWidth = 3;
     ctx.beginPath();
     ctx.ellipse(0, item.height * .08, item.width * (.32 + pulse * .025), item.height * (.19 + pulse * .018), 0, 0, Math.PI * 2);
@@ -1282,11 +1363,11 @@ export class DustyOrbitMultiplayerRenderer {
     const color = state.state === "GENERATING" ? "#52f5ff" : "#ffba55";
     const ctx = this.ctx;
     ctx.save();
-    ctx.globalCompositeOperation = "screen";
+    ctx.globalCompositeOperation = this.dynamicComposite("screen");
     ctx.globalAlpha = .25 + pulse * .42;
     ctx.strokeStyle = color;
     ctx.shadowColor = color;
-    ctx.shadowBlur = state.state === "GENERATING" ? 26 : 13;
+    ctx.shadowBlur = this.dynamicShadowBlur(state.state === "GENERATING" ? 26 : 13);
     ctx.lineWidth = state.state === "GENERATING" ? 4 : 2;
     ctx.beginPath();
     ctx.ellipse(0, item.height * .08, item.width * (.34 + pulse * .035), item.height * (.2 + pulse * .025), 0, 0, Math.PI * 2);
@@ -1453,7 +1534,7 @@ export class DustyOrbitMultiplayerRenderer {
     if (modulePose) this.drawWeaponModule(modulePose, now);
 
     if (player.shieldHits) {
-      ctx.save(); ctx.strokeStyle = "rgba(120,241,255,.86)"; ctx.lineWidth = 2; ctx.shadowColor = "#72efff"; ctx.shadowBlur = 10;
+      ctx.save(); ctx.strokeStyle = "rgba(120,241,255,.86)"; ctx.lineWidth = 2; ctx.shadowColor = "#72efff"; ctx.shadowBlur = this.dynamicShadowBlur(10);
       ctx.beginPath(); ctx.arc(x, y - 8, 31 + Math.sin(now / 160) * 2, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
     }
 
@@ -1602,19 +1683,30 @@ export class DustyOrbitMultiplayerRenderer {
     for (const projectile of projectiles) {
       const x = projectile.x - this.camera.x;
       const y = projectile.y - this.camera.y;
-      ctx.save();
+      const trailX = Number.isFinite(projectile.trailStartX) ? projectile.trailStartX : projectile.x;
+      const trailY = Number.isFinite(projectile.trailStartY) ? projectile.trailStartY : projectile.y;
+      if (!this.isWorldSegmentVisible(trailX, trailY, projectile.x, projectile.y, 65)) continue;
       const plasma = projectile.tier === 6;
       const colors = ["#d8ff8a", "#fff0a4", "#98f8ff", "#ffb1f0", "#ffc977", "#c89cff"];
+      ctx.save();
       if (plasma) {
-        const speed = Math.max(.001, Math.hypot(projectile.vx || 0, projectile.vy || 0));
         const angle = Math.atan2(projectile.vy || 0, projectile.vx || 1);
         const pulse = .92 + Math.sin(performance.now() / 42 + projectile.id) * .08;
         ctx.translate(x, y);
         ctx.rotate(angle);
-        ctx.globalCompositeOperation = "screen";
+        ctx.globalCompositeOperation = this.dynamicComposite("screen");
         ctx.lineCap = "round";
+        if (this.effectsQuality <= .4) {
+          ctx.strokeStyle = "#9ef8ff";
+          ctx.lineWidth = 5 * pulse;
+          ctx.beginPath(); ctx.moveTo(-38, 0); ctx.lineTo(13, 0); ctx.stroke();
+          ctx.fillStyle = "#ffffff";
+          ctx.beginPath(); ctx.arc(13, 0, 3.5 * pulse, 0, Math.PI * 2); ctx.fill();
+          ctx.restore();
+          continue;
+        }
         ctx.shadowColor = "#9a4dff";
-        ctx.shadowBlur = 28;
+        ctx.shadowBlur = this.dynamicShadowBlur(28);
         ctx.strokeStyle = "rgba(113,50,255,.48)";
         ctx.lineWidth = 15 * pulse;
         ctx.beginPath(); ctx.moveTo(-48, 0); ctx.lineTo(11, 0); ctx.stroke();
@@ -1623,12 +1715,12 @@ export class DustyOrbitMultiplayerRenderer {
         beam.addColorStop(.24, "rgba(137,74,255,.76)");
         beam.addColorStop(.76, "rgba(108,240,255,.98)");
         beam.addColorStop(1, "#ffffff");
-        ctx.shadowBlur = 18;
+        ctx.shadowBlur = this.dynamicShadowBlur(18);
         ctx.strokeStyle = beam;
         ctx.lineWidth = 7 * pulse;
         ctx.beginPath(); ctx.moveTo(-52, 0); ctx.lineTo(12, 0); ctx.stroke();
         ctx.shadowColor = "#dfffff";
-        ctx.shadowBlur = 10;
+        ctx.shadowBlur = this.dynamicShadowBlur(10);
         ctx.strokeStyle = "rgba(247,255,255,.96)";
         ctx.lineWidth = 2.3;
         ctx.beginPath(); ctx.moveTo(-32, 0); ctx.lineTo(14, 0); ctx.stroke();
@@ -1638,7 +1730,7 @@ export class DustyOrbitMultiplayerRenderer {
         continue;
       }
       ctx.shadowColor = plasma ? "#9c63ff" : (colors[(projectile.tier || 1) - 1] || "#74f6ff");
-      ctx.shadowBlur = plasma ? 19 : 11;
+      ctx.shadowBlur = this.dynamicShadowBlur(plasma ? 19 : 11);
       ctx.fillStyle = plasma ? "#f8efff" : ctx.shadowColor;
       if (Number.isFinite(projectile.trailStartX) && Number.isFinite(projectile.trailStartY)) {
         ctx.strokeStyle = ctx.shadowColor;
@@ -1679,10 +1771,14 @@ export class DustyOrbitMultiplayerRenderer {
       // Local shots are predicted ahead of the authoritative server response.
       // Stop that visual prediction at the same static colliders used by the
       // simulation so network latency can never paint a round through a wall.
-      const blocked = (this.assets?.projectilePolygons || []).some((polygon) =>
+      const previous = { x: projectile.previousX, y: projectile.previousY };
+      const next = { x: rendered.x, y: rendered.y };
+      const projectilePolygons = this.assets?.projectileBroadphase?.querySegment(previous, next, projectile.radius || 3.5)
+        || this.assets?.projectilePolygons || [];
+      const blocked = projectilePolygons.some((polygon) =>
         sweptCircleIntersectsPolygon(
-          { x: projectile.previousX, y: projectile.previousY },
-          { x: rendered.x, y: rendered.y },
+          previous,
+          next,
           projectile.radius || 3.5,
           polygon,
         ));
@@ -1705,9 +1801,10 @@ export class DustyOrbitMultiplayerRenderer {
   }
 
   drawEffects(pass = "foreground", now = performance.now()) {
-    this.effects = this.effects.filter((effect) => now - effect.born < effect.life);
-    for (const effect of this.effects) {
+    const effects = pass === "muzzle" ? this.effects : this.effectPasses[pass] || [];
+    for (const effect of effects) {
       const muzzleEffect = effect.type === "weapon-muzzle" || effect.type === "muzzle";
+      if (!this.isEffectVisible(effect)) continue;
       if (effect.type === "nuke-blast") {
         this.ctx.save();
         if (pass === "underlay") this.drawNukeUnderlay(effect, now);
@@ -1727,10 +1824,10 @@ export class DustyOrbitMultiplayerRenderer {
         const size = Math.max(2, effect.size || visual.flashSize);
         this.ctx.translate(x, y);
         this.ctx.rotate(effect.angle || 0);
-        this.ctx.globalCompositeOperation = "screen";
+        this.ctx.globalCompositeOperation = this.dynamicComposite("screen");
         this.ctx.fillStyle = plasma ? "#f7efff" : "#eaffff";
         this.ctx.shadowColor = visual.accent;
-        this.ctx.shadowBlur = plasma ? 26 : 8;
+        this.ctx.shadowBlur = this.dynamicShadowBlur(plasma ? 26 : 8);
         this.ctx.beginPath();
         this.ctx.arc(0, 0, size * (1 - amount * .45), 0, Math.PI * 2);
         this.ctx.fill();
@@ -1788,7 +1885,7 @@ export class DustyOrbitMultiplayerRenderer {
     const x = effect.x - this.camera.x, y = effect.y - this.camera.y;
     const bloomRadius = effect.radius * (.08 + timeline.plasmaProgress * .43);
     if (timeline.plasmaAlpha <= .001) return;
-    ctx.globalCompositeOperation = "screen";
+    ctx.globalCompositeOperation = this.dynamicComposite("screen");
     ctx.globalAlpha = timeline.plasmaAlpha * .58;
     this.drawEnergyGlow(x, y, bloomRadius, timeline.plasmaAlpha * .58);
   }
@@ -1797,7 +1894,7 @@ export class DustyOrbitMultiplayerRenderer {
     if (!this.energyGlowSprite || radius <= 0 || alpha <= .001) return;
     const ctx = this.ctx;
     ctx.save();
-    ctx.globalCompositeOperation = "screen";
+    ctx.globalCompositeOperation = this.dynamicComposite("screen");
     ctx.globalAlpha = alpha;
     ctx.drawImage(this.energyGlowSprite, x - radius, y - radius, radius * 2, radius * 2);
     ctx.restore();
@@ -1807,7 +1904,7 @@ export class DustyOrbitMultiplayerRenderer {
     const ctx = this.ctx;
     const timeline = nukeTimeline(now - effect.born);
     const x = effect.x - this.camera.x, y = effect.y - this.camera.y;
-    ctx.globalCompositeOperation = "lighter";
+    ctx.globalCompositeOperation = this.dynamicComposite("lighter");
 
     if (timeline.ignitionAlpha > .001 || timeline.coreAlpha > .001) {
       const ignitionRadius = mix(8, Math.min(92, effect.radius * .14), timeline.ignitionProgress);
@@ -1817,7 +1914,7 @@ export class DustyOrbitMultiplayerRenderer {
 
       ctx.globalAlpha = timeline.ignitionAlpha;
       ctx.strokeStyle = "#ffffff";
-      ctx.shadowColor = "#56f4ff"; ctx.shadowBlur = 12;
+      ctx.shadowColor = "#56f4ff"; ctx.shadowBlur = this.dynamicShadowBlur(12);
       ctx.lineWidth = 3.5;
       const starLength = ignitionRadius * 1.65;
       ctx.beginPath();
@@ -1832,7 +1929,7 @@ export class DustyOrbitMultiplayerRenderer {
       const lineWidth = mix(15, 2.2, timeline.shockwaveProgress);
       ctx.globalAlpha = timeline.shockwaveAlpha;
       ctx.strokeStyle = "#c9ffff";
-      ctx.shadowColor = "#35ddff"; ctx.shadowBlur = mix(15, 5, timeline.shockwaveProgress);
+      ctx.shadowColor = "#35ddff"; ctx.shadowBlur = this.dynamicShadowBlur(mix(15, 5, timeline.shockwaveProgress));
       ctx.lineWidth = lineWidth;
       ctx.beginPath(); ctx.arc(x, y, ringRadius, 0, Math.PI * 2); ctx.stroke();
       ctx.globalAlpha *= .82;
@@ -1849,13 +1946,15 @@ export class DustyOrbitMultiplayerRenderer {
     if (timeline.secondaryAlpha > .001) {
       ctx.globalAlpha = timeline.secondaryAlpha * .64;
       ctx.strokeStyle = "#ef64ff";
-      ctx.shadowColor = "#9b54ff"; ctx.shadowBlur = 8;
+      ctx.shadowColor = "#9b54ff"; ctx.shadowBlur = this.dynamicShadowBlur(8);
       ctx.lineWidth = mix(9, 1.5, timeline.secondaryProgress);
       ctx.beginPath(); ctx.arc(x, y, effect.radius * timeline.secondaryProgress, 0, Math.PI * 2); ctx.stroke();
       ctx.shadowBlur = 0;
     }
 
-    for (const shard of effect.shards) {
+    const particleStep = this.effectParticleStep();
+    for (let shardIndex = 0; shardIndex < effect.shards.length; shardIndex += particleStep) {
+      const shard = effect.shards[shardIndex];
       const elapsed = timeline.elapsed - shard.delay;
       if (elapsed <= 0 || elapsed >= shard.life) continue;
       const amount = elapsed / shard.life;
@@ -1874,7 +1973,8 @@ export class DustyOrbitMultiplayerRenderer {
     }
     ctx.shadowBlur = 0;
 
-    for (const particle of effect.particles) {
+    for (let particleIndex = 0; particleIndex < effect.particles.length; particleIndex += particleStep) {
+      const particle = effect.particles[particleIndex];
       const elapsed = timeline.elapsed - particle.delay;
       if (elapsed <= 0 || elapsed >= particle.life) continue;
       const amount = elapsed / particle.life;
@@ -1909,10 +2009,10 @@ export class DustyOrbitMultiplayerRenderer {
     const ctx = this.ctx;
     const x = effect.x - this.camera.x, y = effect.y - this.camera.y;
     const fade = 1 - smoothstep(amount);
-    ctx.globalCompositeOperation = "screen";
+    ctx.globalCompositeOperation = this.dynamicComposite("screen");
     ctx.globalAlpha = fade;
     ctx.fillStyle = "rgba(255,255,255,.78)";
-    ctx.shadowColor = "#60f4ff"; ctx.shadowBlur = 20;
+    ctx.shadowColor = "#60f4ff"; ctx.shadowBlur = this.dynamicShadowBlur(20);
     ctx.beginPath(); ctx.arc(x, y, 19 + amount * 23, 0, Math.PI * 2); ctx.fill();
     ctx.strokeStyle = "#7bfbff"; ctx.lineWidth = 3 - amount * 1.5;
     ctx.beginPath(); ctx.arc(x, y, 25 + amount * 32, 0, Math.PI * 2); ctx.stroke();
@@ -1929,7 +2029,7 @@ export class DustyOrbitMultiplayerRenderer {
     ctx.beginPath(); ctx.ellipse(x, y, 25 + amount * 31, 8 + amount * 10, 0, 0, Math.PI * 2); ctx.fill();
     ctx.strokeStyle = effect.direction === "emerge" ? "#f1ca7f" : "#c58c5e";
     ctx.lineWidth = 4 - amount * 2.3;
-    ctx.shadowColor = "#6d3940"; ctx.shadowBlur = 8;
+    ctx.shadowColor = "#6d3940"; ctx.shadowBlur = this.dynamicShadowBlur(8);
     ctx.beginPath(); ctx.ellipse(x, y, 17 + amount * 46, 5 + amount * 17, 0, 0, Math.PI * 2); ctx.stroke();
     ctx.shadowBlur = 0;
     for (let index = 0; index < 7; index++) {
@@ -1942,7 +2042,9 @@ export class DustyOrbitMultiplayerRenderer {
       ctx.ellipse(x + Math.cos(phase) * distance, y - 4 - Math.sin(phase) * distance * .24 - puffAmount * 14, 7 + puffAmount * 7, 4 + puffAmount * 4, phase, 0, Math.PI * 2);
       ctx.fill();
     }
-    for (const particle of effect.particles || []) {
+    const particles = effect.particles || [];
+    for (let particleIndex = 0; particleIndex < particles.length; particleIndex += this.effectParticleStep()) {
+      const particle = particles[particleIndex];
       const px = x + particle.vx * age * outward;
       const py = y + particle.vy * age * outward + 125 * age * age;
       ctx.save();
@@ -1960,7 +2062,7 @@ export class DustyOrbitMultiplayerRenderer {
     const age = (now - effect.born) / 1000;
     const fade = Math.pow(1 - amount, .62);
     const scale = effect.scale || 1;
-    ctx.globalCompositeOperation = "screen";
+    ctx.globalCompositeOperation = this.dynamicComposite("screen");
     ctx.globalAlpha = fade;
     const core = ctx.createRadialGradient(x, y, 0, x, y, (18 + amount * 46) * scale);
     core.addColorStop(0, "rgba(255,255,255,.98)");
@@ -1970,20 +2072,22 @@ export class DustyOrbitMultiplayerRenderer {
     ctx.fillStyle = core;
     ctx.beginPath(); ctx.arc(x, y, (18 + amount * 46) * scale, 0, Math.PI * 2); ctx.fill();
     ctx.strokeStyle = `rgba(255,240,166,${fade})`;
-    ctx.shadowColor = "#ff7eef"; ctx.shadowBlur = 24;
+    ctx.shadowColor = "#ff7eef"; ctx.shadowBlur = this.dynamicShadowBlur(24);
     ctx.lineWidth = (6 - amount * 4) * scale;
     ctx.beginPath(); ctx.arc(x, y, (8 + amount * 74) * scale, 0, Math.PI * 2); ctx.stroke();
     ctx.strokeStyle = `rgba(103,237,255,${fade * .75})`;
     ctx.lineWidth = 2.5;
     ctx.beginPath(); ctx.arc(x, y, (22 + amount * 102) * scale, 0, Math.PI * 2); ctx.stroke();
-    for (const particle of effect.particles || []) {
+    const particles = effect.particles || [];
+    for (let particleIndex = 0; particleIndex < particles.length; particleIndex += this.effectParticleStep()) {
+      const particle = particles[particleIndex];
       const px = x + particle.vx * age;
       const py = y + particle.vy * age + 75 * age * age;
       ctx.save();
       ctx.globalAlpha = fade;
       ctx.translate(px, py); ctx.rotate(particle.spin * age);
       ctx.fillStyle = particle.color;
-      ctx.shadowColor = particle.color; ctx.shadowBlur = 12;
+      ctx.shadowColor = particle.color; ctx.shadowBlur = this.dynamicShadowBlur(12);
       ctx.beginPath();
       ctx.moveTo(particle.size * 1.8, 0);
       ctx.lineTo(-particle.size, particle.size * .55);
@@ -1999,14 +2103,14 @@ export class DustyOrbitMultiplayerRenderer {
     const age = (now - effect.born) / 1000;
     const fade = Math.pow(1 - amount, .75);
     const arrive = smoothstep(clamp(amount * 1.8, 0, 1));
-    ctx.globalCompositeOperation = "screen";
+    ctx.globalCompositeOperation = this.dynamicComposite("screen");
     const column = ctx.createLinearGradient(x, y - 150, x, y + 34);
     column.addColorStop(0, "rgba(116,239,255,0)");
     column.addColorStop(.5, `rgba(130,246,255,${.18 * fade})`);
     column.addColorStop(1, "rgba(185,255,132,0)");
     ctx.fillStyle = column;
     ctx.fillRect(x - 30 * fade, y - 150, 60 * fade, 184);
-    ctx.shadowColor = "#8efbff"; ctx.shadowBlur = 20;
+    ctx.shadowColor = "#8efbff"; ctx.shadowBlur = this.dynamicShadowBlur(20);
     for (let ring = 0; ring < 3; ring++) {
       const phase = clamp(amount * 1.35 - ring * .1, 0, 1);
       ctx.globalAlpha = (1 - phase) * .9;
@@ -2016,12 +2120,14 @@ export class DustyOrbitMultiplayerRenderer {
       ctx.ellipse(x, y + 13 - arrive * 10, 14 + phase * (52 + ring * 8), 4 + phase * 15, 0, 0, Math.PI * 2);
       ctx.stroke();
     }
-    for (const particle of effect.particles || []) {
+    const particles = effect.particles || [];
+    for (let particleIndex = 0; particleIndex < particles.length; particleIndex += this.effectParticleStep()) {
+      const particle = particles[particleIndex];
       const px = x + particle.vx * age * .55;
       const py = y + 12 + particle.vy * age - 85 * age;
       ctx.globalAlpha = fade;
       ctx.fillStyle = particle.color;
-      ctx.shadowColor = particle.color; ctx.shadowBlur = 10;
+      ctx.shadowColor = particle.color; ctx.shadowBlur = this.dynamicShadowBlur(10);
       ctx.beginPath(); ctx.arc(px, py, particle.size * .55, 0, Math.PI * 2); ctx.fill();
     }
     ctx.globalAlpha = fade;
@@ -2100,7 +2206,7 @@ export class DustyOrbitMultiplayerRenderer {
     ctx.globalAlpha = .3 - lift * .009;
     ctx.fillStyle = "#100517";
     ctx.shadowColor = "rgba(4,0,10,.75)";
-    ctx.shadowBlur = 7;
+    ctx.shadowBlur = this.dynamicShadowBlur(7);
     ctx.beginPath();
     ctx.ellipse(x, y + 12, 14 - lift * .22, 5 - lift * .055, 0, 0, Math.PI * 2);
     ctx.fill();
@@ -2111,7 +2217,7 @@ export class DustyOrbitMultiplayerRenderer {
     ctx.strokeStyle = color;
     ctx.lineWidth = 1.4;
     ctx.shadowColor = color;
-    ctx.shadowBlur = 12;
+    ctx.shadowBlur = this.dynamicShadowBlur(12);
     ctx.beginPath();
     ctx.arc(x, y - lift, 21 + Math.sin(phase * .72) * 2.2, 0, Math.PI * 2);
     ctx.stroke();
@@ -2127,7 +2233,7 @@ export class DustyOrbitMultiplayerRenderer {
       ctx.translate(x, y - lift);
       ctx.rotate(Math.sin(phase * .55) * .035);
       ctx.shadowColor = color;
-      ctx.shadowBlur = 10 + Math.sin(phase * .72) * 2;
+      ctx.shadowBlur = this.dynamicShadowBlur(10 + Math.sin(phase * .72) * 2);
       ctx.drawImage(art.image, source.x, source.y, source.width, source.height, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight);
       ctx.restore();
       return;
@@ -2139,7 +2245,7 @@ export class DustyOrbitMultiplayerRenderer {
     ctx.fillStyle = color;
     ctx.globalAlpha = .92;
     ctx.shadowColor = color;
-    ctx.shadowBlur = 12;
+    ctx.shadowBlur = this.dynamicShadowBlur(12);
     ctx.beginPath(); ctx.arc(0, 0, radius, 0, Math.PI * 2); ctx.fill();
     ctx.shadowBlur = 0; ctx.fillStyle = "#180820"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
     ctx.font = `1000 ${pickup.type === "fart" || pickup.type === "mole" ? 7 : 9}px ui-monospace,monospace`;
@@ -2172,16 +2278,16 @@ export class DustyOrbitMultiplayerRenderer {
     const boxY = Math.round(clamp(y - lift - 40, 4, this.viewport.height - 19));
     ctx.fillStyle = "rgba(12,4,22,.9)";
     ctx.shadowColor = "rgba(3,0,8,.86)";
-    ctx.shadowBlur = 6;
+    ctx.shadowBlur = this.dynamicShadowBlur(6);
     ctx.fillRect(boxX, boxY, width, 15);
-    ctx.shadowBlur = 8;
+    ctx.shadowBlur = this.dynamicShadowBlur(8);
     ctx.shadowColor = color;
     ctx.strokeStyle = color;
     ctx.globalAlpha = .82;
     ctx.lineWidth = 1;
     ctx.strokeRect(boxX + .5, boxY + .5, width - 1, 14);
     ctx.globalAlpha = 1;
-    ctx.shadowBlur = 4;
+    ctx.shadowBlur = this.dynamicShadowBlur(4);
     ctx.fillStyle = "#fff";
     ctx.fillText(label, labelX, boxY + 7.8);
     ctx.restore();
@@ -2519,6 +2625,7 @@ export class DustyOrbitMultiplayerRenderer {
       camera: { ...this.camera },
       playerScreen: { ...this.playerScreen },
       viewport: { ...this.viewport },
+      quality: { render: this.renderQuality, effects: this.effectsQuality, frameMs: this.frameTimeEma },
       weapon: pose ? {
         tier: pose.tier,
         id: pose.visual.id,

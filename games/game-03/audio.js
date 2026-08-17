@@ -1,4 +1,4 @@
-const AUDIO_ASSET_VERSION = "20260817-3";
+const AUDIO_ASSET_VERSION = "20260817-4";
 const WEAPON_VOICE_LIMIT = 5;
 const EFFECT_VOICE_LIMIT = 2;
 export const DUSTY_AUDIO_MAX_VOLUME = .35;
@@ -28,8 +28,16 @@ export const DUSTY_AUDIO_FILES = Object.freeze({
       [7, audioUrl("weapon-random.mp3")],
     ],
   )),
+  randomWeapons: Object.freeze({
+    DUD: audioUrl("weapon-random-dud.mp3"),
+    AVERAGE: audioUrl("weapon-random.mp3"),
+    LEGENDARY: audioUrl("weapon-random-legendary.mp3"),
+  }),
 });
-const WEAPON_AUDIO_URLS = new Set(Object.values(DUSTY_AUDIO_FILES.weapons));
+const WEAPON_AUDIO_URLS = new Set([
+  ...Object.values(DUSTY_AUDIO_FILES.weapons),
+  ...Object.values(DUSTY_AUDIO_FILES.randomWeapons),
+]);
 
 function finitePoint(value) {
   return Boolean(value) && Number.isFinite(value.x) && Number.isFinite(value.y);
@@ -76,7 +84,7 @@ export class DustyOrbitAudio {
       DUSTY_AUDIO_FILES.death,
       DUSTY_AUDIO_FILES.teleport,
       ...Object.values(DUSTY_AUDIO_FILES.powerups),
-      ...Object.values(DUSTY_AUDIO_FILES.weapons),
+      ...WEAPON_AUDIO_URLS,
     ];
     for (const url of urls) {
       const template = new AudioCtor(url);
@@ -174,7 +182,7 @@ export class DustyOrbitAudio {
     return true;
   }
 
-  weaponFired({ playerId, groupKey, tier, x, y } = {}) {
+  weaponFired({ playerId, groupKey, tier, rarity, x, y } = {}) {
     const weaponTier = Math.max(1, Math.min(7, Math.trunc(Number(tier) || 1)));
     const key = `${String(playerId || "unknown")}:${String(groupKey || "ungrouped")}`;
     if (this.playedShotGroups.has(key)) return false;
@@ -182,7 +190,11 @@ export class DustyOrbitAudio {
     this.shotGroupOrder.push(key);
     while (this.shotGroupOrder.length > 512) this.playedShotGroups.delete(this.shotGroupOrder.shift());
     const volumeScale = weaponTier === 7 ? RANDOM_WEAPON_VOLUME_SCALE : 1;
-    return this.play(DUSTY_AUDIO_FILES.weapons[weaponTier], { x, y }, volumeScale);
+    const randomRarity = String(rarity || "AVERAGE").toUpperCase();
+    const url = weaponTier === 7
+      ? DUSTY_AUDIO_FILES.randomWeapons[randomRarity] || DUSTY_AUDIO_FILES.randomWeapons.AVERAGE
+      : DUSTY_AUDIO_FILES.weapons[weaponTier];
+    return this.play(url, { x, y }, volumeScale);
   }
 
   powerupCollected(type, source = null) {

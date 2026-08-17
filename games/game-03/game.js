@@ -1,9 +1,9 @@
-import { createPolygonBroadphase, moveCircleWithSliding } from "./collision-geometry.js?v=20260817-4";
-import { CollisionEditor } from "./collision-editor.js?v=20260817-16";
-import { loadDustyOrbitAssets } from "./assets.js?v=20260817-4";
+import { createPolygonBroadphase, moveCircleWithSliding } from "./collision-geometry.js?v=20260817-5";
+import { CollisionEditor } from "./collision-editor.js?v=20260817-17";
+import { loadDustyOrbitAssets } from "./assets.js?v=20260817-5";
 import { PRODUCTION_ARENA_WSS } from "./config.js?v=20260812";
 import { MAP_CATALOG, mapCatalogEntry } from "./maps/catalog.js?v=20260814-2";
-import { DustyOrbitMultiplayerRenderer } from "./renderer.js?v=20260817-8";
+import { DustyOrbitMultiplayerRenderer } from "./renderer.js?v=20260817-10";
 import { InputController } from "./input.js?v=20260817-1";
 import { claimSessionIdentity, resolvePoopcadePlayerIdentity } from "./identity.js?v=20260813-2";
 import { ArenaNetwork } from "./network.js?v=20260817-1";
@@ -11,7 +11,7 @@ import { consumeFixedStep, convergeVisualPosition } from "./timing.js?v=20260813
 import { DustyLobby } from "./lobby.js?v=20260817-1";
 import { presenceEndpoint, RECRUITMENT_HREF } from "./presence.js?v=20260817-1";
 import { DustyOrbitHighscoreTracker } from "./highscore.js?v=20260813-2";
-import { DustyOrbitAudio } from "./audio.js?v=20260817-4";
+import { DustyOrbitAudio } from "./audio.js?v=20260817-5";
 import { makePanelDraggable } from "./draggable-panel.js?v=20260814-4";
 
 const INPUT_RATE = 30;
@@ -108,6 +108,7 @@ document.querySelector("[data-current-map-name]").textContent = selectedMap.name
 const assets = await loadDustyOrbitAssets(selectedMapDefinition, (message, amount) => { loadingText.textContent = message; loadingBar.style.width = `${amount * 100}%`; });
 assets.movementBroadphase = createPolygonBroadphase(assets.polygons);
 assets.boundaryBroadphase = createPolygonBroadphase(assets.boundaryPolygons);
+assets.projectileBroadphase = createPolygonBroadphase(assets.projectilePolygons);
 function preloadCharacterSkin(skinId) { void assets.ensureCharacterSkin(skinId).catch(() => {}); }
 loadingBar.style.width = "100%";
 const focusSatellite = parameters.get("focus") === "satellite-east" ? assets.satellites[1] : assets.satellites[0];
@@ -233,7 +234,12 @@ function joinSelectedMap(skinId) {
 function navigateToMap(mapId, autoJoin = false) {
   const destination = new URL(location.href);
   destination.searchParams.set("map", mapId);
-  if (autoJoin) destination.searchParams.set("autojoin", "1");
+  if (autoJoin) {
+    destination.searchParams.set("autojoin", "1");
+    lobby.hide();
+    loadingText.textContent = "SWITCHING ARENA · JOINING NEBULA MURDERBALL…";
+    loading.classList.remove("done");
+  }
   else destination.searchParams.delete("autojoin");
   location.assign(destination);
 }
@@ -262,8 +268,13 @@ const lobby = new DustyLobby(document.querySelector("#lobby"), {
     else navigateToMap(mapId, true);
   },
 });
-lobby.show();
-loading.classList.add("done");
+if (autoJoinRequested) {
+  lobby.hide();
+  loadingText.textContent = "SWITCHING ARENA · JOINING NEBULA MURDERBALL…";
+} else {
+  lobby.show();
+  loading.classList.add("done");
+}
 
 function mapDirectoryEndpoint() {
   const url = new URL(arenaEndpoint);
@@ -333,7 +344,15 @@ network = new ArenaNetwork({
       if (resumeAfterReconnect) {
         applicationState = "PLAYING";
         lobby.hide();
+      } else if (autoJoinRequested && state === "connecting") {
+        applicationState = "JOINING";
+        lobby.setApplicationState(applicationState);
+        lobby.hide();
       } else {
+        if (autoJoinRequested) {
+          autoJoinRequested = false;
+          loading.classList.add("done");
+        }
         highscoreTracker.reset();
         applicationState = state === "connecting" ? "CONNECTING" : "DISCONNECTED";
         lobby.setApplicationState(applicationState);
@@ -342,6 +361,10 @@ network = new ArenaNetwork({
     } else if (!joined) {
       if (resumeAfterReconnect) {
         applicationState = "PLAYING";
+        lobby.hide();
+      } else if (autoJoinRequested || applicationState === "JOINING") {
+        applicationState = "JOINING";
+        lobby.setApplicationState(applicationState);
         lobby.hide();
       } else {
         applicationState = "LOBBY";
@@ -365,7 +388,14 @@ network = new ArenaNetwork({
         joinSelectedMap(lobby.selectedSkinId);
         return;
       }
-      if (autoJoinRequested && !joined && !message.full && applicationState !== "JOINING") {
+      if (autoJoinRequested && message.full) {
+        autoJoinRequested = false;
+        const cleanUrl = new URL(location.href);
+        cleanUrl.searchParams.delete("autojoin");
+        history.replaceState(null, "", cleanUrl);
+        loading.classList.add("done");
+        lobby.show();
+      } else if (autoJoinRequested && !joined && applicationState !== "JOINING") {
         autoJoinRequested = false;
         const cleanUrl = new URL(location.href);
         cleanUrl.searchParams.delete("autojoin");
@@ -383,6 +413,7 @@ network = new ArenaNetwork({
       joined = false;
       applicationState = message.reason === "ARENA_FULL" ? "FULL" : "LOBBY";
       lobby.setApplicationState(applicationState);
+      loading.classList.add("done");
       lobby.show();
       return;
     }
@@ -643,6 +674,7 @@ function updateHud(snapshot) {
     `PROJECTILES: ${snapshot?.projectiles?.length ?? 0}  ·  INPUT SEQ/ACK: ${seq}/${snapshot?.you?.ack ?? 0}`,
     `FIRE: ${inputVisual.fire ? "HELD/QUEUED" : "READY"}`,
     `PENDING: ${pending.length}  ·  CORRECTION: ${reconciliationError.toFixed(2)} (MAX ${maximumReconciliationError.toFixed(2)})`,
+    `QUALITY: RENDER ${rendererDebug.quality.render.toFixed(2)} · EFFECTS ${rendererDebug.quality.effects.toFixed(2)} · FRAME ${rendererDebug.quality.frameMs.toFixed(1)}ms`,
     `FPS: ${fps}  ·  COLLISION: ${debugCollision ? "ON" : "OFF"}`,
   ].join("\n");
 

@@ -79,6 +79,14 @@ test("map cards switch selection in place and defer navigation until joining", a
   assert.doesNotMatch(game, /onMapSelected\(mapId\) \{\s*navigateToMap/);
 });
 
+test("cross-map auto-join keeps the lobby hidden throughout the necessary map load", async () => {
+  const game = await readFile(new URL("../../games/game-03/game.js", import.meta.url), "utf8");
+  assert.match(game, /if \(autoJoin\) \{[\s\S]*lobby\.hide\(\);[\s\S]*loading\.classList\.remove\("done"\)/);
+  assert.match(game, /if \(autoJoinRequested\) \{\s*lobby\.hide\(\);/);
+  assert.match(game, /autoJoinRequested && state === "connecting"[\s\S]*lobby\.hide\(\)/);
+  assert.match(game, /autoJoinRequested \|\| applicationState === "JOINING"[\s\S]*lobby\.hide\(\)/);
+});
+
 test("homepage and lobby use one game-wide presence channel for counts and invitations", async () => {
   const [homePresence, game, worker] = await Promise.all([
     readFile(new URL("../../js/dusty-presence.js", import.meta.url), "utf8"),
