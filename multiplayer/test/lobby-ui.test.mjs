@@ -67,6 +67,31 @@ test("lobby visibly separates waiting players from players already in the arena"
   assert.match(html, /FIGHTING RIGHT NOW/);
 });
 
+test("map cards switch selection in place and defer navigation until joining", async () => {
+  const [lobby, game] = await Promise.all([
+    readFile(new URL("../../games/game-03/lobby.js", import.meta.url), "utf8"),
+    readFile(new URL("../../games/game-03/game.js", import.meta.url), "utf8"),
+  ]);
+  assert.match(lobby, /this\.selectMap\(map\.id\)/);
+  assert.match(lobby, /this\.selectedMapId = map\.id;[\s\S]*this\.renderMapCards\(\);[\s\S]*this\.renderStatus\(\)/);
+  assert.match(game, /history\.replaceState\(null, "", destination\)/);
+  assert.match(game, /if \(lobby\.selectedMapId !== selectedMap\.id\) \{[\s\S]*navigateToMap\(lobby\.selectedMapId, true\)/);
+  assert.doesNotMatch(game, /onMapSelected\(mapId\) \{\s*navigateToMap/);
+});
+
+test("homepage and lobby use one game-wide presence channel for counts and invitations", async () => {
+  const [homePresence, game, worker] = await Promise.all([
+    readFile(new URL("../../js/dusty-presence.js", import.meta.url), "utf8"),
+    readFile(new URL("../../games/game-03/game.js", import.meta.url), "utf8"),
+    readFile(new URL("../src/index.ts", import.meta.url), "utf8"),
+  ]);
+  assert.match(homePresence, /presenceEndpoint\(presenceBase\)/);
+  assert.match(game, /url: presenceEndpoint\(arenaEndpoint\)/);
+  assert.match(game, /lobby\.setOnlinePlayers\(message\.onlinePlayers\)/);
+  assert.match(worker, /url\.pathname === "\/presence\/ws"/);
+  assert.match(worker, /nebula-murderball-presence-v1/);
+});
+
 test("map editor exposes collision point insertion and placed object deletion", async () => {
   const [html, editor] = await Promise.all([
     readFile(new URL("../../games/game-03/index.html", import.meta.url), "utf8"),
@@ -107,4 +132,18 @@ test("crash kills expose a prominent arcade callout to both involved pilots", as
   assert.match(game, /message\.playerIds\.includes\(localId\)/);
   assert.match(arena, /type: "collision_kill"/);
   assert.match(arena, /!player\.moleMode/);
+});
+
+test("random weapon reveals clearly grade duds, average rolls, and legendary jackpots", async () => {
+  const [html, game] = await Promise.all([
+    readFile(new URL("../../games/game-03/index.html", import.meta.url), "utf8"),
+    readFile(new URL("../../games/game-03/game.js", import.meta.url), "utf8"),
+  ]);
+  assert.match(game, /function showWeaponReveal\(weapon\)/);
+  assert.match(game, /\["DUD", "AVERAGE", "LEGENDARY"\]/);
+  assert.match(game, /★ LEGENDARY WEAPON ★/);
+  assert.match(html, /\.arcade-callout\.rating-dud/);
+  assert.match(html, /\.arcade-callout\.rating-average/);
+  assert.match(html, /\.arcade-callout\.rating-legendary/);
+  assert.match(html, /@keyframes legendary-reveal/);
 });

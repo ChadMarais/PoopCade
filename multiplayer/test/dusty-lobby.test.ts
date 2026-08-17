@@ -54,6 +54,8 @@ test("presence summary separates waiting lobby players from homepage and active 
 
 test("lobby spectators can request one non-intrusive recruitment broadcast", () => {
   assert.deepEqual(parseClientMessage(JSON.stringify({ type: "recruit" })), { type: "recruit" });
+  assert.deepEqual(parseClientMessage(JSON.stringify({ type: "recruit", mapId: "hell-moon" })), { type: "recruit", mapId: "hell-moon" });
+  assert.equal(parseClientMessage(JSON.stringify({ type: "recruit", mapId: "made-up-map" })), null);
 });
 
 test("input protocol carries a finite visual timeline for bounded hit rewind", () => {

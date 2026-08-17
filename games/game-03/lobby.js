@@ -37,6 +37,8 @@ export class DustyLobby {
     this.selectedSkinId = initialSkinId();
     this.state = "LOBBY";
     this.connectionState = "connecting";
+    this.recruitmentConnectionState = "connecting";
+    this.globalPresenceOnline = false;
     this.connectionDetail = "";
     this.lobbyState = { players: [], lobbyPlayers: [], activePlayers: 0, maxPlayers: 15, full: false, serverTime: Date.now() };
     this.clockOffset = 0;
@@ -121,7 +123,7 @@ export class DustyLobby {
       button.append(copy);
       button.addEventListener("click", () => {
         if (map.id === this.selectedMapId || full) return;
-        this.onMapSelected?.(map.id);
+        this.selectMap(map.id);
       });
       this.mapCards.append(button);
     }
@@ -133,6 +135,16 @@ export class DustyLobby {
     const statusById = new Map(maps.map((map) => [map.id, map]));
     this.maps = this.maps.map((map) => ({ ...map, ...(statusById.get(map.id) || {}) }));
     this.renderMapCards();
+  }
+
+  selectMap(mapId) {
+    const map = this.maps.find((candidate) => candidate.id === mapId);
+    if (!map || map.full === true || Number(map.activePlayers || 0) >= Number(map.maxPlayers || 15)) return false;
+    this.selectedMapId = map.id;
+    this.renderMapCards();
+    this.renderStatus();
+    this.onMapSelected?.(map.id);
+    return true;
   }
 
   renderSkinCards() {
@@ -185,6 +197,20 @@ export class DustyLobby {
     this.renderStatus();
   }
 
+  setRecruitmentConnectionState(state) {
+    this.recruitmentConnectionState = state;
+    if (state !== "online") {
+      this.globalPresenceOnline = false;
+      this.onlineCount.textContent = "—";
+    }
+    this.updateRecruitButton();
+  }
+
+  setOnlinePlayers(value) {
+    this.globalPresenceOnline = true;
+    this.onlineCount.textContent = String(normalizedOnlinePlayers(value));
+  }
+
   update(state) {
     this.lobbyState = state;
     this.updateMaps([{ id: state.mapId || this.selectedMapId, activePlayers: state.activePlayers, onlinePlayers: state.onlinePlayers, maxPlayers: state.maxPlayers, full: state.full }]);
@@ -192,7 +218,7 @@ export class DustyLobby {
     this.count.textContent = `${state.activePlayers} / ${state.maxPlayers}`;
     this.waitingCount.textContent = String(state.lobbyPlayers?.length || 0);
     this.arenaCount.textContent = String(state.activePlayers || 0);
-    this.onlineCount.textContent = String(normalizedOnlinePlayers(state.onlinePlayers));
+    if (!this.globalPresenceOnline) this.onlineCount.textContent = String(normalizedOnlinePlayers(state.onlinePlayers));
     this.waitingRoster.replaceChildren();
     if (!state.lobbyPlayers?.length) {
       this.waitingRoster.append(this.emptyRoster("No one waiting yet. Be the bait."));
@@ -277,11 +303,11 @@ export class DustyLobby {
 
   updateRecruitButton() {
     const remaining = recruitmentCooldownRemaining(this.recruitRetryAt);
-    const offline = this.connectionState !== "online";
+    const offline = this.recruitmentConnectionState !== "online";
     this.recruit.disabled = offline || remaining > 0;
     this.recruit.textContent = remaining > 0
-      ? `AIRLOCK RATTLED · AGAIN IN ${remaining}s`
-      : offline ? "FINDING OTHER BAD INFLUENCES…" : "RATTLE THE AIRLOCK · FIND PLAYERS";
+      ? `INVITE SENT · AGAIN IN ${remaining}s`
+      : offline ? "CONNECTING TO ONLINE PLAYERS…" : "INVITE ONLINE PLAYERS";
   }
 
   renderStatus() {

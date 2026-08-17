@@ -27,6 +27,16 @@
     .events { right: 12px; top: 56px; width: min(330px, calc(100vw - 24px)); padding: 8px 10px; font: 800 10px/1.45 ui-monospace, monospace; color: #f7dcff; white-space: pre-line; }
     .arcade-callout { position:fixed; z-index:6; left:50%; top:22%; width:min(680px,calc(100vw - 32px)); padding:16px 22px; border:2px solid #c8ff47; border-radius:16px; color:#fff; background:linear-gradient(135deg,rgba(53,12,69,.96),rgba(5,41,54,.96)); box-shadow:0 20px 80px rgba(0,0,0,.7),0 0 34px rgba(200,255,71,.3); font:1000 clamp(18px,4vw,40px)/1 ui-monospace,monospace; letter-spacing:.04em; text-align:center; text-shadow:3px 3px 0 #7c24a1; pointer-events:none; opacity:0; transform:translate(-50%,-35%) scale(.72) rotate(-2deg); transition:opacity .18s ease,transform .24s cubic-bezier(.2,1.5,.4,1); }
     .arcade-callout.show { opacity:1; transform:translate(-50%,0) scale(1) rotate(-1deg); }
+    .arcade-callout.weapon-reveal { display:grid; gap:10px; overflow:hidden; text-transform:uppercase; }
+    .weapon-reveal-name { font:1000 clamp(17px,3.5vw,38px)/1 ui-monospace,monospace; }
+    .weapon-reveal-rating { font:1000 clamp(11px,1.8vw,18px)/1 ui-monospace,monospace; letter-spacing:.16em; }
+    .arcade-callout.rating-dud { border-color:#ff6b73; color:#ffe4d2; background:linear-gradient(135deg,rgba(71,20,27,.97),rgba(38,31,22,.97)); box-shadow:0 20px 70px rgba(0,0,0,.72),0 0 24px rgba(255,81,91,.28); text-shadow:3px 3px 0 #74222b; transform:translate(-50%,-35%) scale(.72) rotate(2deg); }
+    .arcade-callout.rating-dud.show { transform:translate(-50%,0) scale(1) rotate(1deg); }
+    .arcade-callout.rating-average { border-color:#78ecff; background:linear-gradient(135deg,rgba(37,14,57,.97),rgba(5,44,58,.97)); box-shadow:0 20px 80px rgba(0,0,0,.7),0 0 36px rgba(84,226,255,.38); }
+    .arcade-callout.rating-legendary { border:3px solid #fff06a; color:#fffbd0; background:radial-gradient(circle at 50% 0,rgba(255,89,223,.72),transparent 45%),linear-gradient(135deg,rgba(69,13,105,.99),rgba(4,50,75,.99)); box-shadow:0 24px 100px rgba(0,0,0,.8),0 0 26px #fff06a,0 0 64px #ff4be1,inset 0 0 34px rgba(255,255,255,.2); text-shadow:0 0 9px #fff,3px 3px 0 #9d1fb8; animation:legendary-reveal .55s steps(2,end) infinite alternate; }
+    .arcade-callout.rating-legendary .weapon-reveal-rating { color:#fff06a; font-size:clamp(14px,2.4vw,24px); }
+    @keyframes legendary-reveal { from { filter:hue-rotate(-8deg) brightness(1); } to { filter:hue-rotate(12deg) brightness(1.25); } }
+    @media (prefers-reduced-motion:reduce) { .arcade-callout.rating-legendary { animation:none; } }
     .controls { right: 12px; bottom: 12px; padding: 8px 10px; color: rgba(255,255,255,.82); font: 800 10px system-ui; }
     .collision-editor { left: 12px; top: 182px; width: min(340px,calc(100vw - 24px)); padding: 10px; pointer-events: auto; font: 800 10px/1.4 ui-monospace,Consolas,monospace; }
     .collision-editor-header { display: flex; align-items: center; justify-content: space-between; gap: 9px; margin-bottom: 8px; color: #75efff; cursor: move; touch-action: none; letter-spacing: .1em; }
@@ -112,7 +122,7 @@
           <section class="roster-group waiting-group" aria-labelledby="waitingHeading"><div class="roster-group-heading"><div><span class="roster-kicker">WAITING IN LOBBY</span><h3 id="waitingHeading">READY TO JOIN</h3></div><strong data-lobby-player-count>0</strong></div><div class="live-roster waiting-roster" data-lobby-waiting-roster><p class="roster-empty">Checking the airlock…</p></div></section>
           <section class="roster-group arena-group" aria-labelledby="arenaHeading"><div class="roster-group-heading"><div><span class="roster-kicker">FIGHTING RIGHT NOW</span><h3 id="arenaHeading">IN THE ARENA</h3></div><strong data-arena-player-count>0</strong></div><div class="live-roster" data-lobby-roster><p class="roster-empty">Contacting the arena…</p></div></section>
         </div>
-        <div class="join-zone"><button class="recruit-button" data-recruit-players type="button" disabled>RATTLE THE AIRLOCK · FIND PLAYERS</button><div class="arena-status"><strong data-arena-status>CONNECTING</strong><small data-arena-status-copy>Finding the bad decisions…</small></div><button class="join-button" data-join-arena type="button" disabled>CONNECTING…</button></div>
+        <div class="join-zone"><button class="recruit-button" data-recruit-players type="button" disabled>CONNECTING TO ONLINE PLAYERS…</button><div class="arena-status"><strong data-arena-status>CONNECTING</strong><small data-arena-status-copy>Finding the bad decisions…</small></div><button class="join-button" data-join-arena type="button" disabled>CONNECTING…</button></div>
       </section>
     </div>
   </main>
@@ -149,7 +159,7 @@
     </div>
   </div>
   <div id="loading" class="loading"><div><h1>NEBULA MURDERBALL</h1><p id="loadingText">LOADING MULTIPLAYER ASSETS…</p><div class="track"><div id="loadingBar" class="bar"></div></div></div></div>
-  <a class="dusty-recruitment-toast" data-recruitment-toast href="/games/game-03/" hidden aria-live="polite"><strong>ORBITAL BAD DECISION INCOMING</strong><span data-recruitment-copy></span><b>GO TO THE LOBBY →</b></a>
-  <script type="module" src="./game.js?v=20260817-4"></script>
+  <a class="dusty-recruitment-toast" data-recruitment-toast href="/games/game-03/" hidden aria-live="polite"><strong>MURDERBALL INVITE</strong><span data-recruitment-copy></span><b>JOIN THEIR GAME →</b></a>
+  <script type="module" src="./game.js?v=20260817-6"></script>
 </body>
 </html>

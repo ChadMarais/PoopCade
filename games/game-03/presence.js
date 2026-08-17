@@ -1,9 +1,28 @@
 export const RECRUITMENT_COOLDOWN_MS = 60_000;
 export const RECRUITMENT_HREF = "/games/game-03/";
+export const GLOBAL_PRESENCE_PATH = "/presence/ws";
 
-export function recruitmentMessage(rawName) {
+export function recruitmentHref(mapId) {
+  const href = new URL(RECRUITMENT_HREF, "https://poopcade.invalid");
+  if (typeof mapId === "string" && /^[a-z0-9-]{1,48}$/.test(mapId)) href.searchParams.set("map", mapId);
+  return `${href.pathname}${href.search}`;
+}
+
+export function presenceEndpoint(arenaEndpoint) {
+  try {
+    const endpoint = new URL(arenaEndpoint);
+    endpoint.pathname = GLOBAL_PRESENCE_PATH;
+    endpoint.search = "";
+    return endpoint.href;
+  } catch {
+    return "";
+  }
+}
+
+export function recruitmentMessage(rawName, rawMapName = "") {
   const name = typeof rawName === "string" && rawName.trim() ? rawName.trim() : "A suspicious pilot";
-  return `${name} is banging on the NEBULA MURDERBALL airlock and needs backup. Click before they start recruiting moon rocks.`;
+  const mapName = typeof rawMapName === "string" && rawMapName.trim() ? ` on ${rawMapName.trim()}` : "";
+  return `${name} invited you to play NEBULA MURDERBALL${mapName}. Join them before somebody sensible intervenes.`;
 }
 
 export function recruitmentCooldownRemaining(retryAt, now = Date.now()) {

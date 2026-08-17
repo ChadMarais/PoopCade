@@ -3,6 +3,8 @@ import { MAP_CATALOG, mapCatalogEntryForArena } from "../../games/game-03/maps/c
 
 export { DustyOrbitArena } from "./dusty-arena.ts";
 
+const GLOBAL_PRESENCE_ROOM = "nebula-murderball-presence-v1";
+
 interface Env {
   DUSTY_ARENAS: DurableObjectNamespace<DustyOrbitArena>;
 }
@@ -47,6 +49,14 @@ export default {
       const headers: Record<string, string> = { "Cache-Control": "no-store" };
       if (origin) headers["Access-Control-Allow-Origin"] = origin;
       return Response.json({ maps }, { headers });
+    }
+
+    if (url.pathname === "/presence/ws") {
+      if (!originAllowed(request.headers.get("Origin"))) return new Response("Origin not allowed.", { status: 403 });
+      if (request.method !== "GET" || request.headers.get("Upgrade")?.toLowerCase() !== "websocket") {
+        return new Response("Expected a WebSocket upgrade.", { status: 426 });
+      }
+      return env.DUSTY_ARENAS.getByName(GLOBAL_PRESENCE_ROOM).fetch(request);
     }
 
     const match = url.pathname.match(/^\/arena\/([a-z0-9-]{1,48})\/ws$/);

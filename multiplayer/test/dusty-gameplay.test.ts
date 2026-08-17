@@ -4,8 +4,8 @@ import { distanceToPolygon, pointInPolygon } from "../../games/game-03/collision
 import { weaponPose, weaponVisualForTier } from "../../games/game-03/weapon-visuals.js";
 import { FART_CLOUD_GROW_MS, fartCloudGrowth } from "../../games/game-03/effect-timing.js";
 import { DUSTY_GAMEPLAY, DUSTY_WEAPONS, POWERUP_TYPES, type PowerupType } from "../src/dusty-gameplay.ts";
-import { DUSTY_PLAYER_RADIUS, DUSTY_POLYGONS, DUSTY_SATELLITES } from "../src/dusty-map.ts";
-import { DustyOrbitSimulation, DUSTY_FIXED_DT, moleBurrowOrigin, type DustyPlayer, type DustyProjectile } from "../src/dusty-simulation.ts";
+import { DUSTY_PLAYER_HIT_RADIUS, DUSTY_PLAYER_RADIUS, DUSTY_POLYGONS, DUSTY_SATELLITES } from "../src/dusty-map.ts";
+import { DustyOrbitSimulation, DUSTY_FIXED_DT, DUSTY_PLAYER_BOUNCE_GAP, DUSTY_PLAYER_BOUNCE_SPEED, moleBurrowOrigin, type DustyPlayer, type DustyProjectile } from "../src/dusty-simulation.ts";
 
 const A = "20000000-0000-4000-8000-000000000001";
 const B = "20000000-0000-4000-8000-000000000002";
@@ -203,8 +203,10 @@ test("power-up events include authoritative world coordinates for spatial audio"
 
 test("character crashes block overlap, damage both pilots once per impact window, and share one crash-kill callout", () => {
   const simulation = fresh(); const first = add(simulation, A, "Guest-1001"); const second = add(simulation, B, "Guest-1002");
-  first.x = 300; first.y = 300; second.x = 335; second.y = 300;
   const crash = (seq: number, now: number) => {
+    first.x = 300; first.y = 300; second.x = 368; second.y = 300;
+    first.bounceVx = 0; first.bounceVy = 0; first.bounceUntil = 0;
+    second.bounceVx = 0; second.bounceVy = 0; second.bounceUntil = 0;
     simulation.applyInput(A, intent(seq, { moveX: 1 }), now);
     simulation.applyInput(B, intent(seq, { moveX: -1 }), now);
     simulation.step(DUSTY_FIXED_DT, now);
@@ -212,7 +214,8 @@ test("character crashes block overlap, damage both pilots once per impact window
 
   crash(1, 1000);
   assert.deepEqual([first.hp, second.hp], [2, 2]);
-  assert.deepEqual([first.x, second.x], [300, 335]);
+  assert.ok(Math.hypot(first.x - second.x, first.y - second.y) >= DUSTY_PLAYER_HIT_RADIUS * 2 + DUSTY_PLAYER_BOUNCE_GAP - .01);
+  assert.equal(first.vx, -DUSTY_PLAYER_BOUNCE_SPEED); assert.equal(second.vx, DUSTY_PLAYER_BOUNCE_SPEED);
   assert.equal(eventsOf(simulation, "player_hit").filter((event) => event.cause === "collision").length, 2);
 
   crash(2, 1100);
@@ -232,6 +235,26 @@ test("character crashes block overlap, damage both pilots once per impact window
   assert.match(callouts[0].callout, /DEMOLITION|BUMPER|ROAD RAGE|DRIVING TEST/);
 });
 
+test("sustained opposing movement rebounds both pilots instead of pinning them together", () => {
+  const simulation = fresh(); const first = add(simulation, A, "Guest-1001"); const second = add(simulation, B, "Guest-1002");
+  first.x = 300; first.y = 300; second.x = 368; second.y = 300;
+  simulation.applyInput(A, intent(1, { moveX: 1 }), 1000);
+  simulation.applyInput(B, intent(1, { moveX: -1 }), 1000);
+  simulation.step(DUSTY_FIXED_DT, 1000);
+  const impactSeparation = Math.hypot(first.x - second.x, first.y - second.y);
+
+  for (let tick = 1; tick <= 4; tick++) {
+    const now = 1000 + tick * 34;
+    simulation.applyInput(A, intent(tick + 1, { moveX: 1 }), now);
+    simulation.applyInput(B, intent(tick + 1, { moveX: -1 }), now);
+    simulation.step(DUSTY_FIXED_DT, now);
+  }
+
+  assert.ok(Math.hypot(first.x - second.x, first.y - second.y) > impactSeparation, "the knockback must overcome continued inward input");
+  assert.ok(first.x < 300 && second.x > 368, "both pilots should visibly rebound away from the impact");
+  assert.deepEqual([first.hp, second.hp], [2, 2], "one crash still causes exactly one damage event per pilot");
+});
+
 test("character crashes trigger at visible body contact and consume shields before health", () => {
   const simulation = fresh(); const shielded = add(simulation, A, "Guest-1001"); const other = add(simulation, B, "Guest-1002");
   shielded.x = 300; shielded.y = 300; other.x = 368; other.y = 300;
@@ -245,6 +268,9 @@ test("character crashes trigger at visible body contact and consume shields befo
   const shieldHit = eventsOf(simulation, "shield_hit")[0] as { cause: string; playerId: string };
   assert.deepEqual({ cause: shieldHit.cause, playerId: shieldHit.playerId }, { cause: "collision", playerId: shielded.id });
 
+  shielded.x = 300; shielded.y = 300; other.x = 368; other.y = 300;
+  shielded.bounceVx = 0; shielded.bounceVy = 0; shielded.bounceUntil = 0;
+  other.bounceVx = 0; other.bounceVy = 0; other.bounceUntil = 0;
   simulation.applyInput(A, intent(2, { moveX: 1 }), 1800);
   simulation.applyInput(B, intent(2, { moveX: -1 }), 1800);
   simulation.step(DUSTY_FIXED_DT, 1800);

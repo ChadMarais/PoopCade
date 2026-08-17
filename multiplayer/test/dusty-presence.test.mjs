@@ -5,15 +5,19 @@ import {
   RECRUITMENT_COOLDOWN_MS,
   RECRUITMENT_HREF,
   normalizedOnlinePlayers,
+  presenceEndpoint,
   recruitmentCooldownRemaining,
+  recruitmentHref,
   recruitmentMessage,
 } from "../../games/game-03/presence.js";
 
 test("recruitment copy is cheeky, safe to render as text, and links to the production lobby", () => {
   assert.equal(RECRUITMENT_COOLDOWN_MS, 60_000);
   assert.equal(RECRUITMENT_HREF, "/games/game-03/");
-  assert.match(recruitmentMessage("Player XYZ"), /^Player XYZ is banging on the NEBULA MURDERBALL airlock/);
-  assert.match(recruitmentMessage("Player XYZ"), /recruiting moon rocks\.$/);
+  assert.equal(recruitmentHref("hell-moon"), "/games/game-03/?map=hell-moon");
+  assert.equal(presenceEndpoint("wss://arena.example/arena/dusty-orbit-001/ws?debug=1"), "wss://arena.example/presence/ws");
+  assert.match(recruitmentMessage("Player XYZ", "HELL MOON"), /^Player XYZ invited you to play NEBULA MURDERBALL on HELL MOON\./);
+  assert.match(recruitmentMessage("Player XYZ", "HELL MOON"), /somebody sensible intervenes\.$/);
 });
 
 test("online counts and recruitment cooldowns normalize hostile client values", () => {
@@ -37,5 +41,7 @@ test("production launch links omit devtest and both pages expose live presence U
   assert.match(lobby, /data-online-count/);
   assert.match(lobby, /data-lobby-waiting-roster/);
   assert.match(lobby, /data-recruit-players/);
+  assert.match(lobby, /INVITE ONLINE PLAYERS|CONNECTING TO ONLINE PLAYERS/);
   assert.match(game, /parameters\.delete\("devtest"\)/);
+  assert.match(game, /presenceNetwork\?\.send\(\{ type: "recruit", mapId: lobby\.selectedMapId \}\)/);
 });

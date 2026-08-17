@@ -11,7 +11,8 @@ import {
 import { DUSTY_GAMEPLAY, DUSTY_WEAPONS } from "./dusty-gameplay.ts";
 import { submitDustyOrbitFinalScore, type DustyFinalScorePlayer } from "./dusty-score.ts";
 import { validCharacterSkinId } from "../../games/game-03/character-skins.js";
-import { RECRUITMENT_COOLDOWN_MS, RECRUITMENT_HREF, recruitmentMessage } from "../../games/game-03/presence.js";
+import { RECRUITMENT_COOLDOWN_MS, recruitmentHref, recruitmentMessage } from "../../games/game-03/presence.js";
+import { mapCatalogEntry } from "../../games/game-03/maps/catalog.js";
 import { summarizeDustyPresence, type DustyPresenceSurface } from "./dusty-presence.ts";
 
 type Env = { SUPABASE_URL?: string; SUPABASE_PUBLISHABLE_KEY?: string };
@@ -257,12 +258,14 @@ export class DustyOrbitArena extends DurableObject<Env> {
       session.lastRecruitAt = now;
       socket.serializeAttachment(session);
       socket.send(encode({ type: "recruitment_status", accepted: true, retryAt: now + RECRUITMENT_COOLDOWN_MS }));
+      const invitedMap = mapCatalogEntry(message.mapId);
       this.broadcastPresence({
         type: "recruitment",
         playerId: session.playerId,
         playerName: session.name,
-        message: recruitmentMessage(session.name),
-        href: RECRUITMENT_HREF,
+        mapId: invitedMap.id,
+        message: recruitmentMessage(session.name, invitedMap.name),
+        href: recruitmentHref(invitedMap.id),
         sentAt: now,
       }, socket);
       return;

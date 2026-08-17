@@ -15,14 +15,14 @@ export type WeaponDefinition = {
   burstSpacingMs: number;
   muzzleDistance: number;
   generated?: boolean;
-  rarity?: "WEAK" | "COMMON" | "POWERFUL" | "CHAOTIC";
+  rarity?: "DUD" | "AVERAGE" | "LEGENDARY";
   powerScore?: number;
   visualTier?: number;
 };
 
 export type GeneratedWeaponDefinition = WeaponDefinition & {
   generated: true;
-  rarity: "WEAK" | "COMMON" | "POWERFUL" | "CHAOTIC";
+  rarity: "DUD" | "AVERAGE" | "LEGENDARY";
   powerScore: number;
   visualTier: number;
 };
@@ -81,82 +81,98 @@ function between(random: () => number, minimum: number, maximum: number): number
 }
 
 function generatedName(random: () => number, rarity: GeneratedWeaponDefinition["rarity"], pattern: string): string {
-  const prefixes = rarity === "CHAOTIC"
-    ? ["REALITY SHREDDER", "GALAXY BLENDER", "VOID TANTRUM"]
-    : rarity === "POWERFUL"
-      ? ["OVERCHARGED", "APOCALYPSE", "STAR-EATER"]
-      : rarity === "WEAK"
-        ? ["LUCKY", "JUNIOR", "POCKET"]
-        : ["TURBO", "FERAL", "DOUBLE-TROUBLE", "UNREASONABLE", "HOT-ROD"];
+  const prefixes = rarity === "LEGENDARY"
+    ? ["REALITY-SHREDDING", "GALAXY-EATING", "FORBIDDEN", "OMEGA"]
+    : rarity === "DUD"
+      ? ["BARGAIN-BIN", "DAMP", "WARRANTY-VOID", "SUSPICIOUS", "HALF-CHARGED"]
+      : ["FERAL", "TURBO", "UNLICENSED", "DOUBLE-TROUBLE", "HOT-ROD"];
   return `${prefixes[Math.floor(unit(random) * prefixes.length)]} ${pattern}`;
 }
 
-/** Server-only weighted weapon roll. Weak 8%, common 86%, powerful 5%, chaotic 1%. */
+function generatedWeapon(rarity: GeneratedWeaponDefinition["rarity"], powerScore: number, name: string, definition: Omit<WeaponDefinition, "tier" | "name"> & { tier?: number }): GeneratedWeaponDefinition {
+  return Object.freeze({
+    ...definition,
+    tier: definition.tier ?? (rarity === "LEGENDARY" ? 6 : rarity === "AVERAGE" ? 4 : 1),
+    name,
+    visualTier: 7,
+    generated: true,
+    rarity,
+    powerScore,
+    spreadDegrees: Object.freeze([...definition.spreadDegrees]),
+  });
+}
+
+/** Server-only weighted roll: duds 55%, useful oddballs 43%, legendary weapons 2%. */
 export function generateRandomWeapon(random: () => number = Math.random): GeneratedWeaponDefinition {
   const roll = unit(random);
-  const rarity: GeneratedWeaponDefinition["rarity"] = roll < .08 ? "WEAK" : roll < .94 ? "COMMON" : roll < .99 ? "POWERFUL" : "CHAOTIC";
+  const rarity: GeneratedWeaponDefinition["rarity"] = roll < .55 ? "DUD" : roll < .98 ? "AVERAGE" : "LEGENDARY";
+  const archetype = unit(random);
 
-  if (rarity === "CHAOTIC") {
-    const count = unit(random) < .5 ? 3 : 5;
-    const spreadDegrees = count === 3 ? [-6, 0, 6] : [-10, -5, 0, 5, 10];
-    const cooldownMs = Math.round(between(random, 190, 270));
-    const speed = Math.round(between(random, 1300, 1550));
-    const lifetimeMs = Math.round(between(random, 950, 1200));
-    const damage = unit(random) < .35 ? 3 : 2;
-    return Object.freeze({
-      tier: 6, visualTier: 7, generated: true, rarity, powerScore: 10,
-      name: generatedName(random, rarity, "SINGULARITY ARRAY"), cooldownMs, speed, lifetimeMs,
-      damage, radius: 7, count, spreadDegrees: Object.freeze(spreadDegrees), burstSpacingMs: 0, muzzleDistance: 48,
+  if (rarity === "DUD") {
+    if (archetype < .2) return generatedWeapon(rarity, .2, generatedName(random, rarity, "BACKWARDS BLASTER"), {
+      cooldownMs: Math.round(between(random, 1300, 2200)), speed: Math.round(between(random, 340, 500)), lifetimeMs: Math.round(between(random, 450, 750)),
+      damage: 1, radius: 2.5, count: 1, spreadDegrees: [180], burstSpacingMs: 0, muzzleDistance: 48,
+    });
+    if (archetype < .4) return generatedWeapon(rarity, .7, generatedName(random, rarity, "SNEEZE CANNON"), {
+      cooldownMs: Math.round(between(random, 1800, 2700)), speed: Math.round(between(random, 260, 390)), lifetimeMs: Math.round(between(random, 180, 300)),
+      damage: 1, radius: 2.2, count: 5, spreadDegrees: [-38, -17, 3, 22, 41], burstSpacingMs: 0, muzzleDistance: 48,
+    });
+    if (archetype < .6) return generatedWeapon(rarity, .8, generatedName(random, rarity, "BUDGET BURST"), {
+      cooldownMs: Math.round(between(random, 2100, 3100)), speed: Math.round(between(random, 300, 470)), lifetimeMs: Math.round(between(random, 360, 520)),
+      damage: 1, radius: 2.5, count: 3, spreadDegrees: [-19, 13, -7], burstSpacingMs: Math.round(between(random, 320, 480)), muzzleDistance: 48,
+    });
+    if (archetype < .8) return generatedWeapon(rarity, .5, generatedName(random, rarity, "WET-NOODLE RAILGUN"), {
+      cooldownMs: Math.round(between(random, 1600, 2500)), speed: Math.round(between(random, 1300, 1800)), lifetimeMs: Math.round(between(random, 70, 145)),
+      damage: 1, radius: 1.4, count: 1, spreadDegrees: [0], burstSpacingMs: 0, muzzleDistance: 48,
+    });
+    const crookedAngle = between(random, 20, 44) * (unit(random) < .5 ? -1 : 1);
+    return generatedWeapon(rarity, 1, generatedName(random, rarity, "CROOKED PEA FLINGER"), {
+      cooldownMs: Math.round(between(random, 1050, 1900)), speed: Math.round(between(random, 350, 520)), lifetimeMs: Math.round(between(random, 380, 620)),
+      damage: 1, radius: 3, count: 1, spreadDegrees: [crookedAngle], burstSpacingMs: 0, muzzleDistance: 48,
     });
   }
 
-  if (rarity === "POWERFUL") {
-    const base = DUSTY_WEAPONS[5];
-    const count = unit(random) < .28 ? 2 : 1;
-    const spreadDegrees = count === 2 ? [-3, 3] : [0];
-    return Object.freeze({
-      ...base, visualTier: 7, generated: true, rarity, powerScore: 8,
-      name: generatedName(random, rarity, count > 1 ? "TWIN PLASMA" : "PLASMA CANNON"),
-      cooldownMs: Math.round(base.cooldownMs * between(random, .72, .9)),
-      speed: Math.round(base.speed * between(random, 1.05, 1.22)),
-      lifetimeMs: Math.round(base.lifetimeMs * between(random, 1, 1.14)),
-      count, spreadDegrees: Object.freeze(spreadDegrees), muzzleDistance: 48,
+  if (rarity === "AVERAGE") {
+    if (archetype < 1 / 6) return generatedWeapon(rarity, 4.8, generatedName(random, rarity, "CHAOS FAN"), {
+      cooldownMs: Math.round(between(random, 760, 1100)), speed: Math.round(between(random, 580, 780)), lifetimeMs: Math.round(between(random, 520, 760)),
+      damage: 1, radius: 3, count: 5, spreadDegrees: [-27, -9, 2, 15, 34], burstSpacingMs: 0, muzzleDistance: 48,
+    });
+    if (archetype < 2 / 6) return generatedWeapon(rarity, 5.2, generatedName(random, rarity, "STUTTER BURST"), {
+      cooldownMs: Math.round(between(random, 680, 980)), speed: Math.round(between(random, 620, 820)), lifetimeMs: Math.round(between(random, 650, 900)),
+      damage: 1, radius: 3, count: 5, spreadDegrees: [-11, 8, -5, 14, 0], burstSpacingMs: Math.round(between(random, 65, 125)), muzzleDistance: 48,
+    });
+    if (archetype < 3 / 6) return generatedWeapon(rarity, 4.5, generatedName(random, rarity, "COMET HOSE"), {
+      cooldownMs: Math.round(between(random, 150, 290)), speed: Math.round(between(random, 400, 680)), lifetimeMs: Math.round(between(random, 850, 1250)),
+      damage: 1, radius: between(random, 3.2, 4.8), count: 1, spreadDegrees: [between(random, -4, 4)], burstSpacingMs: 0, muzzleDistance: 48,
+    });
+    if (archetype < 4 / 6) return generatedWeapon(rarity, 5.5, generatedName(random, rarity, "BIG SLOW ORB"), {
+      cooldownMs: Math.round(between(random, 720, 1050)), speed: Math.round(between(random, 240, 380)), lifetimeMs: Math.round(between(random, 1700, 2400)),
+      damage: 2, radius: between(random, 8, 11), count: 1, spreadDegrees: [0], burstSpacingMs: 0, muzzleDistance: 48,
+    });
+    if (archetype < 5 / 6) return generatedWeapon(rarity, 5.8, generatedName(random, rarity, "NEEDLE VOLLEY"), {
+      cooldownMs: Math.round(between(random, 580, 820)), speed: Math.round(between(random, 980, 1300)), lifetimeMs: Math.round(between(random, 700, 980)),
+      damage: 1, radius: 2, count: 3, spreadDegrees: [-2.5, 0, 2.5], burstSpacingMs: 0, muzzleDistance: 48,
+    });
+    return generatedWeapon(rarity, 5, generatedName(random, rarity, "SIDEWINDER"), {
+      cooldownMs: Math.round(between(random, 800, 1150)), speed: Math.round(between(random, 650, 900)), lifetimeMs: Math.round(between(random, 650, 950)),
+      damage: 1, radius: 3.5, count: 5, spreadDegrees: [18, -18, 9, -9, 0], burstSpacingMs: Math.round(between(random, 55, 100)), muzzleDistance: 48,
     });
   }
 
-  if (rarity === "WEAK") {
-    const base = unit(random) < .42 ? DUSTY_WEAPONS[0] : DUSTY_WEAPONS[1];
-    return Object.freeze({
-      ...base, visualTier: 7, generated: true, rarity, powerScore: base.tier === 1 ? 2 : 3,
-      name: generatedName(random, rarity, base.tier === 1 ? "PEA SHOOTER" : "PISTOL"),
-      // A generated weak roll is never worse than the stock Pea Shooter.
-      cooldownMs: Math.min(1000, Math.round(base.cooldownMs * between(random, .82, .98))),
-      speed: Math.max(500, Math.round(base.speed * between(random, 1, 1.1))),
-      lifetimeMs: Math.max(500, Math.round(base.lifetimeMs * between(random, 1, 1.1))),
-      spreadDegrees: Object.freeze([...base.spreadDegrees]),
-    });
-  }
-
-  const commonTier = 3 + Math.floor(unit(random) * 3);
-  const base = DUSTY_WEAPONS[commonTier - 1];
-  const patternRoll = unit(random);
-  let count = base.count;
-  let spreadDegrees = [...base.spreadDegrees];
-  let burstSpacingMs = base.burstSpacingMs;
-  let pattern = base.name;
-  if (patternRoll < .28) {
-    count = 3; spreadDegrees = [0]; burstSpacingMs = Math.round(between(random, 65, 115)); pattern = "BURST HYBRID";
-  } else if (patternRoll < .58) {
-    count = unit(random) < .78 ? 3 : 5;
-    spreadDegrees = count === 3 ? [-8, 0, 8] : [-12, -6, 0, 6, 12];
-    burstSpacingMs = 0; pattern = "SCATTER HYBRID";
-  }
-  return Object.freeze({
-    ...base, visualTier: 7, generated: true, rarity, powerScore: 4 + commonTier - 3,
-    name: generatedName(random, rarity, pattern),
-    cooldownMs: Math.round(base.cooldownMs * between(random, .82, 1.06)),
-    speed: Math.round(base.speed * between(random, .94, 1.14)),
-    lifetimeMs: Math.round(base.lifetimeMs * between(random, .92, 1.12)),
-    count, spreadDegrees: Object.freeze(spreadDegrees), burstSpacingMs,
+  if (archetype < .25) return generatedWeapon(rarity, 16, generatedName(random, rarity, "UNIVERSE DELETER"), {
+    cooldownMs: Math.round(between(random, 105, 155)), speed: Math.round(between(random, 1750, 2200)), lifetimeMs: Math.round(between(random, 1200, 1550)),
+    damage: 5, radius: between(random, 10, 14), count: 1, spreadDegrees: [0], burstSpacingMs: 0, muzzleDistance: 52,
+  });
+  if (archetype < .5) return generatedWeapon(rarity, 15, generatedName(random, rarity, "SINGULARITY SPRINKLER"), {
+    cooldownMs: Math.round(between(random, 180, 280)), speed: Math.round(between(random, 1400, 1800)), lifetimeMs: Math.round(between(random, 1050, 1400)),
+    damage: 3, radius: 7, count: 9, spreadDegrees: [-32, -24, -16, -8, 0, 8, 16, 24, 32], burstSpacingMs: 0, muzzleDistance: 52,
+  });
+  if (archetype < .75) return generatedWeapon(rarity, 18, generatedName(random, rarity, "DOOM ACCORDION"), {
+    cooldownMs: Math.round(between(random, 240, 360)), speed: Math.round(between(random, 1350, 1750)), lifetimeMs: Math.round(between(random, 1050, 1450)),
+    damage: 2, radius: 6, count: 12, spreadDegrees: [-20, 20, -15, 15, -10, 10, -5, 5, -2, 2, 0, 0], burstSpacingMs: Math.round(between(random, 22, 38)), muzzleDistance: 52,
+  });
+  return generatedWeapon(rarity, 17, generatedName(random, rarity, "TRIPLE APOCALYPSE"), {
+    cooldownMs: Math.round(between(random, 120, 190)), speed: Math.round(between(random, 1550, 2000)), lifetimeMs: Math.round(between(random, 1150, 1500)),
+    damage: 4, radius: 9, count: 3, spreadDegrees: [-3, 0, 3], burstSpacingMs: 0, muzzleDistance: 52,
   });
 }

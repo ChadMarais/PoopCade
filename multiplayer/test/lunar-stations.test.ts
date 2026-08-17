@@ -114,16 +114,38 @@ test("rerolls never replace the original standard fallback and generated kills n
   assert.ok(death?.randomWeaponLost);
 });
 
-test("generated rarity bands favor common guns, never undercut Pea Shooter, and reserve super-plasma rolls for one percent", () => {
-  const weak = generateRandomWeapon(() => .01);
-  const common = generateRandomWeapon(() => .5);
-  const powerful = generateRandomWeapon(() => .96);
-  const chaotic = generateRandomWeapon(() => .995);
-  assert.deepEqual([weak.rarity, common.rarity, powerful.rarity, chaotic.rarity], ["WEAK", "COMMON", "POWERFUL", "CHAOTIC"]);
-  assert.ok(weak.damage >= DUSTY_WEAPONS[0].damage);
-  assert.ok(weak.cooldownMs <= DUSTY_WEAPONS[0].cooldownMs);
-  assert.ok(weak.speed >= DUSTY_WEAPONS[0].speed);
-  assert.ok(weak.lifetimeMs >= DUSTY_WEAPONS[0].lifetimeMs);
-  assert.ok(chaotic.count * chaotic.damage / chaotic.cooldownMs > DUSTY_WEAPONS[5].count * DUSTY_WEAPONS[5].damage / DUSTY_WEAPONS[5].cooldownMs);
-  assert.equal(chaotic.visualTier, 7);
+test("generated weapons are frequently awful, sometimes useful, and very rarely legendary", () => {
+  const dud = generateRandomWeapon(() => .1);
+  const average = generateRandomWeapon(() => .7);
+  const legendary = generateRandomWeapon(() => .995);
+  assert.deepEqual([dud.rarity, average.rarity, legendary.rarity], ["DUD", "AVERAGE", "LEGENDARY"]);
+  assert.ok(dud.cooldownMs > DUSTY_WEAPONS[0].cooldownMs || dud.speed * dud.lifetimeMs < DUSTY_WEAPONS[0].speed * DUSTY_WEAPONS[0].lifetimeMs, "a dud can be worse than the Pea Shooter");
+  const legendaryVolley = Math.max(legendary.count, legendary.spreadDegrees.length);
+  assert.ok(legendaryVolley * legendary.damage / legendary.cooldownMs > DUSTY_WEAPONS[5].damage / DUSTY_WEAPONS[5].cooldownMs * 8, "legendary output must be unmistakably overpowered");
+  assert.equal(legendary.visualTier, 7);
+});
+
+test("thousands of deterministic rolls produce broad stat and firing-pattern variety at the authored weights", () => {
+  let seed = 0x51f15e;
+  const random = () => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed / 0x100000000; };
+  const weapons = Array.from({ length: 5000 }, () => generateRandomWeapon(random));
+  const count = (rarity: string) => weapons.filter((weapon) => weapon.rarity === rarity).length;
+  assert.ok(count("DUD") > 2600 && count("DUD") < 2900);
+  assert.ok(count("AVERAGE") > 2000 && count("AVERAGE") < 2300);
+  assert.ok(count("LEGENDARY") > 65 && count("LEGENDARY") < 140);
+  assert.ok(new Set(weapons.map((weapon) => weapon.name)).size >= 45, "the generator needs many arcade identities");
+  assert.ok(new Set(weapons.map((weapon) => [weapon.cooldownMs, weapon.speed, weapon.lifetimeMs, weapon.damage, weapon.radius, weapon.count, weapon.spreadDegrees.join(","), weapon.burstSpacingMs].join("|"))).size > 3000, "rolls must vary mechanics, not merely names");
+});
+
+test("weird generated firing angles are authoritative rather than cosmetic labels", () => {
+  const values = [.1, 0, .3, .5, .5, .5]; let index = 0;
+  const backwards = generateRandomWeapon(() => values[index++] ?? .5);
+  assert.match(backwards.name, /BACKWARDS BLASTER/);
+  const simulation = new DustyOrbitSimulation(() => .5);
+  disablePickups(simulation);
+  const player = simulation.addPlayer("30000000-0000-4000-8000-000000000006", "Backfire", 1000);
+  Object.assign(player, { x: 1000, y: 1000, protectedUntil: 0, randomWeapon: backwards });
+  simulation.applyInput(player.id, { type: "input", seq: 1, moveX: 0, moveY: 0, aimX: 1, aimY: 0, fire: true }, 1000);
+  simulation.step(DUSTY_FIXED_DT, 1000);
+  assert.ok(simulation.projectiles[0]?.vx < 0, "the backwards dud must really fire behind the player");
 });

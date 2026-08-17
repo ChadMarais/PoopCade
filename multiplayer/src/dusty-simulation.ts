@@ -23,6 +23,9 @@ export const DUSTY_DISCONNECT_GRACE_MS = 5000;
 export const DUSTY_MAX_PLAYERS = 15;
 export const DUSTY_MAX_HIT_REWIND_MS = 250;
 export const DUSTY_PLAYER_COLLISION_COOLDOWN_MS = 750;
+export const DUSTY_PLAYER_BOUNCE_MS = 220;
+export const DUSTY_PLAYER_BOUNCE_SPEED = 360;
+export const DUSTY_PLAYER_BOUNCE_GAP = 12;
 
 const COLLISION_KILL_CALLOUTS = Object.freeze([
   "DEMOLITION DERBY · INSURANCE DENIED",
@@ -41,6 +44,7 @@ export type DustyPlayer = {
   spyUntil: number; speedUntil: number; moleMode: boolean; moleUntil: number; moleForceAt: number;
   connectedSatelliteId: string | null; connectedHealingStationId: string | null; healingNextAt: number;
   connectedWeaponStationId: string | null; weaponGenerationStartedAt: number; randomWeapon: GeneratedWeaponDefinition | null;
+  bounceVx: number; bounceVy: number; bounceUntil: number;
   emergeBlockedUntil: number; alive: boolean; respawnAt: number; protectedUntil: number;
   lastInputAt: number; lastMessageAt: number; lastInputSeq: number; lastFireAt: number;
   lastFireInput: boolean; suppressFireUntilRelease: boolean; lastNukeInput: boolean;
@@ -176,6 +180,7 @@ export class DustyOrbitSimulation {
       nukeReady: false, shieldHits: 0, spyUntil: 0, speedUntil: 0, moleMode: false, moleUntil: 0,
       connectedSatelliteId: null, connectedHealingStationId: null, healingNextAt: 0,
       connectedWeaponStationId: null, weaponGenerationStartedAt: 0, randomWeapon: null,
+      bounceVx: 0, bounceVy: 0, bounceUntil: 0,
       moleForceAt: 0, emergeBlockedUntil: 0, alive: true, respawnAt: 0,
       protectedUntil: now + DUSTY_SPAWN_PROTECTION_MS, lastInputAt: now, lastMessageAt: now,
       lastInputSeq: 0, lastFireAt: Number.NEGATIVE_INFINITY, lastFireInput: false,
@@ -294,7 +299,10 @@ export class DustyOrbitSimulation {
       if (aim.length) { player.aimX = aim.x; player.aimY = aim.y; }
       const move = normalized(player.input.moveX, player.input.moveY);
       const speed = DUSTY_GAMEPLAY.baseMovementSpeed * (player.speedUntil > now ? DUSTY_GAMEPLAY.speedMultiplier : 1);
-      player.vx = move.x * speed; player.vy = move.y * speed;
+      const bounceWeight = Math.max(0, Math.min(1, (player.bounceUntil - now) / DUSTY_PLAYER_BOUNCE_MS));
+      player.vx = move.x * speed + player.bounceVx * bounceWeight;
+      player.vy = move.y * speed + player.bounceVy * bounceWeight;
+      if (!bounceWeight) { player.bounceVx = 0; player.bounceVy = 0; player.bounceUntil = 0; }
       movementStarts.set(player.id, { x: player.x, y: player.y });
       const displacement = { x: player.vx * dt, y: player.vy * dt };
       // Mole can pass beneath ordinary objects, but the arena's exterior rim
@@ -330,7 +338,7 @@ export class DustyOrbitSimulation {
         const a = players[first], b = players[second];
         if (!a.alive || !b.alive) continue;
         const startA = starts.get(a.id)!, startB = starts.get(b.id)!;
-        const maximumMovement = DUSTY_GAMEPLAY.baseMovementSpeed * DUSTY_GAMEPLAY.speedMultiplier * DUSTY_FIXED_DT + .01;
+        const maximumMovement = (DUSTY_GAMEPLAY.baseMovementSpeed * DUSTY_GAMEPLAY.speedMultiplier + DUSTY_PLAYER_BOUNCE_SPEED) * DUSTY_FIXED_DT + .01;
         // Teleports are discontinuities, not high-speed travel through every
         // player between the pickup and the destination.
         if (Math.hypot(a.x - startA.x, a.y - startA.y) > maximumMovement || Math.hypot(b.x - startB.x, b.y - startB.y) > maximumMovement) continue;
@@ -341,11 +349,22 @@ export class DustyOrbitSimulation {
         const impactAt = movingCircleTime(startA, a, startB, b, collisionDistance);
         if (impactAt === null || (startDistance <= collisionDistance + .001 && !closingAtStart)) continue;
 
-        // Rewind both pilots to their last server-safe positions. This blocks
-        // character overlap without introducing a push that could put either
-        // player inside nearby static collision geometry.
-        a.x = startA.x; a.y = startA.y; a.vx = 0; a.vy = 0;
-        b.x = startB.x; b.y = startB.y; b.vx = 0; b.vy = 0;
+        const impactA = { x: startA.x + (a.x - startA.x) * impactAt, y: startA.y + (a.y - startA.y) * impactAt };
+        const impactB = { x: startB.x + (b.x - startB.x) * impactAt, y: startB.y + (b.y - startB.y) * impactAt };
+        let normal = normalized(impactA.x - impactB.x, impactA.y - impactB.y);
+        if (!normal.length) normal = normalized(relativeStart.x || (a.joinOrder < b.joinOrder ? -1 : 1), relativeStart.y);
+        const impactDistance = Math.hypot(impactA.x - impactB.x, impactA.y - impactB.y);
+        const pushEach = Math.max(DUSTY_PLAYER_BOUNCE_GAP / 2, (collisionDistance + DUSTY_PLAYER_BOUNCE_GAP - impactDistance) / 2);
+        const pushedA = moveCircleWithSliding(impactA, { x: normal.x * pushEach, y: normal.y * pushEach }, DUSTY_PLAYER_RADIUS, this.mapRuntime.polygons);
+        const pushedB = moveCircleWithSliding(impactB, { x: -normal.x * pushEach, y: -normal.y * pushEach }, DUSTY_PLAYER_RADIUS, this.mapRuntime.polygons);
+        a.x = clamp(pushedA.x, DUSTY_PLAYER_RADIUS, this.mapRuntime.map.width - DUSTY_PLAYER_RADIUS);
+        a.y = clamp(pushedA.y, DUSTY_PLAYER_RADIUS, this.mapRuntime.map.height - DUSTY_PLAYER_RADIUS);
+        b.x = clamp(pushedB.x, DUSTY_PLAYER_RADIUS, this.mapRuntime.map.width - DUSTY_PLAYER_RADIUS);
+        b.y = clamp(pushedB.y, DUSTY_PLAYER_RADIUS, this.mapRuntime.map.height - DUSTY_PLAYER_RADIUS);
+        a.bounceVx = normal.x * DUSTY_PLAYER_BOUNCE_SPEED; a.bounceVy = normal.y * DUSTY_PLAYER_BOUNCE_SPEED; a.bounceUntil = now + DUSTY_PLAYER_BOUNCE_MS;
+        b.bounceVx = -normal.x * DUSTY_PLAYER_BOUNCE_SPEED; b.bounceVy = -normal.y * DUSTY_PLAYER_BOUNCE_SPEED; b.bounceUntil = now + DUSTY_PLAYER_BOUNCE_MS;
+        a.vx = a.bounceVx; a.vy = a.bounceVy;
+        b.vx = b.bounceVx; b.vy = b.bounceVy;
         this.resetPositionHistory(a, now); this.resetPositionHistory(b, now);
 
         const pairKey = a.id < b.id ? `${a.id}|${b.id}` : `${b.id}|${a.id}`;
@@ -462,7 +481,8 @@ export class DustyOrbitSimulation {
     const aimX = liveAim.length ? liveAim.x : player.aimX;
     const aimY = liveAim.length ? liveAim.y : player.aimY;
     while (player.burstRemaining > 0 && now >= player.nextBurstAt && this.projectiles.length < DUSTY_GAMEPLAY.maxProjectiles) {
-      this.spawnProjectile(player, weapon, aimX, aimY, now, ++this.shotId);
+      const burstSpread = weapon.spreadDegrees[player.burstIndex % weapon.spreadDegrees.length] ?? 0;
+      this.spawnProjectile(player, weapon, aimX, aimY, now, ++this.shotId, burstSpread);
       player.burstRemaining--; player.burstIndex++; player.nextBurstAt += weapon.burstSpacingMs;
     }
     if (!player.input.fire || player.burstRemaining > 0 || now - player.lastFireAt < weapon.cooldownMs || this.projectiles.length >= DUSTY_GAMEPLAY.maxProjectiles) return;
@@ -478,7 +498,7 @@ export class DustyOrbitSimulation {
       for (const spreadDegrees of weapon.spreadDegrees) this.spawnProjectile(player, weapon, aimX, aimY, now, shotId, spreadDegrees);
       return;
     }
-    this.spawnProjectile(player, weapon, aimX, aimY, now, ++this.shotId);
+    this.spawnProjectile(player, weapon, aimX, aimY, now, ++this.shotId, weapon.spreadDegrees[0] ?? 0);
   }
 
   private spawnProjectile(player: DustyPlayer, weapon: WeaponDefinition, aimX: number, aimY: number, now: number, shotId: number, spreadDegrees = 0): void {
@@ -852,7 +872,7 @@ export class DustyOrbitSimulation {
 
   private respawnPlayer(player: DustyPlayer, now: number): void {
     const spawn = this.chooseRespawn(player.id);
-    Object.assign(player, { x: spawn.x, y: spawn.y, vx: 0, vy: 0, hp: DUSTY_GAMEPLAY.maxHp, alive: true, respawnAt: 0, protectedUntil: now + DUSTY_SPAWN_PROTECTION_MS, lastFireAt: Number.NEGATIVE_INFINITY, lastFireInput: false, lastNukeInput: false, connectedSatelliteId: null, connectedHealingStationId: null, healingNextAt: 0, connectedWeaponStationId: null, weaponGenerationStartedAt: 0, randomWeapon: null });
+    Object.assign(player, { x: spawn.x, y: spawn.y, vx: 0, vy: 0, bounceVx: 0, bounceVy: 0, bounceUntil: 0, hp: DUSTY_GAMEPLAY.maxHp, alive: true, respawnAt: 0, protectedUntil: now + DUSTY_SPAWN_PROTECTION_MS, lastFireAt: Number.NEGATIVE_INFINITY, lastFireInput: false, lastNukeInput: false, connectedSatelliteId: null, connectedHealingStationId: null, healingNextAt: 0, connectedWeaponStationId: null, weaponGenerationStartedAt: 0, randomWeapon: null });
     this.resetPositionHistory(player, now);
     this.events.push({ type: "respawn", playerId: player.id, x: player.x, y: player.y, protectedUntil: player.protectedUntil });
   }

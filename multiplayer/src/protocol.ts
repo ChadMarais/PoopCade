@@ -30,7 +30,7 @@ export type ClientInput = {
 };
 
 export type ClientPing = { type: "ping"; nonce: string };
-export type ClientRecruit = { type: "recruit" };
+export type ClientRecruit = { type: "recruit"; mapId?: "lunar-liability" | "hell-moon" };
 export type ClientDebugPowerup = { type: "debug_powerup"; powerup: "spy" | "speed" | "health" | "shield" | "teleport" | "mole" | "fart" };
 export type ClientDebugNuke = { type: "debug_nuke" };
 export type ClientMessage = ClientHello | ClientJoin | ClientLeave | ClientInput | ClientPing | ClientRecruit | ClientDebugPowerup | ClientDebugNuke;
@@ -107,7 +107,10 @@ export function parseClientMessage(raw: string | ArrayBuffer): ClientMessage | n
     return { type: "ping", nonce: value.nonce };
   }
 
-  if (value.type === "recruit") return { type: "recruit" };
+  if (value.type === "recruit") {
+    if (value.mapId !== undefined && value.mapId !== "lunar-liability" && value.mapId !== "hell-moon") return null;
+    return { type: "recruit", ...(value.mapId ? { mapId: value.mapId } : {}) };
+  }
 
   if (value.type === "debug_powerup") {
     if (!["spy", "speed", "health", "shield", "teleport", "mole", "fart"].includes(String(value.powerup))) return null;

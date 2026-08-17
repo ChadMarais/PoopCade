@@ -1,9 +1,8 @@
 import { PRODUCTION_ARENA_WSS } from "/games/game-03/config.js?v=20260812";
 import { claimSessionIdentity, resolvePoopcadePlayerIdentity } from "/games/game-03/identity.js?v=20260813-2";
 import { ArenaNetwork } from "/games/game-03/network.js?v=20260814-2";
-import { RECRUITMENT_HREF, normalizedOnlinePlayers } from "/games/game-03/presence.js?v=20260814-2";
+import { presenceEndpoint, RECRUITMENT_HREF, normalizedOnlinePlayers } from "/games/game-03/presence.js?v=20260817-1";
 
-const ARENA_ID = "dusty-orbit-001";
 const counters = [...document.querySelectorAll("[data-dusty-online-value]")];
 const counterShells = [...document.querySelectorAll("[data-dusty-online]")];
 const toast = document.querySelector("[data-dusty-recruitment-toast]");
@@ -29,7 +28,11 @@ function showRecruitment(message) {
 }
 
 const productionBase = PRODUCTION_ARENA_WSS.trim().replace(/\/$/, "");
-const endpoint = /^wss:\/\/[^/]+$/i.test(productionBase) ? `${productionBase}/arena/${ARENA_ID}/ws` : "";
+const localFrontend = location.hostname === "localhost" || location.hostname === "127.0.0.1";
+const presenceBase = localFrontend && location.port === "8081"
+  ? `ws://${location.hostname === "localhost" ? "127.0.0.1" : location.hostname}:8787`
+  : productionBase;
+const endpoint = /^wss?:\/\/[^/]+$/i.test(presenceBase) ? presenceEndpoint(presenceBase) : "";
 if (!endpoint) {
   setCount(0, "unavailable");
 } else {

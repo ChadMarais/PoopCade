@@ -8,8 +8,8 @@ import { InputController } from "./input.js?v=20260813-3";
 import { claimSessionIdentity, resolvePoopcadePlayerIdentity } from "./identity.js?v=20260813-2";
 import { ArenaNetwork } from "./network.js?v=20260814-2";
 import { consumeFixedStep, convergeVisualPosition } from "./timing.js?v=20260813-2";
-import { DustyLobby } from "./lobby.js?v=20260814-7";
-import { RECRUITMENT_HREF } from "./presence.js?v=20260814-2";
+import { DustyLobby } from "./lobby.js?v=20260817-1";
+import { presenceEndpoint, RECRUITMENT_HREF } from "./presence.js?v=20260817-1";
 import { DustyOrbitHighscoreTracker } from "./highscore.js?v=20260813-2";
 import { DustyOrbitAudio } from "./audio.js?v=20260817-3";
 import { makePanelDraggable } from "./draggable-panel.js?v=20260814-4";
@@ -189,6 +189,7 @@ const eventLines = [];
 let nukeQueuedUntil = 0;
 let localSpeedBoostUntil = 0;
 let network;
+let presenceNetwork;
 let autoJoinRequested = parameters.get("autojoin") === "1";
 let resumeAfterReconnect = false;
 let highscoreStatus = authenticated ? "READY" : "SIGN IN TO SAVE";
@@ -214,6 +215,10 @@ const highscoreTracker = new DustyOrbitHighscoreTracker({
 });
 
 function joinSelectedMap(skinId) {
+  if (lobby.selectedMapId !== selectedMap.id) {
+    navigateToMap(lobby.selectedMapId, true);
+    return;
+  }
   applicationState = "JOINING";
   if (!network.send({ type: "join", name: playerName, skinId, ...(accessToken ? { accessToken } : {}) })) {
     applicationState = "DISCONNECTED";
@@ -235,8 +240,18 @@ const lobby = new DustyLobby(document.querySelector("#lobby"), {
   onJoin: joinSelectedMap,
   onRetry() { network.connect(true); },
   onSkinSelected(skinId) { preloadCharacterSkin(skinId); },
-  onRecruit() { return network?.send({ type: "recruit" }) === true; },
-  onMapSelected(mapId) { navigateToMap(mapId); },
+  onRecruit() { return presenceNetwork?.send({ type: "recruit", mapId: lobby.selectedMapId }) === true; },
+  onMapSelected(mapId) {
+    const destination = new URL(location.href);
+    destination.searchParams.set("map", mapId);
+    destination.searchParams.delete("autojoin");
+    history.replaceState(null, "", destination);
+    const map = mapCatalogEntry(mapId);
+    void import(`${map.moduleUrl}?v=20260817-2`)
+      .then((definition) => loadDustyOrbitAssets(definition, () => {}))
+      .then((preloadedAssets) => preloadedAssets.ensureCharacterSkin(lobby.selectedSkinId))
+      .catch(() => {});
+  },
   onQuickJoin(mapId, skinId) {
     if (mapId === selectedMap.id) joinSelectedMap(skinId);
     else navigateToMap(mapId, true);
@@ -268,10 +283,27 @@ function addEvent(text) { eventLines.unshift(text); eventLines.splice(6); events
 let arcadeCalloutTimer = 0;
 function showArcadeCallout(text) {
   clearTimeout(arcadeCalloutTimer);
+  arcadeCallout.classList.remove("weapon-reveal", "rating-dud", "rating-average", "rating-legendary");
   arcadeCallout.textContent = text;
   arcadeCallout.classList.remove("show");
   requestAnimationFrame(() => arcadeCallout.classList.add("show"));
   arcadeCalloutTimer = setTimeout(() => arcadeCallout.classList.remove("show"), 2400);
+}
+function showWeaponReveal(weapon) {
+  clearTimeout(arcadeCalloutTimer);
+  const rating = ["DUD", "AVERAGE", "LEGENDARY"].includes(String(weapon?.rarity)) ? String(weapon.rarity) : "AVERAGE";
+  const name = typeof weapon?.name === "string" && weapon.name ? weapon.name : "MYSTERY GUN";
+  const title = document.createElement("strong");
+  title.className = "weapon-reveal-name";
+  title.textContent = name;
+  const grade = document.createElement("span");
+  grade.className = "weapon-reveal-rating";
+  grade.textContent = rating === "LEGENDARY" ? "★ LEGENDARY WEAPON ★" : `${rating} WEAPON`;
+  arcadeCallout.replaceChildren(title, grade);
+  arcadeCallout.classList.remove("show", "rating-dud", "rating-average", "rating-legendary");
+  arcadeCallout.classList.add("weapon-reveal", `rating-${rating.toLowerCase()}`);
+  requestAnimationFrame(() => arcadeCallout.classList.add("show"));
+  arcadeCalloutTimer = setTimeout(() => arcadeCallout.classList.remove("show"), rating === "LEGENDARY" ? 4200 : 3000);
 }
 
 network = new ArenaNetwork({
@@ -413,8 +445,8 @@ network = new ArenaNetwork({
     if (message.type === "weapon_generation_cancelled" && message.playerId === localId) addEvent("WEAPON GENERATION CANCELLED · STAY CLOSE");
     if (message.type === "weapon_generated" && message.playerId === localId) {
       const weapon = message.weapon || {};
-      const callout = `${weapon.rarity || "RANDOM"} WEAPON · ${weapon.name || "GENERATED"}`;
-      showArcadeCallout(callout);
+      const callout = `${weapon.name || "GENERATED"} · ${weapon.rarity || "AVERAGE"} WEAPON`;
+      showWeaponReveal(weapon);
       addEvent(`${callout} · GENERATOR COOLING DOWN 10s`);
     }
     if (message.type === "nuke_warning") { renderer.nukeWarning(message); if (message.ownerId === localId) nukeQueuedUntil = 0; addEvent("NUKE INCOMING"); }
@@ -440,6 +472,19 @@ network = new ArenaNetwork({
     }
     if (message.type === "player_joined") addEvent(`${message.player.name} JOINED`);
     if (message.type === "player_left") addEvent(`${message.player.name} LEFT`);
+  },
+});
+
+presenceNetwork = new ArenaNetwork({
+  url: presenceEndpoint(arenaEndpoint),
+  sessionId,
+  name: playerName,
+  presence: "dusty",
+  onState(state) { lobby.setRecruitmentConnectionState(state); },
+  onMessage(message) {
+    if (message.type === "lobby_state") { lobby.setOnlinePlayers(message.onlinePlayers); return; }
+    if (message.type === "recruitment_status") { lobby.recruitmentStatus(message); return; }
+    if (message.type === "recruitment") showRecruitment(message);
   },
 });
 
@@ -707,8 +752,9 @@ leaveGame.addEventListener("click", () => {
   }
 });
 document.addEventListener("visibilitychange", () => { input.reset(); input.enabled = connectionState === "online" && joined && !document.hidden; network.setActive(!document.hidden); if (!document.hidden) previousFrame = performance.now(); });
-addEventListener("beforeunload", () => { identity.release(); network.close(); });
+addEventListener("beforeunload", () => { identity.release(); network.close(); presenceNetwork.close(); });
 
-window.__DUSTY_ORBIT_MULTIPLAYER__ = { network, renderer, input, collisionEditor, lobby, getState: () => ({ applicationState, connectionState, joined, localId, playerName, authenticated, latestSnapshot, predicted, visualPredicted, predictionOffset: { ...predictionOffset }, pending: [...pending], seq, reconciliationError, maximumReconciliationError, input: input.getVisualState() }) };
+window.__DUSTY_ORBIT_MULTIPLAYER__ = { network, presenceNetwork, renderer, input, collisionEditor, lobby, getState: () => ({ applicationState, connectionState, joined, localId, playerName, authenticated, latestSnapshot, predicted, visualPredicted, predictionOffset: { ...predictionOffset }, pending: [...pending], seq, reconciliationError, maximumReconciliationError, input: input.getVisualState() }) };
 network.connect(true);
+presenceNetwork.connect(true);
 requestAnimationFrame(frame);
