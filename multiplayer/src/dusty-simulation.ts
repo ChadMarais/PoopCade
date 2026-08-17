@@ -481,8 +481,9 @@ export class DustyOrbitSimulation {
     const aimX = liveAim.length ? liveAim.x : player.aimX;
     const aimY = liveAim.length ? liveAim.y : player.aimY;
     while (player.burstRemaining > 0 && now >= player.nextBurstAt && this.projectiles.length < DUSTY_GAMEPLAY.maxProjectiles) {
-      const burstSpread = weapon.spreadDegrees[player.burstIndex % weapon.spreadDegrees.length] ?? 0;
-      this.spawnProjectile(player, weapon, aimX, aimY, now, ++this.shotId, burstSpread);
+      // Timed burst rounds are individual trigger events. Every round must
+      // leave along the live barrel direction sampled on this exact tick.
+      this.spawnProjectile(player, weapon, aimX, aimY, now, ++this.shotId);
       player.burstRemaining--; player.burstIndex++; player.nextBurstAt += weapon.burstSpacingMs;
     }
     if (!player.input.fire || player.burstRemaining > 0 || now - player.lastFireAt < weapon.cooldownMs || this.projectiles.length >= DUSTY_GAMEPLAY.maxProjectiles) return;
@@ -498,7 +499,9 @@ export class DustyOrbitSimulation {
       for (const spreadDegrees of weapon.spreadDegrees) this.spawnProjectile(player, weapon, aimX, aimY, now, shotId, spreadDegrees);
       return;
     }
-    this.spawnProjectile(player, weapon, aimX, aimY, now, ++this.shotId, weapon.spreadDegrees[0] ?? 0);
+    // A single projectile always follows the visible barrel. Authored angular
+    // offsets are reserved for simultaneous multi-pellet scatter patterns.
+    this.spawnProjectile(player, weapon, aimX, aimY, now, ++this.shotId);
   }
 
   private spawnProjectile(player: DustyPlayer, weapon: WeaponDefinition, aimX: number, aimY: number, now: number, shotId: number, spreadDegrees = 0): void {

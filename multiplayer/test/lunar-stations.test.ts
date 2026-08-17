@@ -137,15 +137,19 @@ test("thousands of deterministic rolls produce broad stat and firing-pattern var
   assert.ok(new Set(weapons.map((weapon) => [weapon.cooldownMs, weapon.speed, weapon.lifetimeMs, weapon.damage, weapon.radius, weapon.count, weapon.spreadDegrees.join(","), weapon.burstSpacingMs].join("|"))).size > 3000, "rolls must vary mechanics, not merely names");
 });
 
-test("weird generated firing angles are authoritative rather than cosmetic labels", () => {
+test("generated single-shot weapons preserve the exact live muzzle direction", () => {
   const values = [.1, 0, .3, .5, .5, .5]; let index = 0;
-  const backwards = generateRandomWeapon(() => values[index++] ?? .5);
-  assert.match(backwards.name, /BACKWARDS BLASTER/);
+  const dud = generateRandomWeapon(() => values[index++] ?? .5);
+  assert.match(dud.name, /TRIGGER-LAG BLASTER/);
+  assert.deepEqual(dud.spreadDegrees, [0]);
   const simulation = new DustyOrbitSimulation(() => .5);
   disablePickups(simulation);
-  const player = simulation.addPlayer("30000000-0000-4000-8000-000000000006", "Backfire", 1000);
-  Object.assign(player, { x: 1000, y: 1000, protectedUntil: 0, randomWeapon: backwards });
-  simulation.applyInput(player.id, { type: "input", seq: 1, moveX: 0, moveY: 0, aimX: 1, aimY: 0, fire: true }, 1000);
+  const player = simulation.addPlayer("30000000-0000-4000-8000-000000000006", "Aligned", 1000);
+  Object.assign(player, { x: 1000, y: 1000, protectedUntil: 0, randomWeapon: dud });
+  simulation.applyInput(player.id, { type: "input", seq: 1, moveX: 0, moveY: 0, aimX: .6, aimY: .8, fire: true }, 1000);
   simulation.step(DUSTY_FIXED_DT, 1000);
-  assert.ok(simulation.projectiles[0]?.vx < 0, "the backwards dud must really fire behind the player");
+  const projectile = simulation.projectiles[0];
+  assert.ok(projectile);
+  assert.ok(Math.abs(projectile.vx / dud.speed - .6) < 1e-9);
+  assert.ok(Math.abs(projectile.vy / dud.speed - .8) < 1e-9);
 });

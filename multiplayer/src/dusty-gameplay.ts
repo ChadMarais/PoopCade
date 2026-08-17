@@ -109,9 +109,9 @@ export function generateRandomWeapon(random: () => number = Math.random): Genera
   const archetype = unit(random);
 
   if (rarity === "DUD") {
-    if (archetype < .2) return generatedWeapon(rarity, .2, generatedName(random, rarity, "BACKWARDS BLASTER"), {
+    if (archetype < .2) return generatedWeapon(rarity, .2, generatedName(random, rarity, "TRIGGER-LAG BLASTER"), {
       cooldownMs: Math.round(between(random, 1300, 2200)), speed: Math.round(between(random, 340, 500)), lifetimeMs: Math.round(between(random, 450, 750)),
-      damage: 1, radius: 2.5, count: 1, spreadDegrees: [180], burstSpacingMs: 0, muzzleDistance: 48,
+      damage: 1, radius: 2.5, count: 1, spreadDegrees: [0], burstSpacingMs: 0, muzzleDistance: 48,
     });
     if (archetype < .4) return generatedWeapon(rarity, .7, generatedName(random, rarity, "SNEEZE CANNON"), {
       cooldownMs: Math.round(between(random, 1800, 2700)), speed: Math.round(between(random, 260, 390)), lifetimeMs: Math.round(between(random, 180, 300)),
@@ -119,16 +119,15 @@ export function generateRandomWeapon(random: () => number = Math.random): Genera
     });
     if (archetype < .6) return generatedWeapon(rarity, .8, generatedName(random, rarity, "BUDGET BURST"), {
       cooldownMs: Math.round(between(random, 2100, 3100)), speed: Math.round(between(random, 300, 470)), lifetimeMs: Math.round(between(random, 360, 520)),
-      damage: 1, radius: 2.5, count: 3, spreadDegrees: [-19, 13, -7], burstSpacingMs: Math.round(between(random, 320, 480)), muzzleDistance: 48,
+      damage: 1, radius: 2.5, count: 3, spreadDegrees: [0, 0, 0], burstSpacingMs: Math.round(between(random, 320, 480)), muzzleDistance: 48,
     });
     if (archetype < .8) return generatedWeapon(rarity, .5, generatedName(random, rarity, "WET-NOODLE RAILGUN"), {
       cooldownMs: Math.round(between(random, 1600, 2500)), speed: Math.round(between(random, 1300, 1800)), lifetimeMs: Math.round(between(random, 70, 145)),
       damage: 1, radius: 1.4, count: 1, spreadDegrees: [0], burstSpacingMs: 0, muzzleDistance: 48,
     });
-    const crookedAngle = between(random, 20, 44) * (unit(random) < .5 ? -1 : 1);
-    return generatedWeapon(rarity, 1, generatedName(random, rarity, "CROOKED PEA FLINGER"), {
+    return generatedWeapon(rarity, 1, generatedName(random, rarity, "COUGHING PEA FLINGER"), {
       cooldownMs: Math.round(between(random, 1050, 1900)), speed: Math.round(between(random, 350, 520)), lifetimeMs: Math.round(between(random, 380, 620)),
-      damage: 1, radius: 3, count: 1, spreadDegrees: [crookedAngle], burstSpacingMs: 0, muzzleDistance: 48,
+      damage: 1, radius: 3, count: 1, spreadDegrees: [0], burstSpacingMs: 0, muzzleDistance: 48,
     });
   }
 
@@ -139,11 +138,11 @@ export function generateRandomWeapon(random: () => number = Math.random): Genera
     });
     if (archetype < 2 / 6) return generatedWeapon(rarity, 5.2, generatedName(random, rarity, "STUTTER BURST"), {
       cooldownMs: Math.round(between(random, 680, 980)), speed: Math.round(between(random, 620, 820)), lifetimeMs: Math.round(between(random, 650, 900)),
-      damage: 1, radius: 3, count: 5, spreadDegrees: [-11, 8, -5, 14, 0], burstSpacingMs: Math.round(between(random, 65, 125)), muzzleDistance: 48,
+      damage: 1, radius: 3, count: 5, spreadDegrees: [0, 0, 0, 0, 0], burstSpacingMs: Math.round(between(random, 65, 125)), muzzleDistance: 48,
     });
     if (archetype < 3 / 6) return generatedWeapon(rarity, 4.5, generatedName(random, rarity, "COMET HOSE"), {
       cooldownMs: Math.round(between(random, 150, 290)), speed: Math.round(between(random, 400, 680)), lifetimeMs: Math.round(between(random, 850, 1250)),
-      damage: 1, radius: between(random, 3.2, 4.8), count: 1, spreadDegrees: [between(random, -4, 4)], burstSpacingMs: 0, muzzleDistance: 48,
+      damage: 1, radius: between(random, 3.2, 4.8), count: 1, spreadDegrees: [0], burstSpacingMs: 0, muzzleDistance: 48,
     });
     if (archetype < 4 / 6) return generatedWeapon(rarity, 5.5, generatedName(random, rarity, "BIG SLOW ORB"), {
       cooldownMs: Math.round(between(random, 720, 1050)), speed: Math.round(between(random, 240, 380)), lifetimeMs: Math.round(between(random, 1700, 2400)),
@@ -153,9 +152,9 @@ export function generateRandomWeapon(random: () => number = Math.random): Genera
       cooldownMs: Math.round(between(random, 580, 820)), speed: Math.round(between(random, 980, 1300)), lifetimeMs: Math.round(between(random, 700, 980)),
       damage: 1, radius: 2, count: 3, spreadDegrees: [-2.5, 0, 2.5], burstSpacingMs: 0, muzzleDistance: 48,
     });
-    return generatedWeapon(rarity, 5, generatedName(random, rarity, "SIDEWINDER"), {
+    return generatedWeapon(rarity, 5, generatedName(random, rarity, "PANIC BURST"), {
       cooldownMs: Math.round(between(random, 800, 1150)), speed: Math.round(between(random, 650, 900)), lifetimeMs: Math.round(between(random, 650, 950)),
-      damage: 1, radius: 3.5, count: 5, spreadDegrees: [18, -18, 9, -9, 0], burstSpacingMs: Math.round(between(random, 55, 100)), muzzleDistance: 48,
+      damage: 1, radius: 3.5, count: 5, spreadDegrees: [0, 0, 0, 0, 0], burstSpacingMs: Math.round(between(random, 55, 100)), muzzleDistance: 48,
     });
   }
 
@@ -169,7 +168,7 @@ export function generateRandomWeapon(random: () => number = Math.random): Genera
   });
   if (archetype < .75) return generatedWeapon(rarity, 18, generatedName(random, rarity, "DOOM ACCORDION"), {
     cooldownMs: Math.round(between(random, 240, 360)), speed: Math.round(between(random, 1350, 1750)), lifetimeMs: Math.round(between(random, 1050, 1450)),
-    damage: 2, radius: 6, count: 12, spreadDegrees: [-20, 20, -15, 15, -10, 10, -5, 5, -2, 2, 0, 0], burstSpacingMs: Math.round(between(random, 22, 38)), muzzleDistance: 52,
+    damage: 2, radius: 6, count: 12, spreadDegrees: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], burstSpacingMs: Math.round(between(random, 22, 38)), muzzleDistance: 52,
   });
   return generatedWeapon(rarity, 17, generatedName(random, rarity, "TRIPLE APOCALYPSE"), {
     cooldownMs: Math.round(between(random, 120, 190)), speed: Math.round(between(random, 1550, 2000)), lifetimeMs: Math.round(between(random, 1150, 1500)),
