@@ -63,7 +63,8 @@ test("renderer spawns one independent blast from the authoritative detonation ev
   assert.equal(blasts[0].y, event.y);
   assert.equal(blasts[0].radius, event.radius);
   assert.equal(blasts[0].life, NUKE_EFFECT_DURATION_MS);
-  assert.equal(blasts[0].particles.length, 64);
+  assert.equal(blasts[0].particles.length, 32);
+  assert.equal(blasts[0].shards.length, 6);
   assert.equal(renderer.nukeWarnings.has(event.id), false);
 });
 

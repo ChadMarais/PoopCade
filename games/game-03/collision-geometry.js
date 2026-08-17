@@ -127,11 +127,67 @@ export function circlePolygonPenetration(center, radius, polygon) {
   return { x: normalX * radius, y: normalY * radius, depth: radius };
 }
 
-export function resolveCircleAgainstPolygons(position, radius, polygons, iterations = 4) {
+export function createPolygonBroadphase(polygons, cellSize = 384) {
+  const safeCellSize = Math.max(64, Number(cellSize) || 384);
+  let cells = null;
+  let polygonCount = -1;
+  const seen = [];
+  let stamp = 0;
+
+  const rebuild = () => {
+    cells = new Map();
+    polygonCount = polygons.length;
+    seen.length = polygonCount;
+    for (let index = 0; index < polygons.length; index += 1) {
+      const polygon = polygons[index];
+      if (!polygon?.length) continue;
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      for (const point of polygon) {
+        minX = Math.min(minX, point.x); minY = Math.min(minY, point.y);
+        maxX = Math.max(maxX, point.x); maxY = Math.max(maxY, point.y);
+      }
+      const firstColumn = Math.floor(minX / safeCellSize);
+      const lastColumn = Math.floor(maxX / safeCellSize);
+      const firstRow = Math.floor(minY / safeCellSize);
+      const lastRow = Math.floor(maxY / safeCellSize);
+      for (let row = firstRow; row <= lastRow; row += 1) for (let column = firstColumn; column <= lastColumn; column += 1) {
+        const key = `${column},${row}`;
+        const bucket = cells.get(key);
+        if (bucket) bucket.push(index); else cells.set(key, [index]);
+      }
+    }
+  };
+
+  return {
+    invalidate() { cells = null; polygonCount = -1; },
+    queryCircle(center, radius) {
+      if (!cells || polygonCount !== polygons.length) rebuild();
+      stamp += 1;
+      if (stamp >= 2_000_000_000) { seen.fill(0); stamp = 1; }
+      const indices = [];
+      const firstColumn = Math.floor((center.x - radius) / safeCellSize);
+      const lastColumn = Math.floor((center.x + radius) / safeCellSize);
+      const firstRow = Math.floor((center.y - radius) / safeCellSize);
+      const lastRow = Math.floor((center.y + radius) / safeCellSize);
+      for (let row = firstRow; row <= lastRow; row += 1) for (let column = firstColumn; column <= lastColumn; column += 1) {
+        for (const index of cells.get(`${column},${row}`) || []) {
+          if (seen[index] === stamp) continue;
+          seen[index] = stamp;
+          indices.push(index);
+        }
+      }
+      indices.sort((a, b) => a - b);
+      return indices.map((index) => polygons[index]);
+    },
+  };
+}
+
+export function resolveCircleAgainstPolygons(position, radius, polygons, iterations = 4, broadphase = null) {
   const resolved = { x: position.x, y: position.y };
   for (let pass = 0; pass < iterations; pass += 1) {
     let moved = false;
-    for (const polygon of polygons) {
+    const candidates = broadphase?.queryCircle(resolved, radius) || polygons;
+    for (const polygon of candidates) {
       const penetration = circlePolygonPenetration(resolved, radius, polygon);
       if (!penetration) continue;
       resolved.x += penetration.x;
@@ -143,7 +199,7 @@ export function resolveCircleAgainstPolygons(position, radius, polygons, iterati
   return resolved;
 }
 
-export function moveCircleWithSliding(position, displacement, radius, polygons) {
+export function moveCircleWithSliding(position, displacement, radius, polygons, broadphase = null) {
   const distance = Math.hypot(displacement.x, displacement.y);
   const maximumStep = Math.max(1, radius * 0.45);
   const steps = Math.max(1, Math.ceil(distance / maximumStep));
@@ -156,6 +212,8 @@ export function moveCircleWithSliding(position, displacement, radius, polygons) 
       { x: resolved.x + stepX, y: resolved.y + stepY },
       radius,
       polygons,
+      4,
+      broadphase,
     );
   }
   return resolved;

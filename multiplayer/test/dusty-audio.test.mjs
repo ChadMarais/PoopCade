@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { DUSTY_AUDIO_FILES, DUSTY_AUDIO_MAX_VOLUME, DUSTY_AUDIO_MIN_VOLUME, DustyOrbitAudio, spatialSoundVolume } from "../../games/game-03/audio.js";
+import { DUSTY_AUDIO_FILES, DUSTY_AUDIO_MAX_VOLUME, DUSTY_AUDIO_MIN_VOLUME, RANDOM_WEAPON_VOLUME_SCALE, DustyOrbitAudio, spatialSoundVolume } from "../../games/game-03/audio.js";
 import { readFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 
@@ -22,10 +22,10 @@ class FakeAudio {
 
 class FakeAudioContext {
   static latest = null;
-  constructor() { this.state = "suspended"; this.destination = {}; this.started = []; FakeAudioContext.latest = this; }
+  constructor() { this.state = "suspended"; this.destination = {}; this.started = []; this.gains = []; FakeAudioContext.latest = this; }
   resume() { this.state = "running"; return Promise.resolve(); }
   decodeAudioData(bytes) { return Promise.resolve({ bytes }); }
-  createGain() { return { gain: { value: 1 }, connect() {}, disconnect() {} }; }
+  createGain() { const node = { gain: { value: 1 }, connect() {}, disconnect() {} }; this.gains.push(node); return node; }
   createBufferSource() {
     const context = this;
     return { buffer: null, onended: null, connect() {}, disconnect() {}, start() { context.started.push(this); } };
@@ -65,8 +65,25 @@ test("every standard weapon and the random weapon use their supplied production 
   const audio = fresh();
   for (let tier = 1; tier <= 7; tier++) audio.weaponFired({ playerId: "pilot", groupKey: `shot:${tier}`, tier });
   assert.deepEqual(FakeAudio.played, Object.values(DUSTY_AUDIO_FILES.weapons));
-  assert.deepEqual(FakeAudio.volumes, Array(7).fill(DUSTY_AUDIO_MAX_VOLUME));
+  assert.deepEqual(FakeAudio.volumes, [
+    ...Array(6).fill(DUSTY_AUDIO_MAX_VOLUME),
+    DUSTY_AUDIO_MAX_VOLUME * RANDOM_WEAPON_VOLUME_SCALE,
+  ]);
   assert.match(DUSTY_AUDIO_FILES.weapons[7], /weapon-random\.mp3\?v=20260817-3$/);
+});
+
+test("random weapon is trimmed six decibels in both browser audio paths", async () => {
+  const fallbackAudio = fresh();
+  fallbackAudio.weaponFired({ playerId: "pilot", groupKey: "fallback-random", tier: 7 });
+  assert.equal(FakeAudio.volumes[0], DUSTY_AUDIO_MAX_VOLUME * .5);
+
+  const webAudio = fresh({
+    AudioContextCtor: FakeAudioContext,
+    fetchFn: async () => ({ ok: true, arrayBuffer: async () => new ArrayBuffer(8) }),
+  });
+  await webAudio.ready();
+  webAudio.weaponFired({ playerId: "pilot", groupKey: "web-random", tier: 7 });
+  assert.equal(FakeAudioContext.latest.gains.at(-1).gain.value, DUSTY_AUDIO_MAX_VOLUME * .5);
 });
 
 test("three shotgun pellets sharing one authoritative discharge play one sound", () => {

@@ -1,4 +1,4 @@
-import { closestPointOnSegment, collisionBlocksMovement, collisionBlocksProjectiles, depthSortY, pointInPolygon, polygonSignedArea, transformNormalizedPolygon } from "./collision-geometry.js?v=20260815-3";
+import { closestPointOnSegment, collisionBlocksMovement, collisionBlocksProjectiles, depthSortY, pointInPolygon, polygonSignedArea, transformNormalizedPolygon } from "./collision-geometry.js?v=20260817-4";
 
 const HANDLE_RADIUS = 7;
 const HANDLE_HIT_RADIUS = 14;
@@ -442,6 +442,7 @@ export class CollisionEditor {
       };
       this.assets.environment.push(item);
       this.assets.polygons.push(item.polygon);
+      this.assets.movementBroadphase?.invalidate();
       this.originalByInstanceId.set(item.id, placementForInstance(item));
       const points = normalizedCollisionPoints(item.definition);
       this.originalByAssetId.set(item.assetId, clonePoints(points));
@@ -451,6 +452,7 @@ export class CollisionEditor {
       this.draftBehaviorByAssetId.set(item.assetId, { ...behavior });
       this.appendObjectOption(item);
       this.renderer.minimapSurfaces.clear();
+      this.renderer.invalidateStaticScene();
       this.selectInstance(item.id);
       this.setMode("collision");
       this.setActive(true);
@@ -703,8 +705,10 @@ export class CollisionEditor {
     const selected = this.selected;
     if (!selected) return;
     applyCollisionDraft(selected.assetId, this.draft, this.assets.environment);
+    this.assets.movementBroadphase?.invalidate();
     this.dirtyAssetIds.add(selected.assetId);
     this.renderer.minimapSurfaces.clear();
+    this.renderer.invalidateStaticScene();
     this.refreshStatus();
   }
 
@@ -712,8 +716,10 @@ export class CollisionEditor {
     const selected = this.selected;
     if (!selected) return;
     applyPlacementDraft(selected, placement);
+    this.assets.movementBroadphase?.invalidate();
     this.dirtyInstanceIds.add(selected.id);
     this.renderer.minimapSurfaces.clear();
+    this.renderer.invalidateStaticScene();
     this.refreshStatus();
   }
 
@@ -767,6 +773,7 @@ export class CollisionEditor {
     try {
       const result = await deleteObjectFile(this.assets.map.id, selected.id);
       const removal = removeEnvironmentInstance(this.assets, selected.id);
+      this.assets.movementBroadphase?.invalidate();
       [...this.select.options].find((option) => option.value === selected.id)?.remove();
       this.originalByInstanceId.delete(selected.id);
       if (result.assetRemoved) {
@@ -778,6 +785,7 @@ export class CollisionEditor {
       }
       this.dirtyInstanceIds.delete(selected.id);
       this.renderer.minimapSurfaces.clear();
+      this.renderer.invalidateStaticScene();
       const nextIndex = Math.min(removal?.environmentIndex ?? 0, Math.max(0, this.assets.environment.length - 1));
       this.selectedId = this.assets.environment[nextIndex]?.id || "";
       this.select.value = this.selectedId;
@@ -804,8 +812,10 @@ export class CollisionEditor {
     if (!selected) return;
     if (this.mode === "transform") {
       applyPlacementDraft(selected, this.originalByInstanceId.get(selected.id));
+      this.assets.movementBroadphase?.invalidate();
       this.dirtyInstanceIds.delete(selected.id);
       this.renderer.minimapSurfaces.clear();
+      this.renderer.invalidateStaticScene();
       this.refreshStatus("Restored the placement loaded from map.js.");
       return;
     }
@@ -814,10 +824,12 @@ export class CollisionEditor {
     this.draftByAssetId.set(selected.assetId, original);
     this.draftBehaviorByAssetId.set(selected.assetId, originalBehavior);
     applyCollisionDraft(selected.assetId, original, this.assets.environment);
+    this.assets.movementBroadphase?.invalidate();
     applyCollisionBehaviorDraft(selected.assetId, originalBehavior, this.assets.environment);
     this.dirtyAssetIds.delete(selected.assetId);
     this.selectedPoint = null;
     this.renderer.minimapSurfaces.clear();
+    this.renderer.invalidateStaticScene();
     this.updateModeControls();
     this.refreshStatus("Restored the collision shape and shot behavior loaded from JSON.");
   }

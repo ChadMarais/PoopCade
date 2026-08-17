@@ -9,13 +9,18 @@ import {
 } from "./nuke-vfx.js?v=20260813";
 
 function clamp(value, min, max) { return Math.max(min, Math.min(max, value)); }
-const MAX_RENDER_PIXELS = 4_200_000;
-const MAX_STATIC_WORLD_PIXELS = 12_000_000;
-export function renderScaleForViewport(width, height, nativeScale = 1) {
+const MAX_RENDER_PIXELS = 2_500_000;
+const MIN_RENDER_SCALE = .65;
+const MAX_RENDER_SCALE = 1;
+const STATIC_CHUNK_SIZE = 512;
+const STATIC_CHUNK_SCALE = .75;
+const MAX_STATIC_CHUNKS = 48;
+export function renderScaleForViewport(width, height, nativeScale = 1, qualityScale = 1) {
   const safeWidth = Math.max(1, Number(width) || 1);
   const safeHeight = Math.max(1, Number(height) || 1);
-  const nativeDpr = Math.min(2, Math.max(.75, Number(nativeScale) || 1));
-  return Math.max(.75, Math.min(nativeDpr, Math.sqrt(MAX_RENDER_PIXELS / (safeWidth * safeHeight))));
+  const nativeDpr = Math.min(MAX_RENDER_SCALE, Math.max(MIN_RENDER_SCALE, Number(nativeScale) || 1));
+  const baseScale = Math.min(nativeDpr, Math.sqrt(MAX_RENDER_PIXELS / (safeWidth * safeHeight)));
+  return Math.max(MIN_RENDER_SCALE, baseScale * clamp(Number(qualityScale) || 1, .7, 1));
 }
 function drawNineSliceBoundary(ctx, overlay, x, y, width, height, inset) {
   const image = overlay.image;
@@ -63,7 +68,7 @@ function drawNineSliceBoundary(ctx, overlay, x, y, width, height, inset) {
   for (const corner of corners) ctx.drawImage(image, ...corner);
   ctx.restore();
 }
-function drawPolygonBoundary(ctx, overlay, points, offsetX = 0, offsetY = 0, scaleX = 1, scaleY = 1) {
+function drawPolygonBoundary(ctx, overlay, points, offsetX = 0, offsetY = 0, scaleX = 1, scaleY = 1, viewportWidth = Infinity, viewportHeight = Infinity) {
   const image = overlay.image;
   if (!image || !Array.isArray(points) || points.length < 3) return;
   const sourceWidth = image.naturalWidth;
@@ -85,6 +90,9 @@ function drawPolygonBoundary(ctx, overlay, points, offsetX = 0, offsetY = 0, sca
     const dy = (end.y - start.y) * scaleY;
     const length = Math.hypot(dx, dy);
     if (length < 1) continue;
+    const margin = destinationHeight + overlap;
+    if (Math.max(startX, startX + dx) < -margin || Math.min(startX, startX + dx) > viewportWidth + margin
+      || Math.max(startY, startY + dy) < -margin || Math.min(startY, startY + dy) > viewportHeight + margin) continue;
 
     const drawWidth = length + overlap * 2;
     const requiredSourceWidth = Math.min(sourceWidth, drawWidth / sourceScale);
@@ -171,6 +179,56 @@ function radialParticles(seed, count, colors, speedMin, speedMax) {
   });
 }
 
+function buildFartCloudSprites() {
+  return Array.from({ length: 4 }, (_, variant) => {
+    const surface = document.createElement("canvas");
+    surface.width = 256;
+    surface.height = 256;
+    const ctx = surface.getContext("2d");
+    if (!ctx) return null;
+    const center = 128;
+    const base = ctx.createRadialGradient(center, center, 8, center, center, 124);
+    base.addColorStop(0, "rgba(189,219,50,.94)");
+    base.addColorStop(.36, "rgba(126,160,38,.9)");
+    base.addColorStop(.7, "rgba(75,104,36,.72)");
+    base.addColorStop(1, "rgba(45,68,34,0)");
+    ctx.fillStyle = base;
+    ctx.fillRect(0, 0, 256, 256);
+    for (let index = 0; index < 10; index++) {
+      const seed = variant * 101 + index * 5.31;
+      const angle = index * Math.PI * .2 + seededUnit(seed) * .7;
+      const orbit = mix(18, 62, seededUnit(seed + 3));
+      const radius = mix(31, 53, seededUnit(seed + 7));
+      const x = center + Math.cos(angle) * orbit;
+      const y = center + Math.sin(angle) * orbit * .58;
+      const puff = ctx.createRadialGradient(x, y, 0, x, y, radius);
+      puff.addColorStop(0, index % 3 === 0 ? "rgba(215,236,61,.7)" : "rgba(111,145,39,.72)");
+      puff.addColorStop(.56, index % 2 ? "rgba(77,107,36,.62)" : "rgba(126,151,40,.58)");
+      puff.addColorStop(1, "rgba(42,61,31,0)");
+      ctx.fillStyle = puff;
+      ctx.fillRect(x - radius, y - radius, radius * 2, radius * 2);
+    }
+    return surface;
+  }).filter(Boolean);
+}
+
+function buildEnergyGlowSprite() {
+  const surface = document.createElement("canvas");
+  surface.width = 256;
+  surface.height = 256;
+  const ctx = surface.getContext("2d");
+  if (!ctx) return null;
+  const gradient = ctx.createRadialGradient(128, 128, 0, 128, 128, 128);
+  gradient.addColorStop(0, "rgba(255,255,255,1)");
+  gradient.addColorStop(.12, "rgba(105,245,255,.92)");
+  gradient.addColorStop(.48, "rgba(111,58,255,.62)");
+  gradient.addColorStop(.76, "rgba(232,49,255,.28)");
+  gradient.addColorStop(1, "rgba(70,28,170,0)");
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, 256, 256);
+  return surface;
+}
+
 export class DustyOrbitMultiplayerRenderer {
   constructor(canvas, assets, debug = false, debugFocus = null) {
     this.canvas = canvas;
@@ -214,19 +272,21 @@ export class DustyOrbitMultiplayerRenderer {
     this.reducedMotionQuery?.addEventListener?.("change", (event) => { this.reducedMotion = event.matches; });
     this.collisionEditor = null;
     this.uplink = { active: false, phase: null, changedAt: 0 };
+    this.renderQuality = 1;
+    this.frameTimeEma = 1000 / 60;
+    this.lastQualityChange = 0;
+    this.staticWorldChunks = new Map();
+    this.staticChunkUse = 0;
+    this.fartCloudSprites = buildFartCloudSprites();
+    this.energyGlowSprite = buildEnergyGlowSprite();
     this.resize();
-    this.staticWorldSurface = this.buildStaticWorldSurface();
     addEventListener("resize", () => this.resize());
   }
 
   resize() {
     const width = Math.max(1, innerWidth);
     const height = Math.max(1, innerHeight);
-    // A 2x full-screen canvas is more than eight million shaded pixels at
-    // 1080p and becomes a fill-rate cliff on integrated/mobile GPUs. Preserve
-    // 2x on smaller displays, then reduce resolution gradually instead of
-    // dropping animation frames on large/high-DPI screens.
-    const dpr = renderScaleForViewport(width, height, devicePixelRatio || 1);
+    const dpr = renderScaleForViewport(width, height, devicePixelRatio || 1, this.renderQuality);
     this.canvas.width = Math.round(width * dpr);
     this.canvas.height = Math.round(height * dpr);
     this.canvas.style.width = `${width}px`;
@@ -236,12 +296,29 @@ export class DustyOrbitMultiplayerRenderer {
     this.viewport = { width, height, dpr };
   }
 
-  buildStaticWorldSurface() {
-    const { width, height } = this.assets.world;
-    if (width * height > MAX_STATIC_WORLD_PIXELS) return null;
+  updateAdaptiveQuality(delta, now = performance.now()) {
+    if (!Number.isFinite(delta) || delta <= 0 || delta > .1 || globalThis.document?.hidden) return;
+    const frameMs = delta * 1000;
+    this.frameTimeEma += (frameMs - this.frameTimeEma) * .04;
+    const elapsed = now - this.lastQualityChange;
+    let nextQuality = this.renderQuality;
+    if (this.frameTimeEma > 20 && elapsed > 1400) nextQuality = Math.max(.7, this.renderQuality - .1);
+    else if (this.frameTimeEma < 15.5 && elapsed > 5000) nextQuality = Math.min(1, this.renderQuality + .05);
+    if (nextQuality === this.renderQuality) return;
+    this.renderQuality = nextQuality;
+    this.lastQualityChange = now;
+    this.resize();
+  }
+
+  buildStaticWorldChunk(column, row) {
+    const worldX = column * STATIC_CHUNK_SIZE;
+    const worldY = row * STATIC_CHUNK_SIZE;
+    const width = Math.min(STATIC_CHUNK_SIZE, this.assets.world.width - worldX);
+    const height = Math.min(STATIC_CHUNK_SIZE, this.assets.world.height - worldY);
+    if (width <= 0 || height <= 0) return null;
     const surface = document.createElement("canvas");
-    surface.width = width;
-    surface.height = height;
+    surface.width = Math.ceil(width * STATIC_CHUNK_SCALE);
+    surface.height = Math.ceil(height * STATIC_CHUNK_SCALE);
     const surfaceContext = surface.getContext("2d", { alpha: false });
     if (!surfaceContext) return null;
 
@@ -250,15 +327,14 @@ export class DustyOrbitMultiplayerRenderer {
     const originalViewport = this.viewport;
     try {
       this.ctx = surfaceContext;
-      this.camera = { x: 0, y: 0 };
+      this.camera = { x: worldX, y: worldY };
       this.viewport = { width, height, dpr: 1 };
+      surfaceContext.setTransform(STATIC_CHUNK_SCALE, 0, 0, STATIC_CHUNK_SCALE, 0, 0);
       this.drawTerrain();
       this.drawBoundaryOverlay();
       this.drawTerrainFeatures();
-      return surface;
+      return { surface, worldX, worldY, width, height, used: ++this.staticChunkUse };
     } catch {
-      // Canvas-size limits vary by browser/device. The original drawing path
-      // remains a safe fallback if the one-time cache cannot be allocated.
       return null;
     } finally {
       this.ctx = originalContext;
@@ -267,19 +343,61 @@ export class DustyOrbitMultiplayerRenderer {
     }
   }
 
-  drawStaticWorld() {
-    if (!this.staticWorldSurface) {
-      this.drawTerrain();
-      this.drawBoundaryOverlay();
-      this.drawTerrainFeatures();
-      return;
+  getStaticWorldChunk(column, row) {
+    const key = `${column},${row}`;
+    let chunk = this.staticWorldChunks.get(key);
+    if (!chunk) {
+      chunk = this.buildStaticWorldChunk(column, row);
+      if (!chunk) return null;
+      this.staticWorldChunks.set(key, chunk);
+      if (this.staticWorldChunks.size > MAX_STATIC_CHUNKS) {
+        let oldestKey = null;
+        let oldestUse = Infinity;
+        for (const [candidateKey, candidate] of this.staticWorldChunks) {
+          if (candidateKey !== key && candidate.used < oldestUse) {
+            oldestKey = candidateKey;
+            oldestUse = candidate.used;
+          }
+        }
+        if (oldestKey) this.staticWorldChunks.delete(oldestKey);
+      }
     }
-    const sourceX = clamp(this.camera.x, 0, this.assets.world.width);
-    const sourceY = clamp(this.camera.y, 0, this.assets.world.height);
-    const width = Math.min(this.viewport.width, this.assets.world.width - sourceX);
-    const height = Math.min(this.viewport.height, this.assets.world.height - sourceY);
-    if (width > 0 && height > 0) {
-      this.ctx.drawImage(this.staticWorldSurface, sourceX, sourceY, width, height, 0, 0, width, height);
+    chunk.used = ++this.staticChunkUse;
+    return chunk;
+  }
+
+  invalidateStaticScene() {
+    this.staticWorldChunks.clear();
+    this.environmentLayers = this.assets.environment
+      .filter((item) => item.renderLayer !== "terrain")
+      .map((item) => ({ type: "environment", depth: item.depthY, value: item }));
+  }
+
+  prewarmStaticWorldAt(focus) {
+    if (!Number.isFinite(focus?.x) || !Number.isFinite(focus?.y)) return;
+    const cameraX = clamp(focus.x - this.viewport.width / 2, 0, Math.max(0, this.assets.world.width - this.viewport.width));
+    const cameraY = clamp(focus.y - this.viewport.height / 2, 0, Math.max(0, this.assets.world.height - this.viewport.height));
+    const firstColumn = Math.max(0, Math.floor(cameraX / STATIC_CHUNK_SIZE));
+    const lastColumn = Math.min(Math.ceil(this.assets.world.width / STATIC_CHUNK_SIZE) - 1, Math.floor((cameraX + this.viewport.width) / STATIC_CHUNK_SIZE));
+    const firstRow = Math.max(0, Math.floor(cameraY / STATIC_CHUNK_SIZE));
+    const lastRow = Math.min(Math.ceil(this.assets.world.height / STATIC_CHUNK_SIZE) - 1, Math.floor((cameraY + this.viewport.height) / STATIC_CHUNK_SIZE));
+    for (let row = firstRow; row <= lastRow; row += 1) for (let column = firstColumn; column <= lastColumn; column += 1) {
+      this.getStaticWorldChunk(column, row);
+    }
+  }
+
+  drawStaticWorld() {
+    const firstColumn = Math.max(0, Math.floor(this.camera.x / STATIC_CHUNK_SIZE));
+    const lastColumn = Math.min(Math.ceil(this.assets.world.width / STATIC_CHUNK_SIZE) - 1, Math.floor((this.camera.x + this.viewport.width) / STATIC_CHUNK_SIZE));
+    const firstRow = Math.max(0, Math.floor(this.camera.y / STATIC_CHUNK_SIZE));
+    const lastRow = Math.min(Math.ceil(this.assets.world.height / STATIC_CHUNK_SIZE) - 1, Math.floor((this.camera.y + this.viewport.height) / STATIC_CHUNK_SIZE));
+    for (let row = firstRow; row <= lastRow; row += 1) {
+      for (let column = firstColumn; column <= lastColumn; column += 1) {
+        const chunk = this.getStaticWorldChunk(column, row);
+        if (!chunk) continue;
+        this.ctx.drawImage(chunk.surface, 0, 0, chunk.surface.width, chunk.surface.height,
+          chunk.worldX - this.camera.x, chunk.worldY - this.camera.y, chunk.width, chunk.height);
+      }
     }
   }
 
@@ -725,8 +843,8 @@ export class DustyOrbitMultiplayerRenderer {
     if (this.effects.some((effect) => effect.type === "nuke-blast" && effect.id === event.id)) return;
     const born = performance.now();
     const compact = this.viewport.width < 700 || globalThis.document?.documentElement?.classList.contains("mobile-preview");
-    const particleCount = this.reducedMotion ? 32 : compact ? 44 : 64;
-    const shardCount = this.reducedMotion ? 4 : compact ? 8 : 12;
+    const particleCount = this.reducedMotion ? 16 : compact ? 20 : 32;
+    const shardCount = this.reducedMotion ? 3 : compact ? 4 : 6;
     const seed = (Number(event.id) || 1) * 101 + event.x * .17 + event.y * .29;
     const burst = createNukeBurst(seed, event.radius, particleCount, shardCount);
     this.nukeWarnings.delete(event.id);
@@ -760,9 +878,10 @@ export class DustyOrbitMultiplayerRenderer {
   }
 
   render(snapshot, localId, predicted, delta, inputVisual, onLocalPoseReady = null) {
+    const now = performance.now();
+    this.updateAdaptiveQuality(delta, now);
     const { ctx } = this;
     const { width, height, dpr } = this.viewport;
-    const now = performance.now();
     this.localPlayerId = localId;
     this.weaponPoses.clear();
     this.collisionEditor?.update(delta);
@@ -1035,7 +1154,7 @@ export class DustyOrbitMultiplayerRenderer {
     if (!overlay) return;
     const { ctx, camera, assets } = this;
     if (overlay.mode === "polygon-strip" && assets.playableArea) {
-      drawPolygonBoundary(ctx, overlay, assets.playableArea, -camera.x, -camera.y);
+      drawPolygonBoundary(ctx, overlay, assets.playableArea, -camera.x, -camera.y, 1, 1, this.viewport.width, this.viewport.height);
       return;
     }
     drawNineSliceBoundary(ctx, overlay, -camera.x, -camera.y, assets.world.width, assets.world.height, overlay.inset);
@@ -1655,32 +1774,17 @@ export class DustyOrbitMultiplayerRenderer {
     if (timeline.plasmaAlpha <= .001) return;
     ctx.globalCompositeOperation = "screen";
     ctx.globalAlpha = timeline.plasmaAlpha * .58;
-    const haze = ctx.createRadialGradient(x, y, bloomRadius * .02, x, y, bloomRadius);
-    haze.addColorStop(0, "rgba(255,255,255,.95)");
-    haze.addColorStop(.12, "rgba(90,239,255,.82)");
-    haze.addColorStop(.42, "rgba(111,58,255,.62)");
-    haze.addColorStop(.73, "rgba(232,49,255,.34)");
-    haze.addColorStop(1, "rgba(70,28,170,0)");
-    ctx.fillStyle = haze;
-    ctx.beginPath(); ctx.arc(x, y, bloomRadius, 0, Math.PI * 2); ctx.fill();
+    this.drawEnergyGlow(x, y, bloomRadius, timeline.plasmaAlpha * .58);
+  }
 
-    const lobeColors = [
-      ["rgba(77,234,255,.68)", "rgba(62,75,255,0)"],
-      ["rgba(171,67,255,.67)", "rgba(100,32,211,0)"],
-      ["rgba(255,70,225,.55)", "rgba(175,25,181,0)"],
-    ];
-    for (const lobe of effect.lobes) {
-      const orbit = bloomRadius * lobe.orbit;
-      const lobeRadius = bloomRadius * lobe.radius;
-      const wobble = Math.sin(timeline.elapsed / 115 + lobe.angle * 4) * bloomRadius * .018;
-      const lx = x + Math.cos(lobe.angle) * (orbit + wobble);
-      const ly = y + Math.sin(lobe.angle) * (orbit + wobble) * lobe.squash;
-      const gradient = ctx.createRadialGradient(lx, ly, 0, lx, ly, lobeRadius);
-      gradient.addColorStop(0, lobeColors[lobe.colorIndex][0]);
-      gradient.addColorStop(1, lobeColors[lobe.colorIndex][1]);
-      ctx.fillStyle = gradient;
-      ctx.beginPath(); ctx.arc(lx, ly, lobeRadius, 0, Math.PI * 2); ctx.fill();
-    }
+  drawEnergyGlow(x, y, radius, alpha = 1) {
+    if (!this.energyGlowSprite || radius <= 0 || alpha <= .001) return;
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.globalCompositeOperation = "screen";
+    ctx.globalAlpha = alpha;
+    ctx.drawImage(this.energyGlowSprite, x - radius, y - radius, radius * 2, radius * 2);
+    ctx.restore();
   }
 
   drawNukeForeground(effect, now) {
@@ -1693,15 +1797,7 @@ export class DustyOrbitMultiplayerRenderer {
       const ignitionRadius = mix(8, Math.min(92, effect.radius * .14), timeline.ignitionProgress);
       const coreRadius = mix(ignitionRadius, effect.radius * .31, timeline.coreProgress);
       ctx.globalAlpha = Math.max(timeline.ignitionAlpha, timeline.coreAlpha * .86);
-      const core = ctx.createRadialGradient(x, y, 0, x, y, coreRadius);
-      core.addColorStop(0, "rgba(255,255,255,1)");
-      core.addColorStop(.08, "rgba(255,248,219,.98)");
-      core.addColorStop(.2, "rgba(121,250,255,.94)");
-      core.addColorStop(.52, "rgba(90,88,255,.62)");
-      core.addColorStop(.76, "rgba(236,62,255,.36)");
-      core.addColorStop(1, "rgba(115,25,214,0)");
-      ctx.fillStyle = core;
-      ctx.beginPath(); ctx.arc(x, y, coreRadius, 0, Math.PI * 2); ctx.fill();
+      this.drawEnergyGlow(x, y, coreRadius, Math.max(timeline.ignitionAlpha, timeline.coreAlpha * .86));
 
       ctx.globalAlpha = timeline.ignitionAlpha;
       ctx.strokeStyle = "#ffffff";
@@ -2086,39 +2182,20 @@ export class DustyOrbitMultiplayerRenderer {
       const visibility = Math.min(1, age / 260, remaining / 650);
       const pulse = 1 + Math.sin(performance.now() / 310 + cloud.id) * .025;
       const radius = cloud.radius * fartCloudGrowth(cloud.createdAt, now, cloud.growMs) * pulse;
+      const sprite = this.fartCloudSprites[cloud.id % this.fartCloudSprites.length];
+      if (!sprite) continue;
       ctx.save();
       ctx.globalAlpha = visibility;
-      const base = ctx.createRadialGradient(x, y, radius * .05, x, y, radius);
-      base.addColorStop(0, "rgba(189,219,50,.94)");
-      base.addColorStop(.36, "rgba(126,160,38,.9)");
-      base.addColorStop(.7, "rgba(75,104,36,.72)");
-      base.addColorStop(1, "rgba(45,68,34,0)");
-      ctx.fillStyle = base;
-      ctx.beginPath(); ctx.arc(x, y, radius, 0, Math.PI * 2); ctx.fill();
-
-      // Slow, overlapping lobes create a dense smoke-grenade silhouette. The
-      // deterministic phase keeps every client visually consistent.
-      for (let index = 0; index < 10; index++) {
-        const seed = cloud.id * 17 + index * 5.31;
-        const angle = index * Math.PI * .2 + seededUnit(seed) * .7 + performance.now() / (5200 + index * 130);
-        const orbit = radius * mix(.12, .5, seededUnit(seed + 3));
-        const puffRadius = radius * mix(.22, .39, seededUnit(seed + 7)) * (1 + Math.sin(performance.now() / 420 + index) * .045);
-        const px = x + Math.cos(angle) * orbit;
-        const py = y + Math.sin(angle) * orbit * .58 - Math.sin(performance.now() / 900 + index) * 7;
-        const puff = ctx.createRadialGradient(px, py, 0, px, py, puffRadius);
-        puff.addColorStop(0, index % 3 === 0 ? "rgba(215,236,61,.7)" : "rgba(111,145,39,.72)");
-        puff.addColorStop(.56, index % 2 ? "rgba(77,107,36,.62)" : "rgba(126,151,40,.58)");
-        puff.addColorStop(1, "rgba(42,61,31,0)");
-        ctx.fillStyle = puff;
-        ctx.beginPath(); ctx.arc(px, py, puffRadius, 0, Math.PI * 2); ctx.fill();
-      }
+      ctx.translate(x, y);
+      ctx.rotate(performance.now() / 12000 + cloud.id * .31);
+      ctx.drawImage(sprite, -radius, -radius, radius * 2, radius * 2);
 
       ctx.globalAlpha = visibility * .26;
       ctx.strokeStyle = "#dfff57";
       ctx.lineWidth = Math.max(2, radius * .009);
       ctx.setLineDash([radius * .055, radius * .035]);
       ctx.lineDashOffset = -performance.now() / 24;
-      ctx.beginPath(); ctx.arc(x, y, radius * .61, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.arc(0, 0, radius * .61, 0, Math.PI * 2); ctx.stroke();
       ctx.setLineDash([]);
       ctx.restore();
     }
@@ -2368,7 +2445,7 @@ export class DustyOrbitMultiplayerRenderer {
     }
     if (overlay) {
       if (overlay.mode === "polygon-strip" && this.assets.playableArea) {
-        drawPolygonBoundary(ctx, overlay, this.assets.playableArea, 0, 0, scaleX, scaleY);
+        drawPolygonBoundary(ctx, overlay, this.assets.playableArea, 0, 0, scaleX, scaleY, width, height);
       } else {
         drawNineSliceBoundary(ctx, overlay, 0, 0, width, height, {
           left: overlay.inset.left * scaleX,

@@ -3,6 +3,7 @@ const WEAPON_VOICE_LIMIT = 5;
 const EFFECT_VOICE_LIMIT = 2;
 export const DUSTY_AUDIO_MAX_VOLUME = .35;
 export const DUSTY_AUDIO_MIN_VOLUME = 0;
+export const RANDOM_WEAPON_VOLUME_SCALE = .5;
 const audioUrl = (file) => {
   const url = new URL(`./assets/audio/${file}`, import.meta.url);
   url.searchParams.set("v", AUDIO_ASSET_VERSION);
@@ -103,10 +104,11 @@ export class DustyOrbitAudio {
     return Promise.resolve(context.resume()).then(() => context.state === "running").catch(() => false);
   }
 
-  play(url, source = null) {
+  play(url, source = null, volumeScale = 1) {
     const template = this.templates.get(url);
     if (!template) return false;
-    const volume = spatialSoundVolume(source, this.getListener?.(), this.world);
+    const safeVolumeScale = Number.isFinite(volumeScale) ? Math.max(0, Math.min(1, volumeScale)) : 1;
+    const volume = spatialSoundVolume(source, this.getListener?.(), this.world) * safeVolumeScale;
     const context = this.audioContext;
     const buffer = this.buffers.get(url);
     if (context && buffer) {
@@ -179,7 +181,8 @@ export class DustyOrbitAudio {
     this.playedShotGroups.add(key);
     this.shotGroupOrder.push(key);
     while (this.shotGroupOrder.length > 512) this.playedShotGroups.delete(this.shotGroupOrder.shift());
-    return this.play(DUSTY_AUDIO_FILES.weapons[weaponTier], { x, y });
+    const volumeScale = weaponTier === 7 ? RANDOM_WEAPON_VOLUME_SCALE : 1;
+    return this.play(DUSTY_AUDIO_FILES.weapons[weaponTier], { x, y }, volumeScale);
   }
 
   powerupCollected(type, source = null) {

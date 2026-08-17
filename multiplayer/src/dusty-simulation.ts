@@ -1,4 +1,4 @@
-import { distanceToPolygon, moveCircleWithSliding, pointInPolygon, sweptCircleIntersectsPolygon } from "../../games/game-03/collision-geometry.js";
+import { createPolygonBroadphase, distanceToPolygon, moveCircleWithSliding, pointInPolygon, sweptCircleIntersectsPolygon } from "../../games/game-03/collision-geometry.js";
 import { weaponPose, weaponVisualForTier } from "../../games/game-03/weapon-visuals.js";
 import { FART_CLOUD_GROW_MS, fartCloudGrowth } from "../../games/game-03/effect-timing.js";
 import {
@@ -153,6 +153,8 @@ export class DustyOrbitSimulation {
   private readonly random: () => number;
   readonly mapRuntime: MurderballMapRuntime;
   private readonly validWorldPoints: Point[];
+  private readonly movementBroadphase: ReturnType<typeof createPolygonBroadphase>;
+  private readonly boundaryBroadphase: ReturnType<typeof createPolygonBroadphase>;
   threatLeaderId: string | null = null;
   threatLeaderIds: string[] = [];
   tick = 0;
@@ -162,6 +164,8 @@ export class DustyOrbitSimulation {
   constructor(random: () => number = Math.random, mapRuntime: MurderballMapRuntime = DUSTY_MAP_RUNTIME) {
     this.random = random;
     this.mapRuntime = mapRuntime;
+    this.movementBroadphase = createPolygonBroadphase(mapRuntime.polygons);
+    this.boundaryBroadphase = createPolygonBroadphase(mapRuntime.boundaryPolygons);
     this.validWorldPoints = this.buildValidWorldPoints();
     this.maintainPickups(0);
   }
@@ -377,7 +381,8 @@ export class DustyOrbitSimulation {
       // Mole can pass beneath ordinary objects, but the arena's exterior rim
       // remains solid so burrowing never escapes a shaped map such as Hell Moon.
       const movementPolygons = player.moleMode ? this.mapRuntime.boundaryPolygons : this.mapRuntime.polygons;
-      const moved = moveCircleWithSliding(player, displacement, DUSTY_PLAYER_RADIUS, movementPolygons);
+      const movementBroadphase = player.moleMode ? this.boundaryBroadphase : this.movementBroadphase;
+      const moved = moveCircleWithSliding(player, displacement, DUSTY_PLAYER_RADIUS, movementPolygons, movementBroadphase);
       player.x = clamp(moved.x, DUSTY_PLAYER_RADIUS, this.mapRuntime.map.width - DUSTY_PLAYER_RADIUS);
       player.y = clamp(moved.y, DUSTY_PLAYER_RADIUS, this.mapRuntime.map.height - DUSTY_PLAYER_RADIUS);
       this.collectPickups(player, now);
@@ -424,8 +429,8 @@ export class DustyOrbitSimulation {
         if (!normal.length) normal = normalized(relativeStart.x || (a.joinOrder < b.joinOrder ? -1 : 1), relativeStart.y);
         const impactDistance = Math.hypot(impactA.x - impactB.x, impactA.y - impactB.y);
         const pushEach = Math.max(DUSTY_PLAYER_BOUNCE_GAP / 2, (collisionDistance + DUSTY_PLAYER_BOUNCE_GAP - impactDistance) / 2);
-        const pushedA = moveCircleWithSliding(impactA, { x: normal.x * pushEach, y: normal.y * pushEach }, DUSTY_PLAYER_RADIUS, this.mapRuntime.polygons);
-        const pushedB = moveCircleWithSliding(impactB, { x: -normal.x * pushEach, y: -normal.y * pushEach }, DUSTY_PLAYER_RADIUS, this.mapRuntime.polygons);
+        const pushedA = moveCircleWithSliding(impactA, { x: normal.x * pushEach, y: normal.y * pushEach }, DUSTY_PLAYER_RADIUS, this.mapRuntime.polygons, this.movementBroadphase);
+        const pushedB = moveCircleWithSliding(impactB, { x: -normal.x * pushEach, y: -normal.y * pushEach }, DUSTY_PLAYER_RADIUS, this.mapRuntime.polygons, this.movementBroadphase);
         a.x = clamp(pushedA.x, DUSTY_PLAYER_RADIUS, this.mapRuntime.map.width - DUSTY_PLAYER_RADIUS);
         a.y = clamp(pushedA.y, DUSTY_PLAYER_RADIUS, this.mapRuntime.map.height - DUSTY_PLAYER_RADIUS);
         b.x = clamp(pushedB.x, DUSTY_PLAYER_RADIUS, this.mapRuntime.map.width - DUSTY_PLAYER_RADIUS);

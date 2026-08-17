@@ -1,9 +1,9 @@
-import { moveCircleWithSliding } from "./collision-geometry.js?v=20260815-3";
-import { CollisionEditor } from "./collision-editor.js?v=20260815-15";
-import { loadDustyOrbitAssets } from "./assets.js?v=20260817-2";
+import { createPolygonBroadphase, moveCircleWithSliding } from "./collision-geometry.js?v=20260817-4";
+import { CollisionEditor } from "./collision-editor.js?v=20260817-16";
+import { loadDustyOrbitAssets } from "./assets.js?v=20260817-3";
 import { PRODUCTION_ARENA_WSS } from "./config.js?v=20260812";
 import { MAP_CATALOG, mapCatalogEntry } from "./maps/catalog.js?v=20260814-2";
-import { DustyOrbitMultiplayerRenderer } from "./renderer.js?v=20260817-6";
+import { DustyOrbitMultiplayerRenderer } from "./renderer.js?v=20260817-7";
 import { InputController } from "./input.js?v=20260817-1";
 import { claimSessionIdentity, resolvePoopcadePlayerIdentity } from "./identity.js?v=20260813-2";
 import { ArenaNetwork } from "./network.js?v=20260814-2";
@@ -11,7 +11,7 @@ import { consumeFixedStep, convergeVisualPosition } from "./timing.js?v=20260813
 import { DustyLobby } from "./lobby.js?v=20260817-1";
 import { presenceEndpoint, RECRUITMENT_HREF } from "./presence.js?v=20260817-1";
 import { DustyOrbitHighscoreTracker } from "./highscore.js?v=20260813-2";
-import { DustyOrbitAudio } from "./audio.js?v=20260817-3";
+import { DustyOrbitAudio } from "./audio.js?v=20260817-4";
 import { makePanelDraggable } from "./draggable-panel.js?v=20260814-4";
 
 const INPUT_RATE = 30;
@@ -106,6 +106,8 @@ if (!arenaEndpoint) {
 }
 document.querySelector("[data-current-map-name]").textContent = selectedMap.name;
 const assets = await loadDustyOrbitAssets(selectedMapDefinition, (message, amount) => { loadingText.textContent = message; loadingBar.style.width = `${amount * 100}%`; });
+assets.movementBroadphase = createPolygonBroadphase(assets.polygons);
+assets.boundaryBroadphase = createPolygonBroadphase(assets.boundaryPolygons);
 function preloadCharacterSkin(skinId) { void assets.ensureCharacterSkin(skinId).catch(() => {}); }
 loadingBar.style.width = "100%";
 const focusSatellite = parameters.get("focus") === "satellite-east" ? assets.satellites[1] : assets.satellites[0];
@@ -404,7 +406,10 @@ network = new ArenaNetwork({
       inputStepTimes.length = 0;
       localSpeedBoostUntil = 0;
       input.reset();
-      if (finitePoint(message.player)) resetPredictionTo(message.player);
+      if (finitePoint(message.player)) {
+        resetPredictionTo(message.player);
+        renderer.prewarmStaticWorldAt(message.player);
+      }
       joined = true;
       resumeAfterReconnect = false;
       applicationState = "PLAYING";
@@ -515,7 +520,8 @@ function applyMovement(position, sample, duration, player) {
   const baseSpeed = Number.isFinite(gameplay.baseMovementSpeed) ? gameplay.baseMovementSpeed : FALLBACK_PLAYER_SPEED;
   const speed = baseSpeed * (turboActive(player) ? gameplay.speedMultiplier : 1);
   const predictionPolygons = player.moleMode ? assets.boundaryPolygons : assets.polygons;
-  const next = moveCircleWithSliding(position, { x: finiteAxis(sample?.moveX) * speed * elapsed, y: finiteAxis(sample?.moveY) * speed * elapsed }, PLAYER_RADIUS, predictionPolygons);
+  const predictionBroadphase = player.moleMode ? assets.boundaryBroadphase : assets.movementBroadphase;
+  const next = moveCircleWithSliding(position, { x: finiteAxis(sample?.moveX) * speed * elapsed, y: finiteAxis(sample?.moveY) * speed * elapsed }, PLAYER_RADIUS, predictionPolygons, predictionBroadphase);
   return {
     x: Math.max(PLAYER_RADIUS, Math.min(assets.world.width - PLAYER_RADIUS, next.x)),
     y: Math.max(PLAYER_RADIUS, Math.min(assets.world.height - PLAYER_RADIUS, next.y)),

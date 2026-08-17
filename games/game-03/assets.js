@@ -1,5 +1,5 @@
 import * as DEFAULT_MAP from "./maps/lunar-liability/map.js?v=20260817";
-import { collisionBlocksMovement, depthSortY, transformNormalizedPolygon } from "./collision-geometry.js?v=20260813-2";
+import { collisionBlocksMovement, depthSortY, transformNormalizedPolygon } from "./collision-geometry.js?v=20260817-4";
 import { DEFAULT_CHARACTER_SKIN_ID, characterSkinById } from "./character-skins.js?v=20260814-2";
 
 const ASSET_VERSION = "20260817-2";
