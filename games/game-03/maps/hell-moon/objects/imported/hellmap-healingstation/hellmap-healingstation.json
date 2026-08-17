@@ -1,0 +1,84 @@
+{
+  "id": "hellmap-healingstation",
+  "sprite": "hellmap-healingstation.png",
+  "anchor": {
+    "x": 0.5,
+    "y": 0.5
+  },
+  "depthSortAnchor": {
+    "x": 0.5,
+    "y": 0.82
+  },
+  "collision": {
+    "coordinateSpace": "normalized-image",
+    "type": "polygon",
+    "points": [
+      {
+        "x": 0.4361,
+        "y": 0.4463
+      },
+      {
+        "x": 0.5556,
+        "y": 0.4491
+      },
+      {
+        "x": 0.8083,
+        "y": 0.5241
+      },
+      {
+        "x": 0.9917,
+        "y": 0.6741
+      },
+      {
+        "x": 0.8694,
+        "y": 0.8241
+      },
+      {
+        "x": 0.7417,
+        "y": 0.8018
+      },
+      {
+        "x": 0.6611,
+        "y": 0.8574
+      },
+      {
+        "x": 0.6361,
+        "y": 0.9629
+      },
+      {
+        "x": 0.4667,
+        "y": 1.0157
+      },
+      {
+        "x": 0.3194,
+        "y": 0.9268
+      },
+      {
+        "x": 0.3417,
+        "y": 0.8546
+      },
+      {
+        "x": 0.25,
+        "y": 0.7935
+      },
+      {
+        "x": 0.1444,
+        "y": 0.8352
+      },
+      {
+        "x": -0.0056,
+        "y": 0.7018
+      },
+      {
+        "x": 0.0861,
+        "y": 0.5907
+      }
+    ],
+    "blocksMovement": true,
+    "blocksProjectiles": true
+  },
+  "gameplay": {
+    "destructible": false,
+    "walkable": false
+  }
+}

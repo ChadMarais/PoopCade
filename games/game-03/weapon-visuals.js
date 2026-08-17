@@ -22,6 +22,7 @@ export const WEAPON_VISUALS = Object.freeze({
   4: freezeVisual({ tier: 4, id: "smg", kind: "sprite", asset: "smg", drawSize: { width: 46, height: 25.10 }, pivot: { x: .30, y: .50 }, forwardOffset: 3.94, sideOffset: SHOULDER_SIDE_OFFSET, muzzle: { x: .997, y: .50 }, recoilDistance: 2.6, recoilMs: 105, flashSize: 4.5, accent: "#9cff3f", barrels: 2 }),
   5: freezeVisual({ tier: 5, id: "shotgun", kind: "sprite", asset: "shotgun", drawSize: { width: 48, height: 26.64 }, pivot: { x: .31, y: .50 }, forwardOffset: 3.02, sideOffset: SHOULDER_SIDE_OFFSET, muzzle: { x: .997, y: .50 }, recoilDistance: 5, recoilMs: 180, flashSize: 7, accent: "#5ff7ff", barrels: 2 }),
   6: freezeVisual({ tier: 6, id: "plasma-cannon", kind: "sprite", asset: "plasmaCannon", drawSize: { width: 54, height: 31.66 }, pivot: { x: .30, y: .50 }, forwardOffset: 4.36, sideOffset: SHOULDER_SIDE_OFFSET, muzzle: { x: .997, y: .50 }, recoilDistance: 6.5, recoilMs: 190, flashSize: 9, accent: "#5beeff", barrels: 1 }),
+  7: freezeVisual({ tier: 7, id: "random-generator", kind: "sprite", asset: "randomGenerator", drawSize: { width: 72, height: 72 }, pivot: { x: .50, y: .50 }, forwardOffset: 8, sideOffset: SHOULDER_SIDE_OFFSET, muzzle: { x: .98, y: .50 }, recoilDistance: 6.5, recoilMs: 175, flashSize: 9, accent: "#ff6549", barrels: 5, flipX: true }),
 });
 
 export function weaponVisualForTier(tier) {

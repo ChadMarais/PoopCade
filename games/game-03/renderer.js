@@ -1,4 +1,4 @@
-import { weaponPose, weaponVisualForTier } from "./weapon-visuals.js?v=20260813-5";
+import { weaponPose, weaponVisualForTier } from "./weapon-visuals.js?v=20260817-1";
 import { fartCloudGrowth } from "./effect-timing.js?v=20260813";
 import {
   NUKE_EFFECT_DURATION_MS,
@@ -215,7 +215,17 @@ export class DustyOrbitMultiplayerRenderer {
   }
 
   impact(event) {
-    if (Number.isSafeInteger(event.projectileId)) this.localProjectiles.delete(event.projectileId);
+    if (Number.isSafeInteger(event.projectileId)) {
+      this.localProjectiles.delete(event.projectileId);
+      // A close-range or fast projectile can be spawned and resolved by the
+      // server between two animation frames. In that ordering the shot event
+      // is queued for the next visible muzzle pose, then the impact arrives
+      // before the queue is flushed. Remove both forms of the projectile so a
+      // confirmed impact can never be resurrected as a client-only ghost.
+      this.pendingLocalShotConfirmations = this.pendingLocalShotConfirmations.filter(
+        (confirmation) => confirmation?.projectile?.id !== event.projectileId,
+      );
+    }
     this.effects.push({ x: event.x, y: event.y, born: performance.now(), life: 280 });
   }
 
@@ -241,14 +251,6 @@ export class DustyOrbitMultiplayerRenderer {
     this.materializeShot(event, false, this.weaponPoses.get(event.playerId));
   }
 
-  shotLaunchDirection(event) {
-    const projectile = event?.projectile || {};
-    const rawX = Number.isFinite(event?.aimX) ? event.aimX : projectile.vx;
-    const rawY = Number.isFinite(event?.aimY) ? event.aimY : projectile.vy;
-    const length = Math.hypot(rawX || 0, rawY || 0);
-    return length > .001 ? { x: rawX / length, y: rawY / length } : null;
-  }
-
   shotGroupKey(event) {
     if (Number.isSafeInteger(event?.shotId)) return `shot:${event.shotId}`;
     const projectile = event?.projectile || {};
@@ -264,42 +266,16 @@ export class DustyOrbitMultiplayerRenderer {
     return this.pendingLocalShotConfirmations.slice(0, count);
   }
 
-  shotGroupDirection(group) {
-    const explicit = group.find((event) => Number.isFinite(event?.aimX) && Number.isFinite(event?.aimY));
-    if (explicit) return this.shotLaunchDirection(explicit);
-    let x = 0, y = 0;
-    for (const event of group) {
-      const direction = this.shotLaunchDirection(event);
-      if (direction) { x += direction.x; y += direction.y; }
-    }
-    const length = Math.hypot(x, y);
-    return length > .001 ? { x: x / length, y: y / length } : null;
-  }
-
-  materializeShot(event, local, shotPose, shotGroupDirection = null) {
+  materializeShot(event, local, shotPose) {
     const projectile = event.projectile;
     const speed = Math.hypot(projectile.vx, projectile.vy);
     const authoritativeDirection = { x: projectile.vx / speed, y: projectile.vy / speed };
-    let directionX = authoritativeDirection.x;
-    let directionY = authoritativeDirection.y;
-    if (local && shotPose?.forward) {
-      const barrelLength = Math.hypot(shotPose.forward.x || 0, shotPose.forward.y || 0);
-      if (barrelLength > .001) {
-        const barrel = { x: shotPose.forward.x / barrelLength, y: shotPose.forward.y / barrelLength };
-        const authoredAim = shotGroupDirection || this.shotLaunchDirection(event) || authoritativeDirection;
-        // The visible gun is the final source of truth immediately before a
-        // local bullet is materialized. Preserve only the authored pellet
-        // spread relative to the trigger aim, then rotate that spread onto the
-        // barrel that is actually on screen now.
-        const spread = Math.atan2(
-          authoredAim.x * authoritativeDirection.y - authoredAim.y * authoritativeDirection.x,
-          authoredAim.x * authoritativeDirection.x + authoredAim.y * authoritativeDirection.y,
-        );
-        const cosine = Math.cos(spread), sine = Math.sin(spread);
-        directionX = barrel.x * cosine - barrel.y * sine;
-        directionY = barrel.x * sine + barrel.y * cosine;
-      }
-    }
+    // A confirmation can arrive after the player has already turned toward a
+    // new target. Never rotate the historical projectile onto the gun's newer
+    // pose: its immutable server velocity is the collision path that can
+    // produce an impact, and the rendered shot must tell the same story.
+    const directionX = authoritativeDirection.x;
+    const directionY = authoritativeDirection.y;
     const life = clamp((projectile.expiresAt || 0) - (projectile.spawnedAt || 0), 100, 3000);
     // Never fast-forward a newly confirmed local projectile. Backdating by
     // network transit time made its first visible frame appear downrange
@@ -359,9 +335,8 @@ export class DustyOrbitMultiplayerRenderer {
     // confirmations arrive between frames, sample the current rendered muzzle
     // independently for each discharge rather than reusing an older pose.
     const group = this.pendingLocalLaunchGroup();
-    const groupDirection = this.shotGroupDirection(group);
     const confirmations = this.pendingLocalShotConfirmations.splice(0, group.length);
-    for (const event of confirmations) this.materializeShot(event, true, currentPose, groupDirection);
+    for (const event of confirmations) this.materializeShot(event, true, currentPose);
   }
 
   playerHit(id) { this.hitUntil.set(id, performance.now() + 180); }
@@ -496,7 +471,10 @@ export class DustyOrbitMultiplayerRenderer {
       ...players.map((player) => ({ type: "player", depth: player.y, value: player })),
     ].sort((a, b) => a.depth - b.depth);
     for (const layer of layers) {
-      if (layer.type === "environment") this.drawEnvironmentObject(layer.value, {
+      if (layer.type === "environment") {
+        const weaponStation = snapshot?.weaponStations?.find((station) => station.id === layer.value.id)
+          || (layer.value.kind === "weapon-station" ? { id: layer.value.id, state: "READY", userId: null, generationRemaining: 0, cooldownRemaining: 0 } : null);
+        this.drawEnvironmentObject(layer.value, {
         active: snapshot?.activeSatelliteIds?.includes(layer.value.id) === true,
         connected: local?.connectedSatelliteId === layer.value.id,
       }, {
@@ -504,7 +482,12 @@ export class DustyOrbitMultiplayerRenderer {
         connected: local?.connectedHealingStationId === layer.value.id,
         inProgress: local?.connectedHealingStationId === layer.value.id && local?.healingInProgress === true,
         remaining: Number(local?.healingRemaining) || 0,
-      });
+      }, weaponStation ? {
+        ...weaponStation,
+        connected: local?.connectedWeaponStationId === layer.value.id,
+        localPlayerId: local?.id,
+      } : null);
+      }
       else if (layer.type === "pickup") this.drawPickup(layer.value);
       else this.drawPlayer(layer.value, layer.value.id === localId);
     }
@@ -722,7 +705,7 @@ export class DustyOrbitMultiplayerRenderer {
     drawNineSliceBoundary(ctx, overlay, -camera.x, -camera.y, assets.world.width, assets.world.height, overlay.inset);
   }
 
-  drawEnvironmentObject(item, satelliteState = null, healingState = null) {
+  drawEnvironmentObject(item, satelliteState = null, healingState = null, weaponState = null) {
     const x = item.x - this.camera.x;
     const y = item.y - this.camera.y;
     const cullRadius = Math.hypot(item.width, item.height) / 2;
@@ -735,9 +718,11 @@ export class DustyOrbitMultiplayerRenderer {
     this.ctx.drawImage(item.image, -item.width / 2, -item.height / 2, item.width, item.height);
     if (item.kind === "satellite" && satelliteState?.active) this.drawSatelliteActivePulse(item);
     if (item.kind === "healing-station" && healingState?.active) this.drawHealingStationActivePulse(item);
+    if (item.kind === "weapon-station" && weaponState && weaponState.state !== "READY") this.drawWeaponStationPulse(item, weaponState);
     this.ctx.restore();
-    if (item.kind === "satellite") this.drawSatelliteStationLabel(item, satelliteState);
-    if (item.kind === "healing-station") this.drawHealingStationLabel(item, healingState);
+    if (item.kind === "satellite" && satelliteState) this.drawSatelliteStationLabel(item, satelliteState);
+    if (item.kind === "healing-station" && healingState) this.drawHealingStationLabel(item, healingState);
+    if (item.kind === "weapon-station" && weaponState) this.drawWeaponStationLabel(item, weaponState);
   }
 
   drawSatelliteActivePulse(item) {
@@ -788,7 +773,15 @@ export class DustyOrbitMultiplayerRenderer {
     const ctx = this.ctx;
     ctx.save();
     ctx.globalCompositeOperation = "screen";
-    ctx.globalAlpha = .35 + pulse * .35;
+    ctx.globalAlpha = .3 + pulse * .42;
+    const glow = ctx.createRadialGradient(0, item.height * .08, 0, 0, item.height * .08, item.width * .4);
+    glow.addColorStop(0, "rgba(150,255,174,.58)");
+    glow.addColorStop(.52, "rgba(77,255,121,.2)");
+    glow.addColorStop(1, "rgba(77,255,121,0)");
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.ellipse(0, item.height * .08, item.width * (.39 + pulse * .035), item.height * (.25 + pulse * .025), 0, 0, Math.PI * 2);
+    ctx.fill();
     ctx.strokeStyle = "#7dff87";
     ctx.shadowColor = "#4dff79";
     ctx.shadowBlur = 18;
@@ -828,6 +821,64 @@ export class DustyOrbitMultiplayerRenderer {
     ctx.restore();
   }
 
+  drawWeaponStationPulse(item, state) {
+    const pulse = .5 + .5 * Math.sin(performance.now() / (state.state === "GENERATING" ? 105 : 260));
+    const color = state.state === "GENERATING" ? "#52f5ff" : "#ffba55";
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.globalCompositeOperation = "screen";
+    ctx.globalAlpha = .25 + pulse * .42;
+    ctx.strokeStyle = color;
+    ctx.shadowColor = color;
+    ctx.shadowBlur = state.state === "GENERATING" ? 26 : 13;
+    ctx.lineWidth = state.state === "GENERATING" ? 4 : 2;
+    ctx.beginPath();
+    ctx.ellipse(0, item.height * .08, item.width * (.34 + pulse * .035), item.height * (.2 + pulse * .025), 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  drawWeaponStationLabel(item, state) {
+    const ctx = this.ctx;
+    const x = item.x - this.camera.x;
+    const y = item.y - this.camera.y - item.height * .55;
+    const status = state?.state || "READY";
+    const localGenerating = status === "GENERATING" && state?.userId === state?.localPlayerId;
+    const seconds = Math.max(0, Number(status === "COOLDOWN" ? state?.cooldownRemaining : state?.generationRemaining) || 0) / 1000;
+    const message = status === "COOLDOWN"
+      ? `COOLING DOWN · ${seconds.toFixed(1)}s`
+      : status === "GENERATING"
+        ? `${localGenerating ? "CREATING YOUR WEAPON" : "IN USE"} · ${seconds.toFixed(1)}s`
+        : "MOVE CLOSE TO GENERATE";
+    const accent = status === "COOLDOWN" ? "#ffc06a" : "#75f8ff";
+    const width = status === "READY" ? 218 : 250;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.fillStyle = status === "COOLDOWN" ? "rgba(42,24,7,.92)" : "rgba(5,27,39,.92)";
+    ctx.strokeStyle = accent;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.roundRect(-width / 2, -22, width, 46, 8);
+    ctx.fill(); ctx.stroke();
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillStyle = accent;
+    ctx.font = "1000 10px ui-monospace,monospace";
+    ctx.fillText("RANDOM WEAPON GENERATOR", 0, -10);
+    ctx.fillStyle = "#f2ffff";
+    ctx.font = "900 8px ui-monospace,monospace";
+    ctx.fillText(message, 0, 5);
+    if (status !== "READY") {
+      const total = status === "COOLDOWN" ? 10000 : 5000;
+      const progress = status === "COOLDOWN" ? 1 - Math.min(1, seconds * 1000 / total) : 1 - Math.min(1, seconds * 1000 / total);
+      ctx.fillStyle = "rgba(255,255,255,.14)";
+      ctx.fillRect(-width / 2 + 10, 15, width - 20, 3);
+      ctx.fillStyle = accent;
+      ctx.fillRect(-width / 2 + 10, 15, (width - 20) * progress, 3);
+    }
+    ctx.restore();
+  }
+
   drawPlayer(player, local) {
     if (!player.alive) return;
     const now = performance.now();
@@ -842,11 +893,12 @@ export class DustyOrbitMultiplayerRenderer {
     const shadowSize = definition.shadowDrawSize;
     const shadowOffset = definition.shadowOffset;
     const ctx = this.ctx;
-    const tier = Number.isFinite(player.weaponTier) ? player.weaponTier : 1;
+    const tier = player.randomWeapon ? (player.randomWeapon.visualTier || 7) : Number.isFinite(player.weaponTier) ? player.weaponTier : 1;
+    const equipmentKey = player.randomWeapon ? `random:${player.randomWeapon.name}` : `standard:${tier}`;
     const previousTier = this.weaponTierByPlayer.get(player.id);
-    if (previousTier === undefined) this.weaponTierByPlayer.set(player.id, tier);
-    else if (previousTier !== tier) {
-      this.weaponTierByPlayer.set(player.id, tier);
+    if (previousTier === undefined) this.weaponTierByPlayer.set(player.id, equipmentKey);
+    else if (previousTier !== equipmentKey) {
+      this.weaponTierByPlayer.set(player.id, equipmentKey);
       this.weaponTierPulseUntil.set(player.id, now + 320);
     }
     let spawnAlpha = 1, spawnScale = 1, spawnLift = 0;
@@ -1021,6 +1073,7 @@ export class DustyOrbitMultiplayerRenderer {
     ctx.globalAlpha = pose.alpha;
     ctx.translate(x, y);
     ctx.rotate(pose.angle);
+    if (visual.flipX) ctx.scale(-1, 1);
     const art = visual.kind === "sprite" ? this.assets.weapons?.[visual.asset] : null;
     if (art) {
       const source = art.sourceBounds;
@@ -2009,9 +2062,9 @@ export class DustyOrbitMultiplayerRenderer {
         if (index) ctx.lineTo(x, y); else ctx.moveTo(x, y);
       });
       ctx.closePath();
-      ctx.fillStyle = item.kind === "satellite" ? "rgba(74,239,255,.78)" : item.kind === "healing-station" ? "rgba(125,255,135,.82)" : "rgba(229,137,255,.6)";
+      ctx.fillStyle = item.kind === "satellite" ? "rgba(74,239,255,.78)" : item.kind === "healing-station" ? "rgba(125,255,135,.82)" : item.kind === "weapon-station" ? "rgba(255,179,76,.86)" : "rgba(229,137,255,.6)";
       ctx.fill();
-      ctx.strokeStyle = item.kind === "satellite" ? "rgba(184,252,255,.92)" : item.kind === "healing-station" ? "rgba(210,255,214,.9)" : "rgba(255,213,255,.62)";
+      ctx.strokeStyle = item.kind === "satellite" ? "rgba(184,252,255,.92)" : item.kind === "healing-station" ? "rgba(210,255,214,.9)" : item.kind === "weapon-station" ? "rgba(255,227,171,.94)" : "rgba(255,213,255,.62)";
       ctx.lineWidth = .75;
       ctx.stroke();
     }

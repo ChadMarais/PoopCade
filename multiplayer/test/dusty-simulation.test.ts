@@ -8,14 +8,14 @@ function input(seq: number, moveX: number, moveY: number, aimX: number, aimY: nu
   return { type: "input" as const, seq, moveX, moveY, aimX, aimY, fire };
 }
 
-test("server imports canonical environment JSON for all twelve scaled instances", () => {
+test("server imports canonical environment JSON for every live Lunar map instance", () => {
   assert.equal(DUSTY_CANONICAL_COLLISION.normalizedPointCount, 19);
-  assert.equal(DUSTY_CANONICAL_COLLISION.instanceCount, 12);
-  assert.deepEqual(DUSTY_CANONICAL_COLLISION.definitions.map((item) => item.normalizedPointCount), [19, 13, 13, 12, 8, 18, 12]);
-  assert.equal(DUSTY_POLYGONS.length, 12);
+  assert.equal(DUSTY_CANONICAL_COLLISION.instanceCount, 13);
+  assert.deepEqual(DUSTY_CANONICAL_COLLISION.definitions.map((item) => item.normalizedPointCount), [19, 13, 13, 12, 8, 18, 12, 8, 8]);
+  assert.equal(DUSTY_POLYGONS.length, 13);
   assert.equal(DUSTY_POLYGONS[0].length, 19);
-  assert.equal(DUSTY_POLYGONS[0][0].x, 557.6);
-  assert.equal(DUSTY_POLYGONS[0][0].y, 453.576);
+  assert.equal(DUSTY_POLYGONS[0][0].x, 615.704);
+  assert.equal(DUSTY_POLYGONS[0][0].y, 585.836);
 });
 
 test("east and west satellites retain independent canonical collision definitions", () => {
@@ -72,8 +72,8 @@ test("a reconnect neutralizes stale movement and fire without resetting its inpu
 test("server swept projectile collision stops Pea Shooter shots at canonical rocks", () => {
   const simulation = new DustyOrbitSimulation();
   const player = simulation.addPlayer("10000000-0000-4000-8000-000000000002", "Guest-0002", 1000);
-  player.x = 1350;
-  player.y = 270;
+  player.x = 1500;
+  player.y = 200;
   player.protectedUntil = 0;
   simulation.applyInput(player.id, input(1, 0, 0, 0, 1, true), 1000);
   simulation.step(DUSTY_FIXED_DT, 1000);
@@ -111,14 +111,14 @@ test("bounded rewind hits the authoritative position that an online shooter actu
   const attacker = simulation.addPlayer("10000000-0000-4000-8000-000000000008", "Guest-0008", 1000);
   const victim = simulation.addPlayer("10000000-0000-4000-8000-000000000009", "Guest-0009", 1000);
   attacker.protectedUntil = 0; victim.protectedUntil = 0;
-  attacker.x = 1450; attacker.y = 900;
-  victim.x = 1650; victim.y = 931;
+  attacker.x = 1450; attacker.y = 1800;
+  victim.x = 1650; victim.y = 1831;
   simulation.step(DUSTY_FIXED_DT, 1000);
-  victim.y = 986;
+  victim.y = 1886;
   simulation.step(DUSTY_FIXED_DT, 1100);
 
   simulation.projectiles.push({
-    id: 501, ownerId: attacker.id, tier: 1, x: 1630, y: 931, vx: 1200, vy: 0,
+    id: 501, ownerId: attacker.id, tier: 1, x: 1630, y: 1831, vx: 1200, vy: 0,
     radius: 3, damage: 1, spawnedAt: 1100, expiresAt: 9999, rewindMs: 100,
   });
   simulation.step(DUSTY_FIXED_DT, 1134);
@@ -127,7 +127,7 @@ test("bounded rewind hits the authoritative position that an online shooter actu
 
   victim.hp = 3;
   simulation.projectiles.push({
-    id: 502, ownerId: attacker.id, tier: 1, x: 1630, y: 931, vx: 1200, vy: 0,
+    id: 502, ownerId: attacker.id, tier: 1, x: 1630, y: 1831, vx: 1200, vy: 0,
     radius: 3, damage: 1, spawnedAt: 1134, expiresAt: 9999, rewindMs: 0,
   });
   simulation.step(DUSTY_FIXED_DT, 1168);

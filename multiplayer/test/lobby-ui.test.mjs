@@ -48,6 +48,7 @@ test("localhost previews connect to the IPv4-bound local Worker", async () => {
   const game = await readFile(new URL("../../games/game-03/game.js", import.meta.url), "utf8");
   assert.match(game, /location\.hostname === "localhost" \? "127\.0\.0\.1" : location\.hostname/);
   assert.match(game, /ws:\/\/\$\{workerHostname\}:8787/);
+  assert.match(game, /parameters\.get\("local"\) === "1" \|\| debugMode \|\| location\.port === "8081"/);
 });
 
 test("temporary Worker reloads keep active gameplay out of the lobby", async () => {

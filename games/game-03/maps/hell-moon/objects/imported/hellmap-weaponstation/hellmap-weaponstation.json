@@ -1,0 +1,64 @@
+{
+  "id": "hellmap-weaponstation",
+  "sprite": "hellmap-weaponstation.png",
+  "anchor": {
+    "x": 0.5,
+    "y": 0.5
+  },
+  "depthSortAnchor": {
+    "x": 0.5,
+    "y": 0.82
+  },
+  "collision": {
+    "coordinateSpace": "normalized-image",
+    "type": "polygon",
+    "points": [
+      {
+        "x": 0.1139,
+        "y": 0.3931
+      },
+      {
+        "x": 0.4722,
+        "y": 0.3236
+      },
+      {
+        "x": 0.7472,
+        "y": 0.3986
+      },
+      {
+        "x": 0.9667,
+        "y": 0.6181
+      },
+      {
+        "x": 0.8722,
+        "y": 0.7736
+      },
+      {
+        "x": 0.6778,
+        "y": 0.9347
+      },
+      {
+        "x": 0.3139,
+        "y": 0.9181
+      },
+      {
+        "x": 0.1406,
+        "y": 0.7453
+      },
+      {
+        "x": 0.1128,
+        "y": 0.6009
+      },
+      {
+        "x": 0.0351,
+        "y": 0.5036
+      }
+    ],
+    "blocksMovement": true,
+    "blocksProjectiles": true
+  },
+  "gameplay": {
+    "destructible": false,
+    "walkable": false
+  }
+}

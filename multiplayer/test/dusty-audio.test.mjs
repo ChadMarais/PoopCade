@@ -43,7 +43,7 @@ function fresh(options = {}) {
 test("all supplied production audio files are packaged with the game", () => {
   const urls = [DUSTY_AUDIO_FILES.nuke, DUSTY_AUDIO_FILES.death, DUSTY_AUDIO_FILES.teleport,
     ...Object.values(DUSTY_AUDIO_FILES.powerups), ...Object.values(DUSTY_AUDIO_FILES.weapons)];
-  assert.equal(urls.length, 15);
+  assert.equal(urls.length, 16);
   for (const url of urls) {
     const file = new URL(url); file.search = "";
     assert.equal(existsSync(file), true, url);
@@ -61,11 +61,12 @@ test("Murderball mixes every sound effect at half of its previous maximum volume
   assert.deepEqual(FakeAudio.volumes, Array(5).fill(.35));
 });
 
-test("every weapon tier uses its supplied production sound", () => {
+test("every standard weapon and the random weapon use their supplied production sound", () => {
   const audio = fresh();
-  for (let tier = 1; tier <= 6; tier++) audio.weaponFired({ playerId: "pilot", groupKey: `shot:${tier}`, tier });
+  for (let tier = 1; tier <= 7; tier++) audio.weaponFired({ playerId: "pilot", groupKey: `shot:${tier}`, tier });
   assert.deepEqual(FakeAudio.played, Object.values(DUSTY_AUDIO_FILES.weapons));
-  assert.deepEqual(FakeAudio.volumes, Array(6).fill(DUSTY_AUDIO_MAX_VOLUME));
+  assert.deepEqual(FakeAudio.volumes, Array(7).fill(DUSTY_AUDIO_MAX_VOLUME));
+  assert.match(DUSTY_AUDIO_FILES.weapons[7], /weapon-random\.mp3\?v=20260817-3$/);
 });
 
 test("three shotgun pellets sharing one authoritative discharge play one sound", () => {
@@ -96,16 +97,16 @@ test("power-ups, teleport, death, and nuke map to their production files", () =>
 
 test("power-up playback cannot exhaust or interrupt the reusable weapon voice pool", () => {
   const audio = fresh();
-  // Fifteen templates plus one power-up voice and five weapon voices. The old
+  // Sixteen templates plus one power-up voice and five weapon voices. The old
   // clone-per-shot implementation exceeded this simulated browser limit on
   // the seventh discharge and then lost gun audio until resources recovered.
-  FakeAudio.constructionLimit = 21;
+  FakeAudio.constructionLimit = 22;
   audio.powerupCollected("speed");
   for (let shot = 0; shot < 100; shot++) {
     assert.equal(audio.weaponFired({ playerId: "pilot", groupKey: `shot:${shot}`, tier: 4 }), true);
   }
   assert.equal(FakeAudio.played.filter((url) => url === DUSTY_AUDIO_FILES.weapons[4]).length, 100);
-  assert.equal(FakeAudio.created, 21);
+  assert.equal(FakeAudio.created, 22);
 });
 
 test("Web Audio unlocks on interaction and mixes effects with sustained gunfire", async () => {
@@ -127,7 +128,7 @@ test("teleport uses the one supplied power-up sound exactly once", () => {
   assert.equal(audio.powerupCollected("teleport"), false);
   assert.equal(audio.teleport(), true);
   assert.deepEqual(FakeAudio.played, [DUSTY_AUDIO_FILES.teleport]);
-  assert.match(DUSTY_AUDIO_FILES.teleport, /powerup-teleport\.mp3\?v=20260815-1$/);
+  assert.match(DUSTY_AUDIO_FILES.teleport, /powerup-teleport\.mp3\?v=20260817-3$/);
   assert.equal(existsSync(new URL("../../games/game-03/assets/audio/teleport.mp3", import.meta.url)), false);
 });
 

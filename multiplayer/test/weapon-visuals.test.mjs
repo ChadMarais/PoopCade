@@ -9,8 +9,8 @@ function close(actual, expected, tolerance = .001) {
   assert.ok(Math.abs(actual - expected) <= tolerance, `${actual} should be within ${tolerance} of ${expected}`);
 }
 
-test("weapon visual table maps all six tiers to production art", () => {
-  assert.deepEqual(Object.keys(WEAPON_VISUALS), ["1", "2", "3", "4", "5", "6"]);
+test("weapon visual table maps all standard tiers and the generated loadout to production art", () => {
+  assert.deepEqual(Object.keys(WEAPON_VISUALS), ["1", "2", "3", "4", "5", "6", "7"]);
   assert.equal(WEAPON_VISUALS[1].id, "pea-shooter");
   assert.equal(WEAPON_VISUALS[1].kind, "sprite");
   assert.equal(WEAPON_VISUALS[1].asset, "peaShooter");
@@ -26,11 +26,13 @@ test("weapon visual table maps all six tiers to production art", () => {
       { id: "smg", kind: "sprite", asset: "smg" },
       { id: "shotgun", kind: "sprite", asset: "shotgun" },
       { id: "plasma-cannon", kind: "sprite", asset: "plasmaCannon" },
+      { id: "random-generator", kind: "sprite", asset: "randomGenerator" },
     ],
   );
   assert.equal(WEAPON_VISUALS[1].muzzle.x, .985);
   for (let tier = 2; tier <= 6; tier++) assert.equal(WEAPON_VISUALS[tier].muzzle.x, .997);
-  for (const sprite of ["pea-shooter", "pistol", "burst", "smg", "shotgun", "plasma-cannon"]) {
+  assert.equal(WEAPON_VISUALS[7].flipX, true);
+  for (const sprite of ["pea-shooter", "pistol", "burst", "smg", "shotgun", "plasma-cannon", "random-generator"]) {
     assert.equal(existsSync(resolve("..", "games", "game-03", "assets", "weapons", `weapon-${sprite}.png`)), true);
   }
   assert.equal(weaponVisualForTier(999), WEAPON_VISUALS[1]);
@@ -133,7 +135,7 @@ test("local Shotgun pellets preserve all three authoritative spread directions",
   assert.ok([...renderer.localProjectiles.values()].every((shot) => shot.startX === 411 && shot.startY === 277));
 });
 
-test("Shotgun spread rotates around the gun's current muzzle direction", () => {
+test("Shotgun spread stays on its authoritative direction after the gun turns", () => {
   const renderer = Object.create(DustyOrbitMultiplayerRenderer.prototype);
   renderer.localPlayerId = "local";
   renderer.pendingLocalShotConfirmations = [];
@@ -149,7 +151,7 @@ test("Shotgun spread rotates around the gun's current muzzle direction", () => {
     }, true);
   }
   renderer.flushLocalShotConfirmations();
-  assert.deepEqual([...renderer.localProjectiles.values()].map((shot) => Math.round(Math.atan2(shot.vy, shot.vx) * 180 / Math.PI)), [82, 90, 98]);
+  assert.deepEqual([...renderer.localProjectiles.values()].map((shot) => Math.round(Math.atan2(shot.vy, shot.vx) * 180 / Math.PI)), [-8, 0, 8]);
   assert.ok([...renderer.localProjectiles.values()].every((shot) => shot.startX === 500 && shot.startY === 350));
 });
 
@@ -203,6 +205,36 @@ test("the first rendered projectile sample is exactly the nozzle coordinate", ()
   assert.deepEqual({ x: drawn.trailStartX, y: drawn.trailStartY }, { x: 411, y: 277 });
 });
 
+test("an impact arriving before the next render cannot resurrect a local projectile", () => {
+  const renderer = Object.create(DustyOrbitMultiplayerRenderer.prototype);
+  renderer.localPlayerId = "local";
+  renderer.localProjectiles = new Map();
+  renderer.pendingLocalShotConfirmations = [];
+  renderer.weaponPoses = new Map([["local", {
+    muzzleWorld: { x: 411, y: 277 },
+    forward: { x: 1, y: 0 },
+  }]]);
+  renderer.weaponRecoil = new Map();
+  renderer.effects = [];
+  renderer.lastLocalLaunch = null;
+  renderer.canvas = null;
+
+  renderer.confirmShot({
+    playerId: "local",
+    shotId: 73,
+    aimX: 1,
+    aimY: 0,
+    projectile: { id: 73, tier: 6, x: 400, y: 266, vx: 1200, vy: 0, spawnedAt: 1000, expiresAt: 2000 },
+  }, true);
+  assert.equal(renderer.pendingLocalShotConfirmations.length, 1);
+
+  renderer.impact({ projectileId: 73, x: 430, y: 266, target: "player" });
+  assert.equal(renderer.pendingLocalShotConfirmations.length, 0, "the authoritative impact cancels the deferred launch");
+
+  renderer.flushLocalShotConfirmations();
+  assert.equal(renderer.localProjectiles.has(73), false, "the dead projectile must stay dead on the next frame");
+});
+
 test("movement during confirmation delay still launches from the currently visible aligned muzzle", () => {
   const renderer = Object.create(DustyOrbitMultiplayerRenderer.prototype);
   renderer.localPlayerId = "local";
@@ -234,7 +266,7 @@ test("movement during confirmation delay still launches from the currently visib
   assert.deepEqual({ vx: shot.vx, vy: shot.vy }, { vx: 500, vy: 0 });
 });
 
-test("the current gun muzzle corrects a delayed confirmation immediately before launch", () => {
+test("turning toward a new target cannot redirect an older confirmed shot", () => {
   const renderer = Object.create(DustyOrbitMultiplayerRenderer.prototype);
   renderer.localPlayerId = "local";
   renderer.pendingLocalShotConfirmations = [];
@@ -252,8 +284,8 @@ test("the current gun muzzle corrects a delayed confirmation immediately before 
   renderer.flushLocalShotConfirmations();
   const shot = renderer.localProjectiles.get(8);
   assert.deepEqual({ x: shot.startX, y: shot.startY }, { x: 411, y: 277 });
-  assert.ok(Math.abs(shot.vx) < 1e-9);
-  assert.equal(shot.vy, -600, "the bullet must be redirected onto the gun's current north-facing barrel");
+  assert.deepEqual({ vx: shot.vx, vy: shot.vy }, { vx: 600, vy: 0 });
+  assert.deepEqual(renderer.lastLocalLaunch.direction, { x: 1, y: 0 }, "the old eastbound shot must not be presented as the first northbound shot");
   assert.equal(renderer.pendingLocalShotConfirmations.length, 0);
 });
 

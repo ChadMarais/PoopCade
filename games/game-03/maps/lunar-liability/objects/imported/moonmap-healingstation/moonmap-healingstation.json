@@ -1,0 +1,56 @@
+{
+  "id": "moonmap-healingstation",
+  "sprite": "moonmap-healingstation.png",
+  "anchor": {
+    "x": 0.5,
+    "y": 0.5
+  },
+  "depthSortAnchor": {
+    "x": 0.5,
+    "y": 0.82
+  },
+  "collision": {
+    "coordinateSpace": "normalized-image",
+    "type": "polygon",
+    "points": [
+      {
+        "x": 0.2861,
+        "y": 0.5346
+      },
+      {
+        "x": 0.6194,
+        "y": 0.5652
+      },
+      {
+        "x": 0.8222,
+        "y": 0.8263
+      },
+      {
+        "x": 0.6833,
+        "y": 0.9068
+      },
+      {
+        "x": 0.5528,
+        "y": 0.8235
+      },
+      {
+        "x": 0.4306,
+        "y": 0.8124
+      },
+      {
+        "x": 0.3306,
+        "y": 0.8874
+      },
+      {
+        "x": 0.2028,
+        "y": 0.7791
+      }
+    ],
+    "blocksMovement": true,
+    "blocksProjectiles": true
+  },
+  "gameplay": {
+    "destructible": false,
+    "walkable": false
+  }
+}

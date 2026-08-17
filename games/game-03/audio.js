@@ -1,4 +1,4 @@
-const AUDIO_ASSET_VERSION = "20260815-1";
+const AUDIO_ASSET_VERSION = "20260817-3";
 const WEAPON_VOICE_LIMIT = 5;
 const EFFECT_VOICE_LIMIT = 2;
 export const DUSTY_AUDIO_MAX_VOLUME = .35;
@@ -22,7 +22,10 @@ export const DUSTY_AUDIO_FILES = Object.freeze({
     spy: audioUrl("powerup-spy-plane.mp3"),
   }),
   weapons: Object.freeze(Object.fromEntries(
-    Array.from({ length: 6 }, (_, index) => [index + 1, audioUrl(`weapon-${index + 1}.mp3`)]),
+    [
+      ...Array.from({ length: 6 }, (_, index) => [index + 1, audioUrl(`weapon-${index + 1}.mp3`)]),
+      [7, audioUrl("weapon-random.mp3")],
+    ],
   )),
 });
 const WEAPON_AUDIO_URLS = new Set(Object.values(DUSTY_AUDIO_FILES.weapons));
@@ -170,7 +173,7 @@ export class DustyOrbitAudio {
   }
 
   weaponFired({ playerId, groupKey, tier, x, y } = {}) {
-    const weaponTier = Math.max(1, Math.min(6, Math.trunc(Number(tier) || 1)));
+    const weaponTier = Math.max(1, Math.min(7, Math.trunc(Number(tier) || 1)));
     const key = `${String(playerId || "unknown")}:${String(groupKey || "ungrouped")}`;
     if (this.playedShotGroups.has(key)) return false;
     this.playedShotGroups.add(key);

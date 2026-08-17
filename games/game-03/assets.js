@@ -1,8 +1,8 @@
-import * as DEFAULT_MAP from "./maps/lunar-liability/map.js?v=20260814";
+import * as DEFAULT_MAP from "./maps/lunar-liability/map.js?v=20260817";
 import { collisionBlocksMovement, depthSortY, transformNormalizedPolygon } from "./collision-geometry.js?v=20260813-2";
 import { DEFAULT_CHARACTER_SKIN_ID, characterSkinById } from "./character-skins.js?v=20260814-2";
 
-const ASSET_VERSION = "20260813-11";
+const ASSET_VERSION = "20260817-2";
 const versioned = (url) => `${url}?v=${ASSET_VERSION}`;
 const POWERUP_ART = Object.freeze({
   health: Object.freeze({ sprite: "health.png", sourceBounds: Object.freeze({ x: 229, y: 193, width: 797, height: 785 }) }),
@@ -20,6 +20,7 @@ const WEAPON_ART = Object.freeze({
   smg: Object.freeze({ sprite: "weapon-smg.png", sourceBounds: Object.freeze({ x: 64, y: 302, width: 1138, height: 621 }) }),
   shotgun: Object.freeze({ sprite: "weapon-shotgun.png", sourceBounds: Object.freeze({ x: 44, y: 281, width: 1184, height: 657 }) }),
   plasmaCannon: Object.freeze({ sprite: "weapon-plasma-cannon.png", sourceBounds: Object.freeze({ x: 27, y: 260, width: 1204, height: 706 }) }),
+  randomGenerator: Object.freeze({ sprite: "weapon-random-generator.png", sourceBounds: Object.freeze({ x: 0, y: 0, width: 1254, height: 1254 }) }),
 });
 
 async function loadJson(url) {
@@ -64,7 +65,7 @@ export async function loadDustyOrbitAssets(mapDefinition = DEFAULT_MAP, onProgre
   const weaponRoot = "./assets/weapons/";
   const definitionById = new Map(environmentDefinitions.map((definition) => [definition.id, definition]));
   const definitionRoot = new Map(ASSET_DEFINITION_URLS.map((url, index) => [environmentDefinitions[index].id, url.slice(0, url.lastIndexOf("/") + 1)]));
-  const [terrain, terrainVariationImages, boundaryOverlayImage, environmentImages, defaultCharacter, health, spy, speed, mole, shield, teleport, fart, peaShooter, pistol, burst, smg, shotgun, plasmaCannon] = await Promise.all([
+  const [terrain, terrainVariationImages, boundaryOverlayImage, environmentImages, defaultCharacter, health, spy, speed, mole, shield, teleport, fart, peaShooter, pistol, burst, smg, shotgun, plasmaCannon, randomGenerator] = await Promise.all([
     loadImage(TERRAIN_URL),
     Promise.all(TERRAIN_VARIATION_TILES.map((tile) => loadImage(tile.url))),
     BOUNDARY_OVERLAY?.url ? loadImage(BOUNDARY_OVERLAY.url) : Promise.resolve(null),
@@ -83,6 +84,7 @@ export async function loadDustyOrbitAssets(mapDefinition = DEFAULT_MAP, onProgre
     loadImage(versioned(weaponRoot + WEAPON_ART.smg.sprite)),
     loadImage(versioned(weaponRoot + WEAPON_ART.shotgun.sprite)),
     loadImage(versioned(weaponRoot + WEAPON_ART.plasmaCannon.sprite)),
+    loadImage(versioned(weaponRoot + WEAPON_ART.randomGenerator.sprite)),
   ]);
   onProgress("Building shared environment polygons…", 0.8);
   const imageByAssetId = new Map(environmentDefinitions.map((definition, index) => [definition.id, environmentImages[index]]));
@@ -100,6 +102,7 @@ export async function loadDustyOrbitAssets(mapDefinition = DEFAULT_MAP, onProgre
   const rocks = environment.filter((item) => item.kind === "rock");
   const satellites = environment.filter((item) => item.kind === "satellite");
   const healingStations = environment.filter((item) => item.kind === "healing-station");
+  const weaponStations = environment.filter((item) => item.kind === "weapon-station");
   const characters = new Map([[defaultCharacter.skin.id, defaultCharacter]]);
   const characterLoads = new Map();
   const ensureCharacterSkin = (skinId) => {
@@ -126,6 +129,7 @@ export async function loadDustyOrbitAssets(mapDefinition = DEFAULT_MAP, onProgre
     rocks,
     satellites,
     healingStations,
+    weaponStations,
     satelliteConnection: SATELLITE_CONNECTION,
     environment,
     polygons: [
@@ -152,6 +156,7 @@ export async function loadDustyOrbitAssets(mapDefinition = DEFAULT_MAP, onProgre
       smg: { image: smg, sourceBounds: WEAPON_ART.smg.sourceBounds },
       shotgun: { image: shotgun, sourceBounds: WEAPON_ART.shotgun.sourceBounds },
       plasmaCannon: { image: plasmaCannon, sourceBounds: WEAPON_ART.plasmaCannon.sourceBounds },
+      randomGenerator: { image: randomGenerator, sourceBounds: WEAPON_ART.randomGenerator.sourceBounds },
     },
   };
 }

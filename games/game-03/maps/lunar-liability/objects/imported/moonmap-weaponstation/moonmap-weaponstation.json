@@ -1,0 +1,56 @@
+{
+  "id": "moonmap-weaponstation",
+  "sprite": "moonmap-weaponstation.png",
+  "anchor": {
+    "x": 0.5,
+    "y": 0.5
+  },
+  "depthSortAnchor": {
+    "x": 0.5,
+    "y": 0.82
+  },
+  "collision": {
+    "coordinateSpace": "normalized-image",
+    "type": "polygon",
+    "points": [
+      {
+        "x": 0.1611,
+        "y": 0.4236
+      },
+      {
+        "x": 0.35,
+        "y": 0.3153
+      },
+      {
+        "x": 0.65,
+        "y": 0.3319
+      },
+      {
+        "x": 0.8444,
+        "y": 0.4708
+      },
+      {
+        "x": 0.9056,
+        "y": 0.6236
+      },
+      {
+        "x": 0.8056,
+        "y": 0.7486
+      },
+      {
+        "x": 0.5083,
+        "y": 0.8986
+      },
+      {
+        "x": 0.1833,
+        "y": 0.7431
+      }
+    ],
+    "blocksMovement": true,
+    "blocksProjectiles": true
+  },
+  "gameplay": {
+    "destructible": false,
+    "walkable": false
+  }
+}

@@ -5,7 +5,9 @@ import outpostCanisterDefinition from "../../games/game-03/maps/lunar-liability/
 import outpostSupplyCrateDefinition from "../../games/game-03/maps/lunar-liability/objects/outpost/outpost-supply-crate-01.json" with { type: "json" };
 import outpostWallCornerDefinition from "../../games/game-03/maps/lunar-liability/objects/outpost/outpost-wall-corner-01.json" with { type: "json" };
 import outpostWallStraightDefinition from "../../games/game-03/maps/lunar-liability/objects/outpost/outpost-wall-straight-01.json" with { type: "json" };
-import { ENVIRONMENT_INSTANCES, MAP_METADATA, PLAYER_SPAWNS, SATELLITE_CONNECTION, SATELLITE_INSTANCES, WORLD } from "../../games/game-03/maps/lunar-liability/map.js";
+import { ENVIRONMENT_INSTANCES, HEALING_STATION_CONNECTION, HEALING_STATION_INSTANCES, MAP_METADATA, PLAYER_SPAWNS, SATELLITE_CONNECTION, SATELLITE_INSTANCES, WEAPON_STATION_CONNECTION, WEAPON_STATION_INSTANCES, WORLD } from "../../games/game-03/maps/lunar-liability/map.js";
+import importedMoonmapHealingstationDefinition from "../../games/game-03/maps/lunar-liability/objects/imported/moonmap-healingstation/moonmap-healingstation.json" with { type: "json" };
+import importedMoonmapWeaponstationDefinition from "../../games/game-03/maps/lunar-liability/objects/imported/moonmap-weaponstation/moonmap-weaponstation.json" with { type: "json" };
 import { collisionBlocksMovement, collisionBlocksProjectiles, transformNormalizedPolygon } from "../../games/game-03/collision-geometry.js";
 
 export type Point = { x: number; y: number };
@@ -37,6 +39,8 @@ const DEFINITIONS = Object.freeze({
   [outpostSupplyCrateDefinition.id]: outpostSupplyCrateDefinition,
   [outpostWallCornerDefinition.id]: outpostWallCornerDefinition,
   [outpostWallStraightDefinition.id]: outpostWallStraightDefinition,
+  [importedMoonmapHealingstationDefinition.id]: importedMoonmapHealingstationDefinition,
+  [importedMoonmapWeaponstationDefinition.id]: importedMoonmapWeaponstationDefinition,
 });
 
 export const DUSTY_ENVIRONMENT_COLLIDERS = Object.freeze(ENVIRONMENT_INSTANCES.map((instance) => {
@@ -65,7 +69,16 @@ export const DUSTY_SATELLITES = Object.freeze(SATELLITE_INSTANCES.map((satellite
 
 export const DUSTY_SATELLITE_CONNECT_TOLERANCE = SATELLITE_CONNECTION.connectTolerance;
 export const DUSTY_SATELLITE_DISCONNECT_TOLERANCE = SATELLITE_CONNECTION.disconnectTolerance;
-export const DUSTY_HEALING_STATIONS = Object.freeze([]);
+function stationRuntime<T extends { id: string }>(instances: readonly T[], kind: string) {
+  return Object.freeze(instances.map((instance) => {
+    const collider = DUSTY_ENVIRONMENT_COLLIDERS.find((item) => item.id === instance.id);
+    if (!collider) throw new Error(`Missing Lunar Liability ${kind} collider for ${instance.id}.`);
+    return Object.freeze({ ...instance, polygon: collider.polygon as Polygon });
+  }));
+}
+
+export const DUSTY_HEALING_STATIONS = stationRuntime(HEALING_STATION_INSTANCES, "healing-station");
+export const DUSTY_WEAPON_STATIONS = stationRuntime(WEAPON_STATION_INSTANCES, "weapon-station");
 export const DUSTY_BOUNDARY_POLYGONS = Object.freeze([]) as readonly Polygon[];
 
 // The first pair is deliberately near enough for a quick two-client combat test.
@@ -82,6 +95,8 @@ export const DUSTY_CANONICAL_COLLISION = Object.freeze({
     Object.freeze({ definitionId: outpostSupplyCrateDefinition.id, normalizedPointCount: outpostSupplyCrateDefinition.collisionPolygon.length, source: "games/game-03/maps/lunar-liability/objects/outpost/outpost-supply-crate-01.json" }),
     Object.freeze({ definitionId: outpostWallCornerDefinition.id, normalizedPointCount: outpostWallCornerDefinition.collisionPolygon.length, source: "games/game-03/maps/lunar-liability/objects/outpost/outpost-wall-corner-01.json" }),
     Object.freeze({ definitionId: outpostWallStraightDefinition.id, normalizedPointCount: outpostWallStraightDefinition.collisionPolygon.length, source: "games/game-03/maps/lunar-liability/objects/outpost/outpost-wall-straight-01.json" }),
+    Object.freeze({ definitionId: importedMoonmapHealingstationDefinition.id, normalizedPointCount: importedMoonmapHealingstationDefinition.collision.points.length, source: "games/game-03/maps/lunar-liability/objects/imported/moonmap-healingstation/moonmap-healingstation.json" }),
+    Object.freeze({ definitionId: importedMoonmapWeaponstationDefinition.id, normalizedPointCount: importedMoonmapWeaponstationDefinition.collision.points.length, source: "games/game-03/maps/lunar-liability/objects/imported/moonmap-weaponstation/moonmap-weaponstation.json" }),
   ]),
   instanceCount: DUSTY_ENVIRONMENT_COLLIDERS.length,
 });
@@ -97,6 +112,11 @@ export type MurderballMapRuntime = Readonly<{
   healingStationConnectTolerance: number;
   healingStationDisconnectTolerance: number;
   healingStationHealIntervalMs: number;
+  weaponStations: readonly Readonly<{ id: string; x: number; y: number; polygon: Polygon }>[];
+  weaponStationConnectTolerance: number;
+  weaponStationDisconnectTolerance: number;
+  weaponStationGenerationMs: number;
+  weaponStationCooldownMs: number;
   boundaryPolygons: readonly Polygon[];
   spawns: readonly Point[];
 }>;
@@ -109,9 +129,14 @@ export const DUSTY_MAP_RUNTIME: MurderballMapRuntime = Object.freeze({
   satelliteConnectTolerance: DUSTY_SATELLITE_CONNECT_TOLERANCE,
   satelliteDisconnectTolerance: DUSTY_SATELLITE_DISCONNECT_TOLERANCE,
   healingStations: DUSTY_HEALING_STATIONS,
-  healingStationConnectTolerance: 0,
-  healingStationDisconnectTolerance: 0,
-  healingStationHealIntervalMs: 2000,
+  healingStationConnectTolerance: HEALING_STATION_CONNECTION.connectTolerance,
+  healingStationDisconnectTolerance: HEALING_STATION_CONNECTION.disconnectTolerance,
+  healingStationHealIntervalMs: HEALING_STATION_CONNECTION.healIntervalMs,
+  weaponStations: DUSTY_WEAPON_STATIONS,
+  weaponStationConnectTolerance: WEAPON_STATION_CONNECTION.connectTolerance,
+  weaponStationDisconnectTolerance: WEAPON_STATION_CONNECTION.disconnectTolerance,
+  weaponStationGenerationMs: WEAPON_STATION_CONNECTION.generationMs,
+  weaponStationCooldownMs: WEAPON_STATION_CONNECTION.cooldownMs,
   boundaryPolygons: DUSTY_BOUNDARY_POLYGONS,
   spawns: DUSTY_SPAWNS,
 });

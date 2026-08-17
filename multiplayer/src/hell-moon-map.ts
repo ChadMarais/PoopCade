@@ -1,4 +1,4 @@
-import { BOUNDARY_COLLIDERS, ENVIRONMENT_INSTANCES, HEALING_STATION_CONNECTION, HEALING_STATION_INSTANCES, MAP_METADATA, PLAYER_SPAWNS, SATELLITE_CONNECTION, SATELLITE_INSTANCES, WORLD } from "../../games/game-03/maps/hell-moon/map.js";
+import { BOUNDARY_COLLIDERS, ENVIRONMENT_INSTANCES, HEALING_STATION_CONNECTION, HEALING_STATION_INSTANCES, MAP_METADATA, PLAYER_SPAWNS, SATELLITE_CONNECTION, SATELLITE_INSTANCES, WEAPON_STATION_CONNECTION, WEAPON_STATION_INSTANCES, WORLD } from "../../games/game-03/maps/hell-moon/map.js";
 import importedLava32Definition from "../../games/game-03/maps/hell-moon/objects/imported/lava3-2/lava3-2.json" with { type: "json" };
 import importedLava12Definition from "../../games/game-03/maps/hell-moon/objects/imported/lava1-2/lava1-2.json" with { type: "json" };
 import importedLava31Definition from "../../games/game-03/maps/hell-moon/objects/imported/lava3-1/lava3-1.json" with { type: "json" };
@@ -28,6 +28,8 @@ import importedPowergrid1Definition from "../../games/game-03/maps/hell-moon/obj
 import importedPowergrid12Definition from "../../games/game-03/maps/hell-moon/objects/imported/powergrid1-2/powergrid1-2.json" with { type: "json" };
 import importedPipe1Definition from "../../games/game-03/maps/hell-moon/objects/imported/pipe1/pipe1.json" with { type: "json" };
 import importedCrate1Definition from "../../games/game-03/maps/hell-moon/objects/imported/crate1/crate1.json" with { type: "json" };
+import importedHellmapWeaponstationDefinition from "../../games/game-03/maps/hell-moon/objects/imported/hellmap-weaponstation/hellmap-weaponstation.json" with { type: "json" };
+import importedHellmapHealingstationDefinition from "../../games/game-03/maps/hell-moon/objects/imported/hellmap-healingstation/hellmap-healingstation.json" with { type: "json" };
 import { collisionBlocksMovement, collisionBlocksProjectiles, transformNormalizedPolygon } from "../../games/game-03/collision-geometry.js";
 import type { MurderballMapRuntime, Point, Polygon } from "./dusty-map.ts";
 
@@ -76,6 +78,8 @@ const DEFINITIONS = Object.freeze({
   [importedPowergrid12Definition.id]: importedPowergrid12Definition,
   [importedPipe1Definition.id]: importedPipe1Definition,
   [importedCrate1Definition.id]: importedCrate1Definition,
+  [importedHellmapWeaponstationDefinition.id]: importedHellmapWeaponstationDefinition,
+  [importedHellmapHealingstationDefinition.id]: importedHellmapHealingstationDefinition,
 });
 
 const IMPORTED_ENVIRONMENT_COLLIDERS = ENVIRONMENT_INSTANCES.map((instance) => {
@@ -118,6 +122,15 @@ export const HELL_MOON_HEALING_STATIONS = Object.freeze(HEALING_STATION_INSTANCE
   });
 }));
 
+export const HELL_MOON_WEAPON_STATIONS = Object.freeze(WEAPON_STATION_INSTANCES.map((stationInstance) => {
+  const collider = HELL_MOON_ENVIRONMENT_COLLIDERS.find((item) => item.id === stationInstance.id);
+  if (!collider) throw new Error(`Missing Hell Moon weapon-station collider for ${stationInstance.id}.`);
+  return Object.freeze({
+    ...stationInstance,
+    polygon: collider.polygon as Polygon,
+  });
+}));
+
 export const HELL_MOON_BOUNDARY_POLYGONS = Object.freeze(
   BOUNDARY_ENVIRONMENT_COLLIDERS.map((item) => item.polygon),
 ) as unknown as readonly Polygon[];
@@ -136,6 +149,11 @@ export const HELL_MOON_MAP_RUNTIME: MurderballMapRuntime = Object.freeze({
   healingStationConnectTolerance: HEALING_STATION_CONNECTION.connectTolerance,
   healingStationDisconnectTolerance: HEALING_STATION_CONNECTION.disconnectTolerance,
   healingStationHealIntervalMs: HEALING_STATION_CONNECTION.healIntervalMs,
+  weaponStations: HELL_MOON_WEAPON_STATIONS,
+  weaponStationConnectTolerance: WEAPON_STATION_CONNECTION.connectTolerance,
+  weaponStationDisconnectTolerance: WEAPON_STATION_CONNECTION.disconnectTolerance,
+  weaponStationGenerationMs: WEAPON_STATION_CONNECTION.generationMs,
+  weaponStationCooldownMs: WEAPON_STATION_CONNECTION.cooldownMs,
   boundaryPolygons: HELL_MOON_BOUNDARY_POLYGONS,
   spawns: PLAYER_SPAWNS as readonly Point[],
 });
@@ -173,6 +191,8 @@ export const HELL_MOON_CANONICAL_COLLISION = Object.freeze({
     Object.freeze({ definitionId: importedPowergrid12Definition.id, normalizedPointCount: importedPowergrid12Definition.collision.points.length, source: "games/game-03/maps/hell-moon/objects/imported/powergrid1-2/powergrid1-2.json" }),
     Object.freeze({ definitionId: importedPipe1Definition.id, normalizedPointCount: importedPipe1Definition.collision.points.length, source: "games/game-03/maps/hell-moon/objects/imported/pipe1/pipe1.json" }),
     Object.freeze({ definitionId: importedCrate1Definition.id, normalizedPointCount: importedCrate1Definition.collision.points.length, source: "games/game-03/maps/hell-moon/objects/imported/crate1/crate1.json" }),
+    Object.freeze({ definitionId: importedHellmapWeaponstationDefinition.id, normalizedPointCount: importedHellmapWeaponstationDefinition.collision.points.length, source: "games/game-03/maps/hell-moon/objects/imported/hellmap-weaponstation/hellmap-weaponstation.json" }),
+    Object.freeze({ definitionId: importedHellmapHealingstationDefinition.id, normalizedPointCount: importedHellmapHealingstationDefinition.collision.points.length, source: "games/game-03/maps/hell-moon/objects/imported/hellmap-healingstation/hellmap-healingstation.json" }),
   ]),
   instanceCount: HELL_MOON_ENVIRONMENT_COLLIDERS.length,
 });

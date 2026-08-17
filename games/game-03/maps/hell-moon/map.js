@@ -41,6 +41,8 @@ export const ASSET_DEFINITION_URLS = Object.freeze([
   "/games/game-03/maps/hell-moon/objects/imported/powergrid1-2/powergrid1-2.json",
   "/games/game-03/maps/hell-moon/objects/imported/pipe1/pipe1.json",
   "/games/game-03/maps/hell-moon/objects/imported/crate1/crate1.json",
+  "/games/game-03/maps/hell-moon/objects/imported/hellmap-weaponstation/hellmap-weaponstation.json",
+  "/games/game-03/maps/hell-moon/objects/imported/hellmap-healingstation/hellmap-healingstation.json",
 ]);
 
 export const TERRAIN_URL = "/games/game-03/maps/hell-moon/terrain/hell-moon-ground-tile.png?v=20260815-2";
@@ -135,11 +137,15 @@ export const SATELLITE_INSTANCES = Object.freeze([
   Object.freeze({ id: "SAT-COPY 01", assetId: "sat-copy", kind: "satellite", x: 3436, y: 1224, width: 360, height: 360, rotation: 0 }),
 ]);
 export const HEALING_STATION_INSTANCES = Object.freeze([
-  Object.freeze({ id: "CORE1 01", assetId: "core1", kind: "healing-station", x: 2001.5, y: 1175, width: 360, height: 360, rotation: 0 }),
+  Object.freeze({ id: "HELLMAP-HEALINGSTATION 01", assetId: "hellmap-healingstation", kind: "healing-station", x: 1994.4, y: 371.3, width: 360, height: 360, rotation: 0 }),
+]);
+export const WEAPON_STATION_INSTANCES = Object.freeze([
+  Object.freeze({ id: "HELLMAP-WEAPONSTATION 01", assetId: "hellmap-weaponstation", kind: "weapon-station", x: 2004, y: 1189, width: 360, height: 360, rotation: 0 }),
 ]);
 export const OUTPOST_INSTANCES = Object.freeze([]);
 export const SATELLITE_CONNECTION = Object.freeze({ connectTolerance: 6, disconnectTolerance: 9 });
 export const HEALING_STATION_CONNECTION = Object.freeze({ connectTolerance: 6, disconnectTolerance: 9, healIntervalMs: 2000 });
+export const WEAPON_STATION_CONNECTION = Object.freeze({ connectTolerance: 6, disconnectTolerance: 9, generationMs: 5000, cooldownMs: 10000 });
 export const ENVIRONMENT_INSTANCES = Object.freeze([
   ...SCORCH_INSTANCES,
   ...REGION_INSTANCES,
@@ -156,12 +162,13 @@ export const ENVIRONMENT_INSTANCES = Object.freeze([
   Object.freeze({ id: "LAVA2-4 01", assetId: "lava2-4", kind: "imported", x: 2237.5, y: 1016, width: 360, height: 360, rotation: 89.5 }),
   ...SATELLITE_INSTANCES,
   ...HEALING_STATION_INSTANCES,
-  Object.freeze({ id: "BUILDING1 01", assetId: "building1", kind: "imported", x: 2495.7, y: 408.4, width: 360, height: 360, rotation: -0.5 }),
-  Object.freeze({ id: "BUNKER1 01", assetId: "bunker1", kind: "imported", x: 1491.4, y: 430.5, width: 360, height: 360, rotation: -0.7 }),
+  ...WEAPON_STATION_INSTANCES,
+  Object.freeze({ id: "BUILDING1 01", assetId: "building1", kind: "imported", x: 2504.1, y: 556.4, width: 360, height: 360, rotation: -0.5 }),
+  Object.freeze({ id: "BUNKER1 01", assetId: "bunker1", kind: "imported", x: 1480.4, y: 541.5, width: 360, height: 360, rotation: -0.7 }),
   Object.freeze({ id: "POWERGRID1 01", assetId: "powergrid1", kind: "imported", x: 3330, y: 749.2, width: 360, height: 360, rotation: 0 }),
   Object.freeze({ id: "POWERGRID1-2 01", assetId: "powergrid1-2", kind: "imported", x: 903, y: 1665.5, width: 360, height: 360, rotation: 0 }),
-  Object.freeze({ id: "PIPE1 01", assetId: "pipe1", kind: "imported", x: 2467.7, y: 2008, width: 360, height: 360, rotation: 0.2 }),
-  Object.freeze({ id: "CRATE1 01", assetId: "crate1", kind: "imported", x: 1509.8, y: 2040.3, width: 360, height: 360, rotation: 0.9 }),
+  Object.freeze({ id: "PIPE1 01", assetId: "pipe1", kind: "imported", x: 2537.2, y: 1985.4, width: 360, height: 360, rotation: 0.2 }),
+  Object.freeze({ id: "CRATE1 01", assetId: "crate1", kind: "imported", x: 1490.7, y: 1994.1, width: 360, height: 360, rotation: 0.9 }),
 ]);
 
 export const PLAYER_SPAWNS = Object.freeze([

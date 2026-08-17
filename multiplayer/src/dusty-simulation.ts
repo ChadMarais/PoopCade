@@ -8,7 +8,7 @@ import {
   type MurderballMapRuntime,
   type Point,
 } from "./dusty-map.ts";
-import { DUSTY_GAMEPLAY, DUSTY_WEAPONS, POWERUP_TYPES, weaponForTier, type PowerupType, type WeaponDefinition } from "./dusty-gameplay.ts";
+import { DUSTY_GAMEPLAY, DUSTY_WEAPONS, POWERUP_TYPES, generateRandomWeapon, weaponForTier, type GeneratedWeaponDefinition, type PowerupType, type WeaponDefinition } from "./dusty-gameplay.ts";
 import type { ClientInput } from "./protocol.ts";
 import { DEFAULT_CHARACTER_SKIN_ID, characterSkinById, validCharacterSkinId } from "../../games/game-03/character-skins.js";
 
@@ -40,6 +40,7 @@ export type DustyPlayer = {
   weaponTier: number; nukeProgress: number; nukeReady: boolean; shieldHits: number;
   spyUntil: number; speedUntil: number; moleMode: boolean; moleUntil: number; moleForceAt: number;
   connectedSatelliteId: string | null; connectedHealingStationId: string | null; healingNextAt: number;
+  connectedWeaponStationId: string | null; weaponGenerationStartedAt: number; randomWeapon: GeneratedWeaponDefinition | null;
   emergeBlockedUntil: number; alive: boolean; respawnAt: number; protectedUntil: number;
   lastInputAt: number; lastMessageAt: number; lastInputSeq: number; lastFireAt: number;
   lastFireInput: boolean; suppressFireUntilRelease: boolean; lastNukeInput: boolean;
@@ -54,6 +55,7 @@ export type DustyProjectile = {
 };
 
 type DustyPositionSample = { at: number; x: number; y: number };
+type DustyWeaponStationState = { userId: string | null; startedAt: number; cooldownUntil: number };
 
 export type DustyPickup = {
   id: number; type: PowerupType; x: number; y: number; active: boolean; respawnAt: number;
@@ -140,6 +142,7 @@ export class DustyOrbitSimulation {
   private joinCursor = 0;
   private readonly positionHistory = new Map<string, DustyPositionSample[]>();
   private readonly playerCollisionAt = new Map<string, number>();
+  private readonly weaponStationStates = new Map<string, DustyWeaponStationState>();
   private readonly random: () => number;
   readonly mapRuntime: MurderballMapRuntime;
   private readonly validWorldPoints: Point[];
@@ -172,6 +175,7 @@ export class DustyOrbitSimulation {
       hp: DUSTY_GAMEPLAY.maxHp, kills: 0, deaths: 0, killScore: 0, highScore: 0, weaponTier: 1, nukeProgress: 0,
       nukeReady: false, shieldHits: 0, spyUntil: 0, speedUntil: 0, moleMode: false, moleUntil: 0,
       connectedSatelliteId: null, connectedHealingStationId: null, healingNextAt: 0,
+      connectedWeaponStationId: null, weaponGenerationStartedAt: 0, randomWeapon: null,
       moleForceAt: 0, emergeBlockedUntil: 0, alive: true, respawnAt: 0,
       protectedUntil: now + DUSTY_SPAWN_PROTECTION_MS, lastInputAt: now, lastMessageAt: now,
       lastInputSeq: 0, lastFireAt: Number.NEGATIVE_INFINITY, lastFireInput: false,
@@ -191,12 +195,14 @@ export class DustyOrbitSimulation {
     if (!player) return;
     player.disconnectedAt = now; player.pendingInput = null;
     player.connectedSatelliteId = null; player.connectedHealingStationId = null; player.healingNextAt = 0;
+    this.releaseWeaponStation(player, "disconnect");
     player.input = { ...player.input, moveX: 0, moveY: 0, fire: false, nuke: false };
   }
 
   removePlayer(id: string): void {
     const player = this.players.get(id);
     if (!player) return;
+    this.releaseWeaponStation(player, "leave");
     this.players.delete(id);
     this.positionHistory.delete(id);
     for (const key of this.playerCollisionAt.keys()) if (key.split("|").includes(id)) this.playerCollisionAt.delete(key);
@@ -223,6 +229,7 @@ export class DustyOrbitSimulation {
   prepareConnection(id: string, now: number): void {
     const player = this.players.get(id);
     if (!player) return;
+    this.releaseWeaponStation(player, "reconnect");
     player.pendingInput = null;
     player.input = { ...EMPTY_INPUT, seq: player.lastInputSeq, aimX: player.aimX, aimY: player.aimY };
     player.lastProcessedInputSeq = player.lastInputSeq;
@@ -300,6 +307,7 @@ export class DustyOrbitSimulation {
       this.processActions(player, now);
       this.updateSatelliteConnection(player);
       this.updateHealingStationConnection(player, now);
+      this.updateWeaponStationConnection(player, now);
       this.recordPosition(player, now);
     }
     this.resolvePlayerCollisions(movementStarts, now);
@@ -447,7 +455,7 @@ export class DustyOrbitSimulation {
   }
 
   private processWeapon(player: DustyPlayer, now: number): void {
-    const weapon = weaponForTier(player.weaponTier);
+    const weapon = player.randomWeapon ?? weaponForTier(player.weaponTier);
     // Fire direction is sampled from the exact input being processed on this
     // simulation tick. Never reuse the facing from an earlier round.
     const liveAim = normalized(player.input.aimX, player.input.aimY);
@@ -459,13 +467,13 @@ export class DustyOrbitSimulation {
     }
     if (!player.input.fire || player.burstRemaining > 0 || now - player.lastFireAt < weapon.cooldownMs || this.projectiles.length >= DUSTY_GAMEPLAY.maxProjectiles) return;
     player.protectedUntil = 0; player.lastFireAt = now;
-    if (weapon.tier === 3) {
+    if (weapon.burstSpacingMs > 0 && weapon.count > 1) {
       player.burstIndex = 0;
       player.burstRemaining = weapon.count; player.nextBurstAt = now;
       this.processWeapon(player, now);
       return;
     }
-    if (weapon.tier === 5) {
+    if (weapon.spreadDegrees.length > 1) {
       const shotId = ++this.shotId;
       for (const spreadDegrees of weapon.spreadDegrees) this.spawnProjectile(player, weapon, aimX, aimY, now, shotId, spreadDegrees);
       return;
@@ -483,11 +491,12 @@ export class DustyOrbitSimulation {
       x: liveAim.x * spreadCos - liveAim.y * spreadSin,
       y: liveAim.x * spreadSin + liveAim.y * spreadCos,
     };
-    const muzzle = weaponPose({ ...player, aimX: liveAim.x, aimY: liveAim.y }, weaponVisualForTier(weapon.tier), { weaponMount: characterSkinById(player.skinId)?.weaponMount }).muzzleWorld;
+    const projectileTier = weapon.visualTier ?? weapon.tier;
+    const muzzle = weaponPose({ ...player, aimX: liveAim.x, aimY: liveAim.y }, weaponVisualForTier(projectileTier), { weaponMount: characterSkinById(player.skinId)?.weaponMount }).muzzleWorld;
     const projectileSpeed = weapon.speed * (player.speedUntil > now ? DUSTY_GAMEPLAY.speedMultiplier : 1);
     const x = muzzle.x, y = muzzle.y;
     const projectile: DustyProjectile = {
-      id: ++this.projectileId, ownerId: player.id, tier: weapon.tier, x, y, inputSeq: player.input.seq,
+      id: ++this.projectileId, ownerId: player.id, tier: projectileTier, x, y, inputSeq: player.input.seq,
       vx: direction.x * projectileSpeed, vy: direction.y * projectileSpeed, radius: weapon.radius,
       damage: weapon.damage, spawnedAt: now,
       rewindMs: Number.isFinite(player.input.viewAt)
@@ -558,7 +567,13 @@ export class DustyOrbitSimulation {
     victim.alive = false; victim.hp = 0; victim.vx = victim.vy = 0; victim.deaths++;
     victim.highScore = Math.max(victim.highScore, victim.killScore);
     victim.killScore = Math.max(0, victim.killScore - 1);
-    victim.weaponTier = Math.max(DUSTY_GAMEPLAY.minWeaponTier, victim.weaponTier - 1);
+    const lostRandomWeapon = victim.randomWeapon;
+    // The standard progression gun is frozen beneath a generated loadout.
+    // Dying drops the temporary gun and restores that exact fallback instead
+    // of applying the ordinary one-tier death penalty.
+    if (!lostRandomWeapon) victim.weaponTier = Math.max(DUSTY_GAMEPLAY.minWeaponTier, victim.weaponTier - 1);
+    victim.randomWeapon = null;
+    this.releaseWeaponStation(victim, "death");
     victim.spyUntil = 0; victim.speedUntil = 0; victim.shieldHits = 0; victim.moleMode = false; victim.connectedSatelliteId = null;
     victim.connectedHealingStationId = null; victim.healingNextAt = 0;
     victim.moleUntil = 0; victim.moleForceAt = 0; victim.burstRemaining = 0; victim.suppressFireUntilRelease = false;
@@ -567,13 +582,15 @@ export class DustyOrbitSimulation {
     victim.respawnAt = now + DUSTY_RESPAWN_MS; victim.protectedUntil = 0;
     if (killer && killer.id !== victim.id) this.creditKill(killer);
     this.events.push({ type: "kill", cause, killerId, killerName: killer?.name ?? "NEBULA MURDERBALL", victimId: victim.id, victimName: victim.name, kills: killer?.kills ?? 0 });
-    this.events.push({ type: "death", cause, victimId: victim.id, victimName: victim.name, killerId, killerName: killer?.name ?? "NEBULA MURDERBALL", x: deathX, y: deathY, respawnAt: victim.respawnAt });
+    this.events.push({ type: "death", cause, victimId: victim.id, victimName: victim.name, killerId, killerName: killer?.name ?? "NEBULA MURDERBALL", x: deathX, y: deathY, respawnAt: victim.respawnAt, randomWeaponLost: lostRandomWeapon?.name ?? null, restoredWeaponTier: victim.weaponTier });
   }
 
   private creditKill(killer: DustyPlayer): void {
     killer.kills++; killer.killScore++;
     killer.highScore = Math.max(killer.highScore, killer.killScore);
-    killer.weaponTier = Math.min(DUSTY_GAMEPLAY.maxWeaponTier, killer.weaponTier + 1);
+    // Generated weapons are fixed rolls. Their hidden standard fallback does
+    // not upgrade until the generated loadout has been lost on death.
+    if (!killer.randomWeapon) killer.weaponTier = Math.min(DUSTY_GAMEPLAY.maxWeaponTier, killer.weaponTier + 1);
     if (!killer.nukeReady) {
       killer.nukeProgress = Math.min(DUSTY_GAMEPLAY.nukeRequirement, killer.nukeProgress + 1);
       if (killer.nukeProgress >= DUSTY_GAMEPLAY.nukeRequirement) killer.nukeReady = true;
@@ -701,6 +718,76 @@ export class DustyOrbitSimulation {
     this.events.push({ type: "station_heal", playerId: player.id, stationId: station.id, hp: player.hp, x: player.x, y: player.y });
   }
 
+  private weaponStationState(stationId: string): DustyWeaponStationState {
+    let state = this.weaponStationStates.get(stationId);
+    if (!state) {
+      state = { userId: null, startedAt: 0, cooldownUntil: 0 };
+      this.weaponStationStates.set(stationId, state);
+    }
+    return state;
+  }
+
+  private releaseWeaponStation(player: DustyPlayer, reason: string): void {
+    const stationId = player.connectedWeaponStationId;
+    if (stationId) {
+      const state = this.weaponStationState(stationId);
+      if (state.userId === player.id) {
+        state.userId = null;
+        state.startedAt = 0;
+        this.events.push({ type: "weapon_generation_cancelled", stationId, playerId: player.id, reason });
+      }
+    }
+    player.connectedWeaponStationId = null;
+    player.weaponGenerationStartedAt = 0;
+  }
+
+  private updateWeaponStationConnection(player: DustyPlayer, now: number): void {
+    if (!player.alive || player.moleMode || !this.mapRuntime.weaponStations.length) {
+      this.releaseWeaponStation(player, player.moleMode ? "mole" : "unavailable");
+      return;
+    }
+
+    if (player.connectedWeaponStationId) {
+      const station = this.mapRuntime.weaponStations.find((item) => item.id === player.connectedWeaponStationId);
+      const state = station ? this.weaponStationState(station.id) : null;
+      const edgeGap = station ? Math.max(0, distanceToPolygon(player, station.polygon) - DUSTY_PLAYER_RADIUS) : Number.POSITIVE_INFINITY;
+      if (!station || !state || state.userId !== player.id || edgeGap > this.mapRuntime.weaponStationDisconnectTolerance) {
+        this.releaseWeaponStation(player, "moved-away");
+        return;
+      }
+      if (now - state.startedAt < this.mapRuntime.weaponStationGenerationMs) return;
+
+      const weapon = generateRandomWeapon(this.random);
+      player.randomWeapon = weapon;
+      player.burstRemaining = 0;
+      player.lastFireAt = Number.NEGATIVE_INFINITY;
+      player.connectedWeaponStationId = null;
+      player.weaponGenerationStartedAt = 0;
+      state.userId = null;
+      state.startedAt = 0;
+      state.cooldownUntil = now + this.mapRuntime.weaponStationCooldownMs;
+      this.events.push({
+        type: "weapon_generated", stationId: station.id, playerId: player.id, x: player.x, y: player.y,
+        weapon: { name: weapon.name, rarity: weapon.rarity, powerScore: weapon.powerScore },
+        cooldownUntil: state.cooldownUntil,
+      });
+      return;
+    }
+
+    for (const station of this.mapRuntime.weaponStations) {
+      const state = this.weaponStationState(station.id);
+      if (state.userId || now < state.cooldownUntil) continue;
+      const edgeGap = Math.max(0, distanceToPolygon(player, station.polygon) - DUSTY_PLAYER_RADIUS);
+      if (edgeGap > this.mapRuntime.weaponStationConnectTolerance) continue;
+      state.userId = player.id;
+      state.startedAt = now;
+      player.connectedWeaponStationId = station.id;
+      player.weaponGenerationStartedAt = now;
+      this.events.push({ type: "weapon_generation_started", stationId: station.id, playerId: player.id, x: player.x, y: player.y, completesAt: now + this.mapRuntime.weaponStationGenerationMs });
+      return;
+    }
+  }
+
   private maintainPickups(now: number): void {
     while (this.pickups.length < DUSTY_GAMEPLAY.pickupActiveCount) this.pickups.push({ id: ++this.pickupId, type: "health", x: 0, y: 0, active: false, respawnAt: 0 });
     for (const pickup of this.pickups) {
@@ -765,7 +852,7 @@ export class DustyOrbitSimulation {
 
   private respawnPlayer(player: DustyPlayer, now: number): void {
     const spawn = this.chooseRespawn(player.id);
-    Object.assign(player, { x: spawn.x, y: spawn.y, vx: 0, vy: 0, hp: DUSTY_GAMEPLAY.maxHp, alive: true, respawnAt: 0, protectedUntil: now + DUSTY_SPAWN_PROTECTION_MS, lastFireAt: Number.NEGATIVE_INFINITY, lastFireInput: false, lastNukeInput: false, connectedSatelliteId: null, connectedHealingStationId: null, healingNextAt: 0 });
+    Object.assign(player, { x: spawn.x, y: spawn.y, vx: 0, vy: 0, hp: DUSTY_GAMEPLAY.maxHp, alive: true, respawnAt: 0, protectedUntil: now + DUSTY_SPAWN_PROTECTION_MS, lastFireAt: Number.NEGATIVE_INFINITY, lastFireInput: false, lastNukeInput: false, connectedSatelliteId: null, connectedHealingStationId: null, healingNextAt: 0, connectedWeaponStationId: null, weaponGenerationStartedAt: 0, randomWeapon: null });
     this.resetPositionHistory(player, now);
     this.events.push({ type: "respawn", playerId: player.id, x: player.x, y: player.y, protectedUntil: player.protectedUntil });
   }
@@ -803,9 +890,10 @@ export class DustyOrbitSimulation {
 
   private updateThreatLeader(): void {
     const living = [...this.players.values()].filter((player) => player.alive);
-    const highestWeaponTier = living.reduce((highest, player) => Math.max(highest, player.weaponTier), 0);
+    const weaponPower = (player: DustyPlayer) => player.randomWeapon?.powerScore ?? player.weaponTier;
+    const highestWeaponTier = living.reduce((highest, player) => Math.max(highest, weaponPower(player)), 0);
     this.threatLeaderIds = living
-      .filter((player) => player.weaponTier === highestWeaponTier)
+      .filter((player) => weaponPower(player) === highestWeaponTier)
       .sort((a, b) => a.joinOrder - b.joinOrder || a.id.localeCompare(b.id))
       .map((player) => player.id);
     // Retain the singular field for wire compatibility with older clients.
@@ -831,6 +919,11 @@ export class DustyOrbitSimulation {
       connectedHealingStationId: player.connectedHealingStationId,
       healingInProgress: Boolean(player.connectedHealingStationId) && player.hp < DUSTY_GAMEPLAY.maxHp,
       healingRemaining: player.connectedHealingStationId && player.hp < DUSTY_GAMEPLAY.maxHp ? Math.max(0, player.healingNextAt - now) : 0,
+      randomWeapon: player.randomWeapon ? { name: player.randomWeapon.name, rarity: player.randomWeapon.rarity, powerScore: player.randomWeapon.powerScore, visualTier: player.randomWeapon.visualTier } : null,
+      weaponStationConnected: this.mapRuntime.weaponStations.some((item) => item.id === player.connectedWeaponStationId),
+      connectedWeaponStationId: player.connectedWeaponStationId,
+      weaponGenerationInProgress: Boolean(player.connectedWeaponStationId),
+      weaponGenerationRemaining: player.connectedWeaponStationId ? Math.max(0, this.mapRuntime.weaponStationGenerationMs - (now - player.weaponGenerationStartedAt)) : 0,
       respawnAt: player.respawnAt, protectedUntil: player.protectedUntil, color: player.color,
     });
     const visiblePlayers = [...this.players.values()].filter((player) => player.id === viewerId || (!player.moleMode && !this.isConcealed(player, now)));
@@ -860,7 +953,19 @@ export class DustyOrbitSimulation {
       threatLeaderIds: this.threatLeaderIds,
       totalPlayers: this.players.size,
       activeSatelliteIds: this.mapRuntime.satellites.filter((satellite) => [...this.players.values()].some((player) => player.alive && player.connectedSatelliteId === satellite.id)).map((satellite) => satellite.id),
-      activeHealingStationIds: this.mapRuntime.healingStations.filter((station) => [...this.players.values()].some((player) => player.alive && player.connectedHealingStationId === station.id)).map((station) => station.id),
+      activeHealingStationIds: this.mapRuntime.healingStations.filter((station) => [...this.players.values()].some((player) => player.alive && player.hp < DUSTY_GAMEPLAY.maxHp && player.connectedHealingStationId === station.id)).map((station) => station.id),
+      weaponStations: this.mapRuntime.weaponStations.map((station) => {
+        const state = this.weaponStationState(station.id);
+        const generating = Boolean(state.userId);
+        const coolingDown = !generating && now < state.cooldownUntil;
+        return {
+          id: station.id,
+          state: generating ? "GENERATING" : coolingDown ? "COOLDOWN" : "READY",
+          userId: state.userId,
+          generationRemaining: generating ? Math.max(0, this.mapRuntime.weaponStationGenerationMs - (now - state.startedAt)) : 0,
+          cooldownRemaining: coolingDown ? Math.max(0, state.cooldownUntil - now) : 0,
+        };
+      }),
       minimapPlayers,
     };
   }

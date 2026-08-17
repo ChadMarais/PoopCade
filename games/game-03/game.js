@@ -1,9 +1,9 @@
 import { moveCircleWithSliding } from "./collision-geometry.js?v=20260815-3";
 import { CollisionEditor } from "./collision-editor.js?v=20260815-15";
-import { loadDustyOrbitAssets } from "./assets.js?v=20260815-4";
+import { loadDustyOrbitAssets } from "./assets.js?v=20260817-2";
 import { PRODUCTION_ARENA_WSS } from "./config.js?v=20260812";
 import { MAP_CATALOG, mapCatalogEntry } from "./maps/catalog.js?v=20260814-2";
-import { DustyOrbitMultiplayerRenderer } from "./renderer.js?v=20260816-1";
+import { DustyOrbitMultiplayerRenderer } from "./renderer.js?v=20260817-3";
 import { InputController } from "./input.js?v=20260813-3";
 import { claimSessionIdentity, resolvePoopcadePlayerIdentity } from "./identity.js?v=20260813-2";
 import { ArenaNetwork } from "./network.js?v=20260814-2";
@@ -11,7 +11,7 @@ import { consumeFixedStep, convergeVisualPosition } from "./timing.js?v=20260813
 import { DustyLobby } from "./lobby.js?v=20260814-7";
 import { RECRUITMENT_HREF } from "./presence.js?v=20260814-2";
 import { DustyOrbitHighscoreTracker } from "./highscore.js?v=20260813-2";
-import { DustyOrbitAudio } from "./audio.js?v=20260815-5";
+import { DustyOrbitAudio } from "./audio.js?v=20260817-3";
 import { makePanelDraggable } from "./draggable-panel.js?v=20260814-4";
 
 const INPUT_RATE = 30;
@@ -20,7 +20,7 @@ const PLAYER_RADIUS = 17;
 const FALLBACK_PLAYER_SPEED = 165;
 const parameters = new URLSearchParams(location.search);
 const selectedMap = mapCatalogEntry(parameters.get("map"));
-const selectedMapDefinition = await import(`${selectedMap.moduleUrl}?v=20260815-5`);
+const selectedMapDefinition = await import(`${selectedMap.moduleUrl}?v=20260817-2`);
 const ARENA_ID = selectedMap.arenaId;
 const debugMode = parameters.get("debug") === "1";
 let debugCollision = debugMode;
@@ -54,7 +54,12 @@ function endpoint() {
   // A plain static preview should remain playable without requiring Wrangler.
   // Local Worker development is opt-in so an absent port 8787 cannot strand
   // the lobby in a permanent retry loop.
-  if (local && parameters.get("local") === "1") {
+  // Debug/map-authoring sessions must use the matching local authoritative
+  // simulation. Pointing new map geometry at the older production Worker
+  // makes prediction stop at an object while reconciliation pulls the player
+  // through it, and production cannot activate newly authored stations.
+  const localWorkerRequested = parameters.get("local") === "1" || debugMode || location.port === "8081";
+  if (local && localWorkerRequested) {
     const workerHostname = location.hostname === "localhost" ? "127.0.0.1" : location.hostname;
     return `ws://${workerHostname}:8787/arena/${ARENA_ID}/ws${parameters.get("debug") === "1" ? "?debug=1" : ""}`;
   }
@@ -404,6 +409,14 @@ network = new ArenaNetwork({
       audio.powerupCollected("health", message);
       if (message.playerId === localId) addEvent(`HEALING STATION · +1 HP · ${message.hp}/3`);
     }
+    if (message.type === "weapon_generation_started" && message.playerId === localId) addEvent("RANDOM WEAPON GENERATOR · CREATING WEAPON · 5.0s");
+    if (message.type === "weapon_generation_cancelled" && message.playerId === localId) addEvent("WEAPON GENERATION CANCELLED · STAY CLOSE");
+    if (message.type === "weapon_generated" && message.playerId === localId) {
+      const weapon = message.weapon || {};
+      const callout = `${weapon.rarity || "RANDOM"} WEAPON · ${weapon.name || "GENERATED"}`;
+      showArcadeCallout(callout);
+      addEvent(`${callout} · GENERATOR COOLING DOWN 10s`);
+    }
     if (message.type === "nuke_warning") { renderer.nukeWarning(message); if (message.ownerId === localId) nukeQueuedUntil = 0; addEvent("NUKE INCOMING"); }
     if (message.type === "nuke_detonated") renderer.nukeDetonated(message);
     if (message.type === "player_hit") { renderer.playerHit(message.playerId); addEvent(`${message.playerId === localId ? "YOU" : "PLAYER"} HIT · ${message.hp} HP`); }
@@ -416,7 +429,10 @@ network = new ArenaNetwork({
     if (message.type === "death") {
       renderer.death(message);
       audio.death(message);
-      if (message.victimId === localId) { localSpeedBoostUntil = 0; addEvent("YOU ARE DOWN · RESPAWNING IN 2s"); }
+      if (message.victimId === localId) {
+        localSpeedBoostUntil = 0;
+        addEvent(message.randomWeaponLost ? `RANDOM WEAPON LOST · RESTORING T${message.restoredWeaponTier}` : "YOU ARE DOWN · RESPAWNING IN 2s");
+      }
     }
     if (message.type === "respawn") {
       renderer.respawn(message);
@@ -541,12 +557,15 @@ function updateHud(snapshot) {
       ? `HEALING IN PROGRESS: +1 HP IN ${(Math.max(0, player.healingRemaining) / 1000).toFixed(1)}s`
       : "HEALING STATION: CONNECTED · HEALTH FULL");
   }
+  if (player?.weaponGenerationInProgress) effects.push(`CREATING RANDOM WEAPON: ${(Math.max(0, player.weaponGenerationRemaining) / 1000).toFixed(1)}s · STAY CLOSE`);
   if (player?.speedRemaining > 0) effects.push(`SPEED ${(player.speedRemaining / 1000).toFixed(1)}s`);
   if (player?.moleMode) effects.push(`MOLE ${(player.moleRemaining / 1000).toFixed(1)}s${player.emergeBlocked ? " · BLOCKED" : ""}`);
   gameplayHud.textContent = [
     `HP: ${"●".repeat(Math.max(0, player?.hp || 0))}${"○".repeat(Math.max(0, 3 - (player?.hp || 0)))}`,
     `SHIELD: ${player?.shieldHits ? "YES" : "NO"}`,
-    `WEAPON: T${player?.weaponTier || 1} ${weapon?.name || "PEA SHOOTER"}`,
+    player?.randomWeapon
+      ? `WEAPON: RANDOM ${player.randomWeapon.rarity} · ${player.randomWeapon.name} · FALLBACK T${player.weaponTier || 1}`
+      : `WEAPON: T${player?.weaponTier || 1} ${weapon?.name || "PEA SHOOTER"}`,
     `SCORE: ${player?.killScore ?? 0}`,
     `TOTAL PLAYERS: ${snapshot?.totalPlayers ?? snapshot?.players?.length ?? 0}`,
     `HIGHSCORE: ${highscoreStatus}`,
