@@ -27,6 +27,16 @@ test("the zero-input taunt says I DARE YOU instead of the directional word RIGHT
   assert.doesNotMatch(next, /\['RIGHT\.','No more nice machine\.'\]/);
 });
 
+test("ordinary NEXT rounds use deliberately conflicting visual cues", () => {
+  assert.match(next, /const distractor=\{LEFT:'RIGHT',RIGHT:'LEFT',UP:'DOWN',DOWN:'UP'\}\[dir\]/);
+  assert.match(next, /Words outrank arrows\./);
+  assert.match(next, /text:'BIG'.*size:small|size:small.*text:'BIG'/);
+  assert.match(next, /text:'SMALL'.*size:big|size:big.*text:'SMALL'/);
+  assert.match(next, /const misleadingLabels=cols\.map/);
+  assert.match(next, /sideRound,sameDifferentRound,oppositeSwipeRound/);
+  assert.match(next, /if\(score>=10\)pool\.push\(machineIsLyingRound\)/);
+});
+
 test("Murderball progression copy remains cheeky without profanity", async () => {
   const [homepage, lobby] = await Promise.all([
     readFile(new URL("../../index.html", import.meta.url), "utf8"),

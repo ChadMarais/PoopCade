@@ -21,7 +21,7 @@ test("mobile asset profile covers phones, coarse pointers, and narrow app window
 
 test("Murderball cache fallback never ignores version query strings", async () => {
   const source = await import("node:fs/promises").then(({ readFile }) => readFile(new URL("../../service-worker.js", import.meta.url), "utf8"));
-  assert.match(source, /shell-v23/);
+  assert.match(source, /shell-v24/);
   assert.match(source, /new Request\(request, \{ cache: 'no-store' \}\)/);
   assert.doesNotMatch(source, /caches\.match\(request, \{ ignoreSearch: true \}\)/);
   assert.match(source, /if \(request\.mode === 'navigate'\).*caches\.match\('\/index\.html'\)/);

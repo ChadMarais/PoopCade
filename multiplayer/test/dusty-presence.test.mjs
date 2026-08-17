@@ -45,3 +45,19 @@ test("production launch links omit devtest and both pages expose live presence U
   assert.match(game, /parameters\.delete\("devtest"\)/);
   assert.match(game, /presenceNetwork\?\.send\(\{ type: "recruit", mapId: lobby\.selectedMapId \}\)/);
 });
+
+test("homepage cards expose per-game currently-playing counts", async () => {
+  const [home, orbit, next, presence] = await Promise.all([
+    readFile(new URL("../../index.html", import.meta.url), "utf8"),
+    readFile(new URL("../../games/orbit-shift/index.html", import.meta.url), "utf8"),
+    readFile(new URL("../../games/next/index.html", import.meta.url), "utf8"),
+    readFile(new URL("../../js/game-presence.js", import.meta.url), "utf8"),
+  ]);
+  for (const game of ["dusty-orbit", "orbit-shift", "next"]) {
+    assert.match(home, new RegExp(`data-currently-playing="${game}"`));
+  }
+  assert.match(orbit, /\/js\/game-presence\.js/);
+  assert.match(next, /\/js\/game-presence\.js/);
+  assert.match(presence, /map\.activePlayers/);
+  assert.match(presence, /channel\.track\(\{ game: trackedGame/);
+});

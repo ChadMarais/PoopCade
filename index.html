@@ -120,6 +120,9 @@
     .game-list { display: grid; grid-auto-rows: 1fr; gap: 14px; }
     .game-card { position: relative; height: auto; overflow: hidden; border: 1px solid rgba(255,255,255,.14); border-radius: 20px; background: linear-gradient(135deg,rgba(31,25,58,.93),rgba(14,13,25,.97) 58%,rgba(9,24,31,.91)); box-shadow: 0 24px 68px rgba(0,0,0,.32), inset 0 1px 0 rgba(255,255,255,.07); isolation: isolate; }
     .game-card::before { position: absolute; inset: 0; z-index: -2; content: ""; pointer-events: none; background: radial-gradient(circle at 90% 24%,rgba(82,239,255,.12),transparent 25%), radial-gradient(circle at 76% 100%,rgba(255,79,189,.09),transparent 31%); }
+    .game-live-count { position:absolute;right:clamp(16px,3vw,28px);top:clamp(16px,3vw,25px);z-index:5;display:grid;justify-items:end;gap:4px;padding:9px 11px;border:1px solid rgba(255,255,255,.14);border-radius:10px;color:var(--dim);background:rgba(7,7,13,.72);backdrop-filter:blur(10px);font:800 .51rem/1 ui-monospace,monospace;letter-spacing:.08em;text-transform:uppercase; }
+    .game-live-count strong { color:var(--acid);font-size:.78rem;font-variant-numeric:tabular-nums;text-shadow:0 0 12px rgba(200,255,71,.3); }
+    .game-live-count[data-state="unavailable"] { opacity:.62; }
     .game-copy { position: relative; z-index: 2; width: min(100%,720px); padding: clamp(21px,4vw,38px); }
     .game-label { display: flex; align-items: center; gap: 9px; color: var(--cyan); font: 850 .59rem/1 ui-monospace,monospace; letter-spacing: .11em; text-transform: uppercase; }
     .game-label::before { width: 21px; height: 2px; content: ""; background: currentColor; box-shadow: 0 0 10px currentColor; }
@@ -167,6 +170,7 @@
     .dusty-visual::after { inset: 22%; border-color: rgba(255,79,189,.5); border-style: dashed; animation: orbit 18s linear infinite reverse; }
     .dusty-character { position: absolute; inset: 3%; width: 94%; height: 94%; object-fit: contain; filter: drop-shadow(0 26px 20px rgba(0,0,0,.48)) drop-shadow(0 0 25px rgba(255,30,220,.32)); transform: rotate(5deg); animation: dusty-hover 4.4s ease-in-out infinite; }
     .dusty-character-name { position: absolute; right: 12%; bottom: 9%; z-index: 2; padding: 6px 9px; border: 1px solid rgba(255,255,255,.16); border-radius: 8px; color: white; background: rgba(7,7,18,.74); backdrop-filter: blur(9px); font: 900 .52rem/1 ui-monospace,monospace; letter-spacing: .08em; text-transform: uppercase; box-shadow: 0 8px 24px rgba(0,0,0,.28); }
+    @media (max-width: 560px) { .game-live-count { position:relative;right:auto;top:auto;width:max-content;margin:16px 16px 0 auto; } .game-copy { padding-top:18px; } }
 
     .poopline { padding: 0 0 clamp(28px,5vw,48px); }
     .poopline-box { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 18px; overflow: hidden; padding: 17px clamp(18px,3.5vw,30px); border: 1px solid var(--line); border-radius: 15px; background: linear-gradient(110deg,rgba(82,239,255,.07),rgba(17,15,28,.75) 40%,rgba(255,79,189,.07)); }
@@ -306,6 +310,7 @@
       <div class="section-head"><h2 id="games-title">GAMES</h2></div>
       <div class="game-list">
         <article class="game-card dusty-card" data-game="game-01">
+          <div class="game-live-count" data-currently-playing="dusty-orbit" data-state="loading" role="status" aria-live="polite"><span>Currently playing:</span><strong data-currently-playing-value>—</strong></div>
           <div class="game-copy">
             <div class="game-label"><span>Game 01 · Multiplayer</span></div>
             <h3 class="game-title">NEBULA<br>MURDERBALL</h3>
@@ -323,6 +328,7 @@
           </div>
         </article>
         <article class="game-card">
+          <div class="game-live-count" data-currently-playing="orbit-shift" data-state="loading" role="status" aria-live="polite"><span>Currently playing:</span><strong data-currently-playing-value>—</strong></div>
           <div class="game-copy">
             <span class="game-label">Game 02 · Single player</span>
             <h3 class="game-title">ORBIT<i>//</i>SHIFT</h3>
@@ -336,6 +342,7 @@
           <div class="game-watermark" aria-hidden="true"><span class="art-puck"></span></div>
         </article>
         <article class="game-card next-card">
+          <div class="game-live-count" data-currently-playing="next" data-state="loading" role="status" aria-live="polite"><span>Currently playing:</span><strong data-currently-playing-value>—</strong></div>
           <div class="game-copy">
             <span class="game-label">Game 03 · Single player</span>
             <h3 class="game-title">NEXT<i>.</i></h3>
@@ -367,6 +374,7 @@
 
   <script type="module" src="/js/auth.js"></script>
   <script type="module" src="/js/stats.js"></script>
+  <script type="module" src="/js/game-presence.js?v=20260817-1"></script>
   <script type="module" src="/js/dusty-presence.js?v=20260817-2"></script>
   <script>
     (() => {
