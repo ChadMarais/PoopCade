@@ -9,6 +9,14 @@ import {
 } from "./nuke-vfx.js?v=20260813";
 
 function clamp(value, min, max) { return Math.max(min, Math.min(max, value)); }
+const MAX_RENDER_PIXELS = 4_200_000;
+const MAX_STATIC_WORLD_PIXELS = 12_000_000;
+export function renderScaleForViewport(width, height, nativeScale = 1) {
+  const safeWidth = Math.max(1, Number(width) || 1);
+  const safeHeight = Math.max(1, Number(height) || 1);
+  const nativeDpr = Math.min(2, Math.max(.75, Number(nativeScale) || 1));
+  return Math.max(.75, Math.min(nativeDpr, Math.sqrt(MAX_RENDER_PIXELS / (safeWidth * safeHeight))));
+}
 function drawNineSliceBoundary(ctx, overlay, x, y, width, height, inset) {
   const image = overlay.image;
   const source = overlay.sourceInset;
@@ -194,6 +202,9 @@ export class DustyOrbitMultiplayerRenderer {
     this.weaponHiddenByMole = new Set();
     this.weaponHiddenUntil = new Map();
     this.renderedPlayers = new Map();
+    this.environmentLayers = assets.environment
+      .filter((item) => item.renderLayer !== "terrain")
+      .map((item) => ({ type: "environment", depth: item.depthY, value: item }));
     this.localPlayerId = null;
     this.minimapSurfaces = new Map();
     this.nukeWarnings = new Map();
@@ -204,13 +215,18 @@ export class DustyOrbitMultiplayerRenderer {
     this.collisionEditor = null;
     this.uplink = { active: false, phase: null, changedAt: 0 };
     this.resize();
+    this.staticWorldSurface = this.buildStaticWorldSurface();
     addEventListener("resize", () => this.resize());
   }
 
   resize() {
     const width = Math.max(1, innerWidth);
     const height = Math.max(1, innerHeight);
-    const dpr = Math.min(2, devicePixelRatio || 1);
+    // A 2x full-screen canvas is more than eight million shaded pixels at
+    // 1080p and becomes a fill-rate cliff on integrated/mobile GPUs. Preserve
+    // 2x on smaller displays, then reduce resolution gradually instead of
+    // dropping animation frames on large/high-DPI screens.
+    const dpr = renderScaleForViewport(width, height, devicePixelRatio || 1);
     this.canvas.width = Math.round(width * dpr);
     this.canvas.height = Math.round(height * dpr);
     this.canvas.style.width = `${width}px`;
@@ -218,6 +234,53 @@ export class DustyOrbitMultiplayerRenderer {
     this.ctx.imageSmoothingEnabled = true;
     this.ctx.imageSmoothingQuality = "high";
     this.viewport = { width, height, dpr };
+  }
+
+  buildStaticWorldSurface() {
+    const { width, height } = this.assets.world;
+    if (width * height > MAX_STATIC_WORLD_PIXELS) return null;
+    const surface = document.createElement("canvas");
+    surface.width = width;
+    surface.height = height;
+    const surfaceContext = surface.getContext("2d", { alpha: false });
+    if (!surfaceContext) return null;
+
+    const originalContext = this.ctx;
+    const originalCamera = this.camera;
+    const originalViewport = this.viewport;
+    try {
+      this.ctx = surfaceContext;
+      this.camera = { x: 0, y: 0 };
+      this.viewport = { width, height, dpr: 1 };
+      this.drawTerrain();
+      this.drawBoundaryOverlay();
+      this.drawTerrainFeatures();
+      return surface;
+    } catch {
+      // Canvas-size limits vary by browser/device. The original drawing path
+      // remains a safe fallback if the one-time cache cannot be allocated.
+      return null;
+    } finally {
+      this.ctx = originalContext;
+      this.camera = originalCamera;
+      this.viewport = originalViewport;
+    }
+  }
+
+  drawStaticWorld() {
+    if (!this.staticWorldSurface) {
+      this.drawTerrain();
+      this.drawBoundaryOverlay();
+      this.drawTerrainFeatures();
+      return;
+    }
+    const sourceX = clamp(this.camera.x, 0, this.assets.world.width);
+    const sourceY = clamp(this.camera.y, 0, this.assets.world.height);
+    const width = Math.min(this.viewport.width, this.assets.world.width - sourceX);
+    const height = Math.min(this.viewport.height, this.assets.world.height - sourceY);
+    if (width > 0 && height > 0) {
+      this.ctx.drawImage(this.staticWorldSurface, sourceX, sourceY, width, height, 0, 0, width, height);
+    }
   }
 
   impact(event) {
@@ -719,9 +782,7 @@ export class DustyOrbitMultiplayerRenderer {
     ctx.fillRect(0, 0, width, height);
     ctx.save();
     ctx.translate(shake.x, shake.y);
-    this.drawTerrain();
-    this.drawBoundaryOverlay();
-    this.drawTerrainFeatures();
+    this.drawStaticWorld();
     this.drawNukes(snapshot?.nukes || [], Date.now());
     this.drawEffects("underlay", now);
 
@@ -733,9 +794,10 @@ export class DustyOrbitMultiplayerRenderer {
         ? { ...player, x: predicted.x, y: predicted.y, aimX, aimY }
         : { ...player, aimX, aimY };
     });
-    this.renderedPlayers = new Map(players.map((player) => [player.id, { x: player.x, y: player.y, vx: player.vx || 0, vy: player.vy || 0 }]));
+    this.renderedPlayers.clear();
+    for (const player of players) this.renderedPlayers.set(player.id, { x: player.x, y: player.y, vx: player.vx || 0, vy: player.vy || 0 });
     const layers = [
-      ...this.assets.environment.filter((item) => item.renderLayer !== "terrain").map((item) => ({ type: "environment", depth: item.depthY, value: item })),
+      ...this.environmentLayers,
       ...(snapshot?.pickups || []).map((pickup) => ({ type: "pickup", depth: pickup.y, value: pickup })),
       ...players.map((player) => ({ type: "player", depth: player.y, value: player })),
     ].sort((a, b) => a.depth - b.depth);
