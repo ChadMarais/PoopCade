@@ -27,14 +27,16 @@
     .events { right: 12px; top: 56px; width: min(330px, calc(100vw - 24px)); padding: 8px 10px; font: 800 10px/1.45 ui-monospace, monospace; color: #f7dcff; white-space: pre-line; }
     .arcade-callout { position:fixed; z-index:6; left:50%; top:22%; width:min(680px,calc(100vw - 32px)); padding:16px 22px; border:2px solid #c8ff47; border-radius:16px; color:#fff; background:linear-gradient(135deg,rgba(53,12,69,.96),rgba(5,41,54,.96)); box-shadow:0 20px 80px rgba(0,0,0,.7),0 0 34px rgba(200,255,71,.3); font:1000 clamp(18px,4vw,40px)/1 ui-monospace,monospace; letter-spacing:.04em; text-align:center; text-shadow:3px 3px 0 #7c24a1; pointer-events:none; opacity:0; transform:translate(-50%,-35%) scale(.72) rotate(-2deg); transition:opacity .18s ease,transform .24s cubic-bezier(.2,1.5,.4,1); }
     .arcade-callout.show { opacity:1; transform:translate(-50%,0) scale(1) rotate(-1deg); }
-    .arcade-callout.weapon-reveal { display:grid; gap:10px; overflow:hidden; text-transform:uppercase; }
-    .weapon-reveal-name { font:1000 clamp(17px,3.5vw,38px)/1 ui-monospace,monospace; }
-    .weapon-reveal-rating { font:1000 clamp(11px,1.8vw,18px)/1 ui-monospace,monospace; letter-spacing:.16em; }
-    .arcade-callout.rating-dud { border-color:#ff6b73; color:#ffe4d2; background:linear-gradient(135deg,rgba(71,20,27,.97),rgba(38,31,22,.97)); box-shadow:0 20px 70px rgba(0,0,0,.72),0 0 24px rgba(255,81,91,.28); text-shadow:3px 3px 0 #74222b; transform:translate(-50%,-35%) scale(.72) rotate(2deg); }
-    .arcade-callout.rating-dud.show { transform:translate(-50%,0) scale(1) rotate(1deg); }
-    .arcade-callout.rating-average { border-color:#78ecff; background:linear-gradient(135deg,rgba(37,14,57,.97),rgba(5,44,58,.97)); box-shadow:0 20px 80px rgba(0,0,0,.7),0 0 36px rgba(84,226,255,.38); }
-    .arcade-callout.rating-legendary { border:3px solid #fff06a; color:#fffbd0; background:radial-gradient(circle at 50% 0,rgba(255,89,223,.72),transparent 45%),linear-gradient(135deg,rgba(69,13,105,.99),rgba(4,50,75,.99)); box-shadow:0 24px 100px rgba(0,0,0,.8),0 0 26px #fff06a,0 0 64px #ff4be1,inset 0 0 34px rgba(255,255,255,.2); text-shadow:0 0 9px #fff,3px 3px 0 #9d1fb8; animation:legendary-reveal .55s steps(2,end) infinite alternate; }
-    .arcade-callout.rating-legendary .weapon-reveal-rating { color:#fff06a; font-size:clamp(14px,2.4vw,24px); }
+    .arcade-callout.weapon-reveal { display:grid; width:min(420px,calc(100vw - 32px)); gap:6px; padding:11px 16px 12px; overflow:hidden; border-radius:11px; text-transform:uppercase; transform:translate(-50%,-24%) scale(.86) rotate(0); }
+    .arcade-callout.weapon-reveal.show { transform:translate(-50%,0) scale(1) rotate(0); }
+    .weapon-reveal-name { overflow-wrap:anywhere; font:1000 clamp(13px,2vw,20px)/1.08 ui-monospace,monospace; letter-spacing:.025em; }
+    .weapon-reveal-rating { font:1000 clamp(8px,1.1vw,11px)/1 ui-monospace,monospace; letter-spacing:.24em; }
+    .arcade-callout.rating-dud { border-color:#ff9aa2; color:#fff5f5; background:linear-gradient(135deg,rgba(151,16,31,.98),rgba(74,3,14,.98)); box-shadow:0 16px 52px rgba(0,0,0,.72),0 0 25px rgba(255,47,66,.5),inset 0 0 22px rgba(255,255,255,.08); text-shadow:2px 2px 0 #65101b; }
+    .arcade-callout.rating-dud .weapon-reveal-rating { color:#ffd1d5; }
+    .arcade-callout.rating-average { border-color:#85ff9e; color:#effff2; background:linear-gradient(135deg,rgba(12,103,57,.98),rgba(3,51,31,.98)); box-shadow:0 16px 55px rgba(0,0,0,.72),0 0 31px rgba(79,255,131,.42),inset 0 0 24px rgba(170,255,197,.08); text-shadow:2px 2px 0 #07502d; }
+    .arcade-callout.rating-average .weapon-reveal-rating { color:#a9ffba; }
+    .arcade-callout.rating-legendary { border:2px solid #fff27a; color:#fff; background:radial-gradient(circle at 18% 0,rgba(69,243,255,.82),transparent 38%),radial-gradient(circle at 82% 100%,rgba(255,204,51,.76),transparent 42%),linear-gradient(125deg,rgba(112,20,190,.99),rgba(221,21,131,.99) 48%,rgba(20,77,184,.99)); box-shadow:0 20px 75px rgba(0,0,0,.8),0 0 24px #fff06a,0 0 52px #ff42da,0 0 76px rgba(52,225,255,.64),inset 0 0 26px rgba(255,255,255,.24); text-shadow:0 0 8px #fff,2px 2px 0 #741495; animation:legendary-reveal .55s steps(2,end) infinite alternate; }
+    .arcade-callout.rating-legendary .weapon-reveal-rating { color:#fff7a8; font-size:clamp(9px,1.35vw,13px); }
     @keyframes legendary-reveal { from { filter:hue-rotate(-8deg) brightness(1); } to { filter:hue-rotate(12deg) brightness(1.25); } }
     @media (prefers-reduced-motion:reduce) { .arcade-callout.rating-legendary { animation:none; } }
     .controls { right: 12px; bottom: 12px; padding: 8px 10px; color: rgba(255,255,255,.82); font: 800 10px system-ui; }
@@ -160,6 +162,6 @@
   </div>
   <div id="loading" class="loading"><div><h1>NEBULA MURDERBALL</h1><p id="loadingText">LOADING MULTIPLAYER ASSETS…</p><div class="track"><div id="loadingBar" class="bar"></div></div></div></div>
   <a class="dusty-recruitment-toast" data-recruitment-toast href="/games/game-03/" hidden aria-live="polite"><strong>MURDERBALL INVITE</strong><span data-recruitment-copy></span><b>JOIN THEIR GAME →</b></a>
-  <script type="module" src="./game.js?v=20260817-9"></script>
+  <script type="module" src="./game.js?v=20260817-10"></script>
 </body>
 </html>

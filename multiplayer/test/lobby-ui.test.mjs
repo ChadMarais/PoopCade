@@ -134,14 +134,20 @@ test("crash kills expose a prominent arcade callout to both involved pilots", as
   assert.match(arena, /!player\.moleMode/);
 });
 
-test("random weapon reveals clearly grade duds, average rolls, and legendary jackpots", async () => {
+test("random weapon reveals use compact straight dud, common, and legendary cards", async () => {
   const [html, game] = await Promise.all([
     readFile(new URL("../../games/game-03/index.html", import.meta.url), "utf8"),
     readFile(new URL("../../games/game-03/game.js", import.meta.url), "utf8"),
   ]);
   assert.match(game, /function showWeaponReveal\(weapon\)/);
   assert.match(game, /\["DUD", "AVERAGE", "LEGENDARY"\]/);
-  assert.match(game, /★ LEGENDARY WEAPON ★/);
+  assert.match(game, /rating === "AVERAGE" \? "COMMON" : rating/);
+  assert.match(game, /★ LEGENDARY ★/);
+  assert.match(game, /replaceChildren\(grade, title\)/);
+  assert.match(game, /`WEAPON: \$\{equippedWeaponName\}`/);
+  assert.doesNotMatch(game, /FALLBACK T/);
+  assert.match(html, /\.arcade-callout\.weapon-reveal\.show \{ transform:translate\(-50%,0\) scale\(1\) rotate\(0\); \}/);
+  assert.match(html, /\.weapon-reveal-name \{[^}]*clamp\(13px,2vw,20px\)/);
   assert.match(html, /\.arcade-callout\.rating-dud/);
   assert.match(html, /\.arcade-callout\.rating-average/);
   assert.match(html, /\.arcade-callout\.rating-legendary/);

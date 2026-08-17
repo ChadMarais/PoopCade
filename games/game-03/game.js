@@ -295,14 +295,15 @@ function showArcadeCallout(text) {
 function showWeaponReveal(weapon) {
   clearTimeout(arcadeCalloutTimer);
   const rating = ["DUD", "AVERAGE", "LEGENDARY"].includes(String(weapon?.rarity)) ? String(weapon.rarity) : "AVERAGE";
+  const displayRating = rating === "AVERAGE" ? "COMMON" : rating;
   const name = typeof weapon?.name === "string" && weapon.name ? weapon.name : "MYSTERY GUN";
   const title = document.createElement("strong");
   title.className = "weapon-reveal-name";
   title.textContent = name;
   const grade = document.createElement("span");
   grade.className = "weapon-reveal-rating";
-  grade.textContent = rating === "LEGENDARY" ? "★ LEGENDARY WEAPON ★" : `${rating} WEAPON`;
-  arcadeCallout.replaceChildren(title, grade);
+  grade.textContent = rating === "LEGENDARY" ? "★ LEGENDARY ★" : displayRating;
+  arcadeCallout.replaceChildren(grade, title);
   arcadeCallout.classList.remove("show", "rating-dud", "rating-average", "rating-legendary");
   arcadeCallout.classList.add("weapon-reveal", `rating-${rating.toLowerCase()}`);
   requestAnimationFrame(() => arcadeCallout.classList.add("show"));
@@ -651,12 +652,11 @@ function updateHud(snapshot) {
   if (player?.weaponGenerationInProgress) effects.push(`CREATING RANDOM WEAPON: ${(Math.max(0, player.weaponGenerationRemaining) / 1000).toFixed(1)}s · STAY CLOSE`);
   if (player?.speedRemaining > 0) effects.push(`SPEED ${(player.speedRemaining / 1000).toFixed(1)}s`);
   if (player?.moleMode) effects.push(`MOLE ${(player.moleRemaining / 1000).toFixed(1)}s${player.emergeBlocked ? " · BLOCKED" : ""}`);
+  const equippedWeaponName = player?.randomWeapon?.name || weapon?.name || "PEA SHOOTER";
   gameplayHud.textContent = [
     `HP: ${"●".repeat(Math.max(0, player?.hp || 0))}${"○".repeat(Math.max(0, 3 - (player?.hp || 0)))}`,
     `SHIELD: ${player?.shieldHits ? "YES" : "NO"}`,
-    player?.randomWeapon
-      ? `WEAPON: RANDOM ${player.randomWeapon.rarity} · ${player.randomWeapon.name} · FALLBACK T${player.weaponTier || 1}`
-      : `WEAPON: T${player?.weaponTier || 1} ${weapon?.name || "PEA SHOOTER"}`,
+    `WEAPON: ${equippedWeaponName}`,
     `SCORE: ${player?.killScore ?? 0}`,
     `TOTAL PLAYERS: ${snapshot?.totalPlayers ?? snapshot?.players?.length ?? 0}`,
     `HIGHSCORE: ${highscoreStatus}`,
