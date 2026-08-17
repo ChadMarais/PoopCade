@@ -1,5 +1,5 @@
 const CACHE_PREFIX = 'poopcade-';
-const CACHE_NAME = `${CACHE_PREFIX}shell-v22`;
+const CACHE_NAME = `${CACHE_PREFIX}shell-v23`;
 const SUPABASE_ORIGIN = 'https://kpssybcwwmtcdhrmfcgc.supabase.co';
 
 // These routes must exist for the offline shell to install successfully.
@@ -97,7 +97,7 @@ self.addEventListener('fetch', (event) => {
   // with a newly deployed canonical build. Successful responses remain
   // available as an offline fallback.
   if (url.pathname.startsWith('/games/game-03/')) {
-    event.respondWith(networkFirst(request));
+    event.respondWith(networkFirst(request, undefined, { bypassHttpCache: true }));
     return;
   }
 
@@ -110,18 +110,22 @@ self.addEventListener('fetch', (event) => {
   );
 });
 
-async function networkFirst(request, preloadResponse) {
+async function networkFirst(request, preloadResponse, { bypassHttpCache = false } = {}) {
   try {
-    const response = (await preloadResponse) || (await fetch(request));
+    const networkRequest = bypassHttpCache ? new Request(request, { cache: 'no-store' }) : request;
+    const response = (await preloadResponse) || (await fetch(networkRequest));
     if (response.ok) {
       const cache = await caches.open(CACHE_NAME);
       await cache.put(request, response.clone());
     }
     return response;
   } catch {
-    return (await caches.match(request, { ignoreSearch: true })) ||
-      (await caches.match('/index.html')) ||
-      Response.error();
+    // Match the exact versioned URL. Ignoring the query string can combine an
+    // old map module with newly deployed artwork after a mobile network drop.
+    const cached = await caches.match(request);
+    if (cached) return cached;
+    if (request.mode === 'navigate') return (await caches.match('/index.html')) || Response.error();
+    return Response.error();
   }
 }
 

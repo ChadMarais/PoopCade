@@ -1,8 +1,8 @@
-import * as DEFAULT_MAP from "./maps/lunar-liability/map.js?v=20260817";
+import * as DEFAULT_MAP from "./maps/lunar-liability/map.js?v=20260817-3";
 import { collisionBlocksMovement, collisionBlocksProjectiles, depthSortY, transformNormalizedPolygon } from "./collision-geometry.js?v=20260817-5";
 import { DEFAULT_CHARACTER_SKIN_ID, characterSkinById } from "./character-skins.js?v=20260814-2";
 
-const ASSET_VERSION = "20260817-2";
+const ASSET_VERSION = "20260817-3";
 const versioned = (url) => `${url}?v=${ASSET_VERSION}`;
 const POWERUP_ART = Object.freeze({
   health: Object.freeze({ sprite: "health.png", sourceBounds: Object.freeze({ x: 229, y: 193, width: 797, height: 785 }) }),
@@ -29,13 +29,33 @@ async function loadJson(url) {
   return response.json();
 }
 
+export function prefersMobileMapAssets(scope = globalThis) {
+  return scope.navigator?.userAgentData?.mobile === true
+    || scope.matchMedia?.("(pointer: coarse)")?.matches === true
+    || (Number(scope.innerWidth) > 0 && Number(scope.innerWidth) <= 900);
+}
+
+export function mobileOptimizedAssetUrl(url, mobile = prefersMobileMapAssets()) {
+  if (!mobile || !url.includes("/games/game-03/maps/hell-moon/") || !/\.png(?:[?#]|$)/.test(url)) return url;
+  return url.replace(/\.png(?=([?#]|$))/, ".mobile.webp");
+}
+
 function loadImage(url) {
   return new Promise((resolve, reject) => {
     const image = new Image();
+    const preferredUrl = mobileOptimizedAssetUrl(url);
+    let triedOriginal = preferredUrl === url;
     image.decoding = "async";
     image.onload = () => resolve(image);
-    image.onerror = () => reject(new Error(`Could not load ${url}`));
-    image.src = url;
+    image.onerror = () => {
+      if (!triedOriginal) {
+        triedOriginal = true;
+        image.src = url;
+        return;
+      }
+      reject(new Error(`Could not load ${url}`));
+    };
+    image.src = preferredUrl;
   });
 }
 
@@ -58,6 +78,8 @@ export async function loadDustyOrbitAssets(mapDefinition = DEFAULT_MAP, onProgre
   if (!MAP_METADATA || !Array.isArray(ASSET_DEFINITION_URLS) || !WORLD) throw new Error("Invalid Nebula Murderball map definition.");
   onProgress("Loading canonical collision geometry…", 0.12);
   const environmentDefinitions = await Promise.all(ASSET_DEFINITION_URLS.map((url) => loadJson(versioned(url))));
+  const requiredAssetIds = new Set(ENVIRONMENT_INSTANCES.map((instance) => instance.assetId));
+  const activeEnvironmentDefinitions = environmentDefinitions.filter((definition) => requiredAssetIds.has(definition.id));
   onProgress("Loading Nebula Murderball artwork…", 0.34);
   const defaultSkin = characterSkinById(DEFAULT_CHARACTER_SKIN_ID);
   if (!defaultSkin) throw new Error("Nebula Murderball requires one enabled default character skin.");
@@ -69,7 +91,7 @@ export async function loadDustyOrbitAssets(mapDefinition = DEFAULT_MAP, onProgre
     loadImage(TERRAIN_URL),
     Promise.all(TERRAIN_VARIATION_TILES.map((tile) => loadImage(tile.url))),
     BOUNDARY_OVERLAY?.url ? loadImage(BOUNDARY_OVERLAY.url) : Promise.resolve(null),
-    Promise.all(environmentDefinitions.map((definition) => loadImage(versioned(definitionRoot.get(definition.id) + definition.sprite)))),
+    Promise.all(activeEnvironmentDefinitions.map((definition) => loadImage(versioned(definitionRoot.get(definition.id) + definition.sprite)))),
     loadCharacterAsset(defaultSkin),
     loadImage(versioned(powerupRoot + POWERUP_ART.health.sprite)),
     loadImage(versioned(powerupRoot + POWERUP_ART.spy.sprite)),
@@ -87,7 +109,7 @@ export async function loadDustyOrbitAssets(mapDefinition = DEFAULT_MAP, onProgre
     loadImage(versioned(weaponRoot + WEAPON_ART.randomGenerator.sprite)),
   ]);
   onProgress("Building shared environment polygons…", 0.8);
-  const imageByAssetId = new Map(environmentDefinitions.map((definition, index) => [definition.id, environmentImages[index]]));
+  const imageByAssetId = new Map(activeEnvironmentDefinitions.map((definition, index) => [definition.id, environmentImages[index]]));
   const environment = ENVIRONMENT_INSTANCES.map((instance) => {
     const definition = definitionById.get(instance.assetId);
     if (!definition) throw new Error(`Missing environment definition for ${instance.assetId}.`);
