@@ -27,14 +27,20 @@ test("the zero-input taunt says I DARE YOU instead of the directional word RIGHT
   assert.doesNotMatch(next, /\['RIGHT\.','No more nice machine\.'\]/);
 });
 
-test("ordinary NEXT rounds use deliberately conflicting visual cues", () => {
-  assert.match(next, /const distractor=\{LEFT:'RIGHT',RIGHT:'LEFT',UP:'DOWN',DOWN:'UP'\}\[dir\]/);
+test("ordinary NEXT rounds mix honest and conflicting visual cues", () => {
+  assert.match(next, /const opposite=\{LEFT:'RIGHT',RIGHT:'LEFT',UP:'DOWN',DOWN:'UP'\}\[dir\]/);
+  assert.match(next, /const arrowDir=Math\.random\(\)<\.5\?dir:opposite/);
   assert.match(next, /Words outrank arrows\./);
   assert.match(next, /text:'BIG'.*size:small|size:small.*text:'BIG'/);
   assert.match(next, /text:'SMALL'.*size:big|size:big.*text:'SMALL'/);
   assert.match(next, /const misleadingLabels=cols\.map/);
   assert.match(next, /sideRound,sameDifferentRound,oppositeSwipeRound/);
   assert.match(next, /if\(score>=10\)pool\.push\(machineIsLyingRound\)/);
+});
+
+test("the do-not-press round uses tempting button copy", () => {
+  assert.match(next, /text:choice\(\['PRESS ME','QUICK!'\]\)/);
+  assert.doesNotMatch(next, /text:'DO NOT'/);
 });
 
 test("Murderball progression copy remains cheeky without profanity", async () => {

@@ -6,6 +6,7 @@
   <meta name="theme-color" content="#26132f">
   <meta name="description" content="Nebula Murderball, Poopcade's live multiplayer space free-for-all.">
   <title>NEBULA MURDERBALL — Poopcade Game 01</title>
+  <script>if(new URLSearchParams(location.search).get('autojoin')==='1')document.documentElement.classList.add('arena-transition')</script>
   <link rel="stylesheet" href="./lobby.css?v=20260815-1">
   <style>
     :root { color-scheme: dark; font-family: ui-sans-serif, system-ui, sans-serif; }
@@ -70,6 +71,8 @@
     [hidden] { display: none !important; }
     .loading { position: fixed; z-index: 4; inset: 0; display: grid; place-items: center; background: radial-gradient(circle, #5b276d, #26112f 60%, #120719); transition: opacity .2s; }
     .loading.done { opacity: 0; pointer-events: none; }
+    .arena-transition #lobby { display: none; }
+    .arena-transition .loading { z-index: 30; }
     .loading div { width: min(360px, 82vw); text-align: center; }
     .loading h1 { margin: 0; font-size: clamp(25px,9vw,42px); letter-spacing: -.04em; }
     .loading p { color: #a9f7ff; font: 900 11px ui-monospace, monospace; }
@@ -162,6 +165,6 @@
   </div>
   <div id="loading" class="loading"><div><h1>NEBULA MURDERBALL</h1><p id="loadingText">LOADING MULTIPLAYER ASSETS…</p><div class="track"><div id="loadingBar" class="bar"></div></div></div></div>
   <a class="dusty-recruitment-toast" data-recruitment-toast href="/games/game-03/" hidden aria-live="polite"><strong>MURDERBALL INVITE</strong><span data-recruitment-copy></span><b>JOIN THEIR GAME →</b></a>
-  <script type="module" src="./game.js?v=20260817-16"></script>
+  <script type="module" src="./game.js?v=20260817-20"></script>
 </body>
 </html>

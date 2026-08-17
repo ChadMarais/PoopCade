@@ -1,14 +1,14 @@
 import { createPolygonBroadphase, moveCircleWithSliding } from "./collision-geometry.js?v=20260817-5";
 import { CollisionEditor } from "./collision-editor.js?v=20260817-17";
-import { loadDustyOrbitAssets } from "./assets.js?v=20260817-6";
+import { loadDustyOrbitAssets } from "./assets.js?v=20260817-7";
 import { PRODUCTION_ARENA_WSS } from "./config.js?v=20260812";
-import { MAP_CATALOG, mapCatalogEntry } from "./maps/catalog.js?v=20260817-3";
+import { MAP_CATALOG, mapCatalogEntry } from "./maps/catalog.js?v=20260817-4";
 import { DustyOrbitMultiplayerRenderer } from "./renderer.js?v=20260817-10";
 import { InputController } from "./input.js?v=20260817-1";
 import { claimSessionIdentity, resolvePoopcadePlayerIdentity } from "./identity.js?v=20260813-2";
 import { ArenaNetwork } from "./network.js?v=20260817-1";
 import { consumeFixedStep, convergeVisualPosition } from "./timing.js?v=20260813-2";
-import { DustyLobby } from "./lobby.js?v=20260817-1";
+import { DustyLobby } from "./lobby.js?v=20260817-4";
 import { presenceEndpoint, RECRUITMENT_HREF } from "./presence.js?v=20260817-1";
 import { DustyOrbitHighscoreTracker } from "./highscore.js?v=20260813-2";
 import { DustyOrbitAudio } from "./audio.js?v=20260817-5";
@@ -20,7 +20,7 @@ const PLAYER_RADIUS = 17;
 const FALLBACK_PLAYER_SPEED = 165;
 const parameters = new URLSearchParams(location.search);
 const selectedMap = mapCatalogEntry(parameters.get("map"));
-const selectedMapDefinition = await import(`${selectedMap.moduleUrl}?v=20260817-3`);
+const selectedMapDefinition = await import(`${selectedMap.moduleUrl}?v=20260817-4`);
 const ARENA_ID = selectedMap.arenaId;
 const debugMode = parameters.get("debug") === "1";
 let debugCollision = debugMode;
@@ -257,11 +257,6 @@ const lobby = new DustyLobby(document.querySelector("#lobby"), {
     destination.searchParams.set("map", mapId);
     destination.searchParams.delete("autojoin");
     history.replaceState(null, "", destination);
-    const map = mapCatalogEntry(mapId);
-    void import(`${map.moduleUrl}?v=20260817-3`)
-      .then((definition) => loadDustyOrbitAssets(definition, () => {}))
-      .then((preloadedAssets) => preloadedAssets.ensureCharacterSkin(lobby.selectedSkinId))
-      .catch(() => {});
   },
   onQuickJoin(mapId, skinId) {
     if (mapId === selectedMap.id) joinSelectedMap(skinId);
@@ -395,7 +390,7 @@ network = new ArenaNetwork({
         history.replaceState(null, "", cleanUrl);
         loading.classList.add("done");
         lobby.show();
-      } else if (autoJoinRequested && !joined && applicationState !== "JOINING") {
+      } else if (autoJoinRequested && !joined) {
         autoJoinRequested = false;
         const cleanUrl = new URL(location.href);
         cleanUrl.searchParams.delete("autojoin");
@@ -449,6 +444,7 @@ network = new ArenaNetwork({
       input.enabled = !document.hidden;
       addEvent(`JOINED ${message.arenaId} AS ${playerName}`);
       loading.classList.add("done");
+      document.documentElement.classList.remove("arena-transition");
       canvas.focus({ preventScroll: true });
       return;
     }

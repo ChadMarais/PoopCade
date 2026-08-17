@@ -77,6 +77,7 @@ test("map cards switch selection in place and defer navigation until joining", a
   assert.match(game, /history\.replaceState\(null, "", destination\)/);
   assert.match(game, /if \(lobby\.selectedMapId !== selectedMap\.id\) \{[\s\S]*navigateToMap\(lobby\.selectedMapId, true\)/);
   assert.doesNotMatch(game, /onMapSelected\(mapId\) \{\s*navigateToMap/);
+  assert.doesNotMatch(game, /onMapSelected\(mapId\) \{[\s\S]*loadDustyOrbitAssets/);
 });
 
 test("cross-map auto-join keeps the lobby hidden throughout the necessary map load", async () => {

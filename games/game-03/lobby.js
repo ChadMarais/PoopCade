@@ -1,4 +1,5 @@
 import { CHARACTER_SKINS, DEFAULT_CHARACTER_SKIN_ID, characterSkinById, enabledCharacterSkins } from "./character-skins.js?v=20260814-2";
+import { mobileOptimizedAssetUrl } from "./asset-profile.js?v=20260817-1";
 import { RECRUITMENT_COOLDOWN_MS, normalizedOnlinePlayers, recruitmentCooldownRemaining } from "./presence.js?v=20260814";
 
 const STORAGE_KEY = "poopcade.game03.skin";
@@ -156,7 +157,7 @@ export class DustyLobby {
       button.dataset.skinId = skin.id;
       button.setAttribute("aria-label", `Select ${skin.displayName}`);
       const image = document.createElement("img");
-      image.src = skin.sprite;
+      image.src = mobileOptimizedAssetUrl(skin.sprite);
       image.alt = "";
       image.loading = skin.id === this.selectedSkinId ? "eager" : "lazy";
       image.style.setProperty("--card-scale", String(skin.visual.lobbyScale || 1));
@@ -178,7 +179,7 @@ export class DustyLobby {
       card.classList.toggle("selected", selected);
       card.setAttribute("aria-pressed", String(selected));
     });
-    this.preview.src = skin.sprite;
+    this.preview.src = mobileOptimizedAssetUrl(skin.sprite);
     this.preview.alt = skin.displayName;
     this.preview.style.setProperty("--preview-scale", String(skin.visual.lobbyScale || 1));
     this.previewName.textContent = skin.displayName;
@@ -260,7 +261,7 @@ export class DustyLobby {
     article.className = "roster-player";
     article.dataset.joinedAt = String(player.joinedAt);
     const image = document.createElement("img");
-    image.src = skin.sprite;
+    image.src = mobileOptimizedAssetUrl(skin.sprite);
     image.alt = "";
     image.loading = "lazy";
     const identity = document.createElement("div");
@@ -345,6 +346,6 @@ export class DustyLobby {
     this.updateRecruitButton();
   }
 
-  show() { this.root.hidden = false; document.documentElement.classList.add("lobby-visible"); }
+  show() { this.root.hidden = false; document.documentElement.classList.remove("arena-transition"); document.documentElement.classList.add("lobby-visible"); }
   hide() { this.root.hidden = true; document.documentElement.classList.remove("lobby-visible"); }
 }

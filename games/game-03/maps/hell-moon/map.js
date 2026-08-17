@@ -3,7 +3,7 @@ export const MAP_METADATA = Object.freeze({
   arenaId: "hell-moon-001",
   name: "HELL MOON",
   description: "Four fractured volcanic territories orbit a brutal central combat ring.",
-  previewUrl: "/games/game-03/maps/hell-moon/preview/hell-moon-lobby-preview.webp?v=20260815-1",
+  previewUrl: "/games/game-03/maps/hell-moon/preview/hell-moon-lobby-preview-optimized.webp?v=20260817-1",
   moduleUrl: "/games/game-03/maps/hell-moon/map.js",
   maxPlayers: 15,
 });

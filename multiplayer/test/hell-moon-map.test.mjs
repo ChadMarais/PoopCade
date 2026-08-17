@@ -73,7 +73,7 @@ test("Hell Moon has its own authoritative 4000 by 2500 runtime", () => {
   assert.equal(BOUNDARY_COLLIDERS.reduce((total, item) => total + item.polygon.length, 0), 40);
   assert.equal(TERRAIN_VARIATION_TILES.length, 1);
   assert.match(TERRAIN_VARIATION_TILES[0].url, /hell-moon-ground-variation\.png/);
-  assert.match(MAP_METADATA.previewUrl, /hell-moon-lobby-preview\.webp/);
+  assert.match(MAP_METADATA.previewUrl, /hell-moon-lobby-preview-optimized\.webp/);
   assert.equal(ENVIRONMENT_INSTANCES.some((item) => item.assetId === "maptile2"), false);
   assert.equal(CENTER_ARENA_INSTANCE.assetId, "hell-moon-center-arena");
   for (const spawn of runtime.spawns) {

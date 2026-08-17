@@ -3,7 +3,7 @@ export const MAP_METADATA = Object.freeze({
   arenaId: "dusty-orbit-001",
   name: "LUNAR LIABILITY",
   description: "An abandoned relay outpost with rocks, guns, and absolutely no waiver form.",
-  previewUrl: "/games/game-03/maps/lunar-liability/terrain/dusty-orbit-ground-runtime.webp",
+  previewUrl: "/games/game-03/maps/lunar-liability/preview/dusty-orbit-lobby-preview.webp?v=20260817-1",
   moduleUrl: "/games/game-03/maps/lunar-liability/map.js",
   maxPlayers: 15,
 });

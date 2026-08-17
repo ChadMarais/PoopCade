@@ -1,43 +1,33 @@
-import * as DEFAULT_MAP from "./maps/lunar-liability/map.js?v=20260817-3";
+import * as DEFAULT_MAP from "./maps/lunar-liability/map.js?v=20260817-4";
+import { mobileOptimizedAssetUrl } from "./asset-profile.js?v=20260817-1";
 import { collisionBlocksMovement, collisionBlocksProjectiles, depthSortY, transformNormalizedPolygon } from "./collision-geometry.js?v=20260817-5";
 import { DEFAULT_CHARACTER_SKIN_ID, characterSkinById } from "./character-skins.js?v=20260814-2";
 
-const ASSET_VERSION = "20260817-3";
+const ASSET_VERSION = "20260817-4";
 const versioned = (url) => `${url}?v=${ASSET_VERSION}`;
 const POWERUP_ART = Object.freeze({
-  health: Object.freeze({ sprite: "health.png", sourceBounds: Object.freeze({ x: 229, y: 193, width: 797, height: 785 }) }),
-  spy: Object.freeze({ sprite: "spy.png", sourceBounds: Object.freeze({ x: 306, y: 180, width: 654, height: 793 }) }),
-  speed: Object.freeze({ sprite: "speed.png", sourceBounds: Object.freeze({ x: 193, y: 107, width: 869, height: 919 }) }),
-  mole: Object.freeze({ sprite: "mole.png", sourceBounds: Object.freeze({ x: 0, y: 0, width: 192, height: 183 }) }),
-  shield: Object.freeze({ sprite: "shield.png", sourceBounds: Object.freeze({ x: 0, y: 0, width: 187, height: 192 }) }),
-  teleport: Object.freeze({ sprite: "teleport.png", sourceBounds: Object.freeze({ x: 0, y: 0, width: 175, height: 192 }) }),
-  fart: Object.freeze({ sprite: "fart.png", sourceBounds: Object.freeze({ x: 0, y: 0, width: 161, height: 192 }) }),
+  health: Object.freeze({ sprite: "health.png", canvas: Object.freeze({ width: 1254, height: 1254 }), sourceBounds: Object.freeze({ x: 229, y: 193, width: 797, height: 785 }) }),
+  spy: Object.freeze({ sprite: "spy.png", canvas: Object.freeze({ width: 1254, height: 1254 }), sourceBounds: Object.freeze({ x: 306, y: 180, width: 654, height: 793 }) }),
+  speed: Object.freeze({ sprite: "speed.png", canvas: Object.freeze({ width: 1254, height: 1254 }), sourceBounds: Object.freeze({ x: 193, y: 107, width: 869, height: 919 }) }),
+  mole: Object.freeze({ sprite: "mole.png", canvas: Object.freeze({ width: 192, height: 183 }), sourceBounds: Object.freeze({ x: 0, y: 0, width: 192, height: 183 }) }),
+  shield: Object.freeze({ sprite: "shield.png", canvas: Object.freeze({ width: 187, height: 192 }), sourceBounds: Object.freeze({ x: 0, y: 0, width: 187, height: 192 }) }),
+  teleport: Object.freeze({ sprite: "teleport.png", canvas: Object.freeze({ width: 175, height: 192 }), sourceBounds: Object.freeze({ x: 0, y: 0, width: 175, height: 192 }) }),
+  fart: Object.freeze({ sprite: "fart.png", canvas: Object.freeze({ width: 161, height: 192 }), sourceBounds: Object.freeze({ x: 0, y: 0, width: 161, height: 192 }) }),
 });
 const WEAPON_ART = Object.freeze({
-  peaShooter: Object.freeze({ sprite: "weapon-pea-shooter.png", sourceBounds: Object.freeze({ x: 0, y: 0, width: 256, height: 199 }) }),
-  pistol: Object.freeze({ sprite: "weapon-pistol.png", sourceBounds: Object.freeze({ x: 166, y: 322, width: 972, height: 552 }) }),
-  burst: Object.freeze({ sprite: "weapon-burst.png", sourceBounds: Object.freeze({ x: 66, y: 325, width: 1127, height: 586 }) }),
-  smg: Object.freeze({ sprite: "weapon-smg.png", sourceBounds: Object.freeze({ x: 64, y: 302, width: 1138, height: 621 }) }),
-  shotgun: Object.freeze({ sprite: "weapon-shotgun.png", sourceBounds: Object.freeze({ x: 44, y: 281, width: 1184, height: 657 }) }),
-  plasmaCannon: Object.freeze({ sprite: "weapon-plasma-cannon.png", sourceBounds: Object.freeze({ x: 27, y: 260, width: 1204, height: 706 }) }),
-  randomGenerator: Object.freeze({ sprite: "weapon-random-generator.png", sourceBounds: Object.freeze({ x: 0, y: 0, width: 1254, height: 1254 }) }),
+  peaShooter: Object.freeze({ sprite: "weapon-pea-shooter.png", canvas: Object.freeze({ width: 256, height: 199 }), sourceBounds: Object.freeze({ x: 0, y: 0, width: 256, height: 199 }) }),
+  pistol: Object.freeze({ sprite: "weapon-pistol.png", canvas: Object.freeze({ width: 1254, height: 1254 }), sourceBounds: Object.freeze({ x: 166, y: 322, width: 972, height: 552 }) }),
+  burst: Object.freeze({ sprite: "weapon-burst.png", canvas: Object.freeze({ width: 1254, height: 1254 }), sourceBounds: Object.freeze({ x: 66, y: 325, width: 1127, height: 586 }) }),
+  smg: Object.freeze({ sprite: "weapon-smg.png", canvas: Object.freeze({ width: 1254, height: 1254 }), sourceBounds: Object.freeze({ x: 64, y: 302, width: 1138, height: 621 }) }),
+  shotgun: Object.freeze({ sprite: "weapon-shotgun.png", canvas: Object.freeze({ width: 1254, height: 1254 }), sourceBounds: Object.freeze({ x: 44, y: 281, width: 1184, height: 657 }) }),
+  plasmaCannon: Object.freeze({ sprite: "weapon-plasma-cannon.png", canvas: Object.freeze({ width: 1254, height: 1254 }), sourceBounds: Object.freeze({ x: 27, y: 260, width: 1204, height: 706 }) }),
+  randomGenerator: Object.freeze({ sprite: "weapon-random-generator.png", canvas: Object.freeze({ width: 1254, height: 1254 }), sourceBounds: Object.freeze({ x: 0, y: 0, width: 1254, height: 1254 }) }),
 });
 
 async function loadJson(url) {
   const response = await fetch(url, { cache: "no-store" });
   if (!response.ok) throw new Error(`Could not load ${url} (${response.status})`);
   return response.json();
-}
-
-export function prefersMobileMapAssets(scope = globalThis) {
-  return scope.navigator?.userAgentData?.mobile === true
-    || scope.matchMedia?.("(pointer: coarse)")?.matches === true
-    || (Number(scope.innerWidth) > 0 && Number(scope.innerWidth) <= 900);
-}
-
-export function mobileOptimizedAssetUrl(url, mobile = prefersMobileMapAssets()) {
-  if (!mobile || !url.includes("/games/game-03/maps/hell-moon/") || !/\.png(?:[?#]|$)/.test(url)) return url;
-  return url.replace(/\.png(?=([?#]|$))/, ".mobile.webp");
 }
 
 function loadImage(url) {
@@ -59,11 +49,41 @@ function loadImage(url) {
   });
 }
 
+async function loadImagesInBatches(urls, concurrency = 4) {
+  const results = new Array(urls.length);
+  let cursor = 0;
+  const worker = async () => {
+    while (cursor < urls.length) {
+      const index = cursor++;
+      results[index] = await loadImage(urls[index]);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(concurrency, urls.length) }, worker));
+  return results;
+}
+
+function scaledSourceBounds(art, image) {
+  const width = image.naturalWidth || image.width;
+  const height = image.naturalHeight || image.height;
+  const scaleX = width / art.canvas.width;
+  const scaleY = height / art.canvas.height;
+  return {
+    x: art.sourceBounds.x * scaleX,
+    y: art.sourceBounds.y * scaleY,
+    width: art.sourceBounds.width * scaleX,
+    height: art.sourceBounds.height * scaleY,
+  };
+}
+
 async function loadCharacterAsset(skin) {
   const [body, shadow] = await Promise.all([loadImage(versioned(skin.sprite)), loadImage(versioned(skin.shadow))]);
   return {
     skin,
-    definition: { ...skin.visual, bodyPivot: { normalized: skin.visual.bodyPivot } },
+    definition: {
+      ...skin.visual,
+      bodyPivot: { normalized: skin.visual.bodyPivot },
+      shadowSourceBounds: scaledSourceBounds({ canvas: { width: 1536, height: 1024 }, sourceBounds: skin.visual.shadowSourceBounds }, shadow),
+    },
     body,
     shadow,
   };
@@ -87,27 +107,32 @@ export async function loadDustyOrbitAssets(mapDefinition = DEFAULT_MAP, onProgre
   const weaponRoot = "./assets/weapons/";
   const definitionById = new Map(environmentDefinitions.map((definition) => [definition.id, definition]));
   const definitionRoot = new Map(ASSET_DEFINITION_URLS.map((url, index) => [environmentDefinitions[index].id, url.slice(0, url.lastIndexOf("/") + 1)]));
-  const [terrain, terrainVariationImages, boundaryOverlayImage, environmentImages, defaultCharacter, health, spy, speed, mole, shield, teleport, fart, peaShooter, pistol, burst, smg, shotgun, plasmaCannon, randomGenerator] = await Promise.all([
-    loadImage(TERRAIN_URL),
-    Promise.all(TERRAIN_VARIATION_TILES.map((tile) => loadImage(tile.url))),
-    BOUNDARY_OVERLAY?.url ? loadImage(BOUNDARY_OVERLAY.url) : Promise.resolve(null),
-    Promise.all(activeEnvironmentDefinitions.map((definition) => loadImage(versioned(definitionRoot.get(definition.id) + definition.sprite)))),
+  const mapImageUrls = [
+    TERRAIN_URL,
+    ...TERRAIN_VARIATION_TILES.map((tile) => tile.url),
+    ...(BOUNDARY_OVERLAY?.url ? [BOUNDARY_OVERLAY.url] : []),
+    ...activeEnvironmentDefinitions.map((definition) => versioned(definitionRoot.get(definition.id) + definition.sprite)),
+  ];
+  const powerupKeys = Object.keys(POWERUP_ART);
+  const weaponKeys = Object.keys(WEAPON_ART);
+  const sharedImageUrls = [
+    ...powerupKeys.map((key) => versioned(powerupRoot + POWERUP_ART[key].sprite)),
+    ...weaponKeys.map((key) => versioned(weaponRoot + WEAPON_ART[key].sprite)),
+  ];
+  const [mapImages, defaultCharacter, sharedImages] = await Promise.all([
+    loadImagesInBatches(mapImageUrls, 4),
     loadCharacterAsset(defaultSkin),
-    loadImage(versioned(powerupRoot + POWERUP_ART.health.sprite)),
-    loadImage(versioned(powerupRoot + POWERUP_ART.spy.sprite)),
-    loadImage(versioned(powerupRoot + POWERUP_ART.speed.sprite)),
-    loadImage(versioned(powerupRoot + POWERUP_ART.mole.sprite)),
-    loadImage(versioned(powerupRoot + POWERUP_ART.shield.sprite)),
-    loadImage(versioned(powerupRoot + POWERUP_ART.teleport.sprite)),
-    loadImage(versioned(powerupRoot + POWERUP_ART.fart.sprite)),
-    loadImage(versioned(weaponRoot + WEAPON_ART.peaShooter.sprite)),
-    loadImage(versioned(weaponRoot + WEAPON_ART.pistol.sprite)),
-    loadImage(versioned(weaponRoot + WEAPON_ART.burst.sprite)),
-    loadImage(versioned(weaponRoot + WEAPON_ART.smg.sprite)),
-    loadImage(versioned(weaponRoot + WEAPON_ART.shotgun.sprite)),
-    loadImage(versioned(weaponRoot + WEAPON_ART.plasmaCannon.sprite)),
-    loadImage(versioned(weaponRoot + WEAPON_ART.randomGenerator.sprite)),
+    loadImagesInBatches(sharedImageUrls, 2),
   ]);
+  let mapImageIndex = 0;
+  const terrain = mapImages[mapImageIndex++];
+  const terrainVariationImages = mapImages.slice(mapImageIndex, mapImageIndex += TERRAIN_VARIATION_TILES.length);
+  const boundaryOverlayImage = BOUNDARY_OVERLAY?.url ? mapImages[mapImageIndex++] : null;
+  const environmentImages = mapImages.slice(mapImageIndex);
+  const powerupImages = sharedImages.slice(0, powerupKeys.length);
+  const weaponImages = sharedImages.slice(powerupKeys.length);
+  const powerupImageByKey = new Map(powerupKeys.map((key, index) => [key, powerupImages[index]]));
+  const weaponImageByKey = new Map(weaponKeys.map((key, index) => [key, weaponImages[index]]));
   onProgress("Building shared environment polygons…", 0.8);
   const imageByAssetId = new Map(activeEnvironmentDefinitions.map((definition, index) => [definition.id, environmentImages[index]]));
   const environment = ENVIRONMENT_INSTANCES.map((instance) => {
@@ -167,22 +192,10 @@ export async function loadDustyOrbitAssets(mapDefinition = DEFAULT_MAP, onProgre
     character: defaultCharacter,
     ensureCharacterSkin,
     powerups: {
-      health: { image: health, sourceBounds: POWERUP_ART.health.sourceBounds },
-      spy: { image: spy, sourceBounds: POWERUP_ART.spy.sourceBounds },
-      speed: { image: speed, sourceBounds: POWERUP_ART.speed.sourceBounds },
-      mole: { image: mole, sourceBounds: POWERUP_ART.mole.sourceBounds },
-      shield: { image: shield, sourceBounds: POWERUP_ART.shield.sourceBounds },
-      teleport: { image: teleport, sourceBounds: POWERUP_ART.teleport.sourceBounds },
-      fart: { image: fart, sourceBounds: POWERUP_ART.fart.sourceBounds },
+      ...Object.fromEntries(powerupKeys.map((key) => [key, { image: powerupImageByKey.get(key), sourceBounds: scaledSourceBounds(POWERUP_ART[key], powerupImageByKey.get(key)) }])),
     },
     weapons: {
-      peaShooter: { image: peaShooter, sourceBounds: WEAPON_ART.peaShooter.sourceBounds },
-      pistol: { image: pistol, sourceBounds: WEAPON_ART.pistol.sourceBounds },
-      burst: { image: burst, sourceBounds: WEAPON_ART.burst.sourceBounds },
-      smg: { image: smg, sourceBounds: WEAPON_ART.smg.sourceBounds },
-      shotgun: { image: shotgun, sourceBounds: WEAPON_ART.shotgun.sourceBounds },
-      plasmaCannon: { image: plasmaCannon, sourceBounds: WEAPON_ART.plasmaCannon.sourceBounds },
-      randomGenerator: { image: randomGenerator, sourceBounds: WEAPON_ART.randomGenerator.sourceBounds },
+      ...Object.fromEntries(weaponKeys.map((key) => [key, { image: weaponImageByKey.get(key), sourceBounds: scaledSourceBounds(WEAPON_ART[key], weaponImageByKey.get(key)) }])),
     },
   };
 }

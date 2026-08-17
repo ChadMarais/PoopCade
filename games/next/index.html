@@ -1751,11 +1751,12 @@
     ]));
     setRoundAnswer(`SWIPE ${dir}.`);
     bindSwipe(dir,()=>correct('WHOOSH.'));
-    const distractor={LEFT:'RIGHT',RIGHT:'LEFT',UP:'DOWN',DOWN:'UP'}[dir];
+    const opposite={LEFT:'RIGHT',RIGHT:'LEFT',UP:'DOWN',DOWN:'UP'}[dir];
+    const arrowDir=Math.random()<.5?dir:opposite;
     sub.textContent='Words outrank arrows.';
     const arrow=document.createElement('div');
     arrow.style.cssText='position:absolute;left:50%;top:55%;transform:translate(-50%,-50%);font-size:94px;font-weight:1000;opacity:.16;';
-    arrow.textContent={LEFT:'←',RIGHT:'→',UP:'↑',DOWN:'↓'}[distractor];arena.appendChild(arrow);
+    arrow.textContent={LEFT:'←',RIGHT:'→',UP:'↑',DOWN:'↓'}[arrowDir];arena.appendChild(arrow);
     armTimeout(2600);
   }
 
@@ -2285,7 +2286,7 @@
       'Hands off.',
       'Behave.'
     ]);
-    const b=targetButton({x:50,y:56,size:148,color:'#ff4f68',text:'DO NOT',onTap:()=>fail('Of course you pressed it.')});
+    const b=targetButton({x:50,y:56,size:148,color:'#ff4f68',text:choice(['PRESS ME','QUICK!']),onTap:()=>fail('Of course you pressed it.')});
     b.animate([{transform:'scale(1)'},{transform:'scale(1.06)'},{transform:'scale(1)'}],
               {duration:520,iterations:Infinity,easing:'ease-in-out'});
     audio.suspense();
