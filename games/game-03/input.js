@@ -355,13 +355,18 @@ export class InputController {
       mouseCanvasY: this.mouseCanvasY,
       mouseRecent: now - this.mouseMovedAt < 1800,
     };
-    return {
+    const sample = {
       moveX: this.visualState.moveX,
       moveY: this.visualState.moveY,
       aimX: this.visualState.aimX,
       aimY: this.visualState.aimY,
       fire: this.visualState.fire,
     };
+    Object.defineProperty(sample, "moveIntentActive", {
+      value: this.enabled && !this.editorBlocked && targetMove.length >= DEADZONE,
+      enumerable: false,
+    });
+    return sample;
   }
 
   getVisualState() { return { ...this.visualState }; }

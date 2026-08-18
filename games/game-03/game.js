@@ -4,9 +4,10 @@ import { loadDustyOrbitAssets } from "./assets.js?v=20260817-7";
 import { PRODUCTION_ARENA_WSS } from "./config.js?v=20260812";
 import { MAP_CATALOG, mapCatalogEntry } from "./maps/catalog.js?v=20260817-4";
 import { DustyOrbitMultiplayerRenderer } from "./renderer.js?v=20260817-10";
-import { InputController } from "./input.js?v=20260817-1";
+import { InputController } from "./input.js?v=20260818-1";
+import { InputNetworkScheduler, reconcilePredictionHistory } from "./input-network.js?v=20260818-1";
 import { claimSessionIdentity, resolvePoopcadePlayerIdentity } from "./identity.js?v=20260813-2";
-import { ArenaNetwork } from "./network.js?v=20260817-1";
+import { ArenaNetwork } from "./network.js?v=20260818-1";
 import { consumeFixedStep, convergeVisualPosition } from "./timing.js?v=20260813-2";
 import { DustyLobby } from "./lobby.js?v=20260817-4";
 import { presenceEndpoint, RECRUITMENT_HREF } from "./presence.js?v=20260817-1";
@@ -177,6 +178,7 @@ const predictionOffset = { x: 0, y: 0 };
 let pending = [];
 let seq = 0;
 let sendAccumulator = 0;
+const inputNetworkScheduler = new InputNetworkScheduler();
 let previousFrame = performance.now();
 let fps = 0;
 let fpsFrames = 0;
@@ -334,6 +336,7 @@ network = new ArenaNetwork({
       pending = [];
       renderer.clearLocalShotHistory();
       sendAccumulator = 0;
+      inputNetworkScheduler.reset();
       inputStepTimes.length = 0;
       localSpeedBoostUntil = 0;
       if (resumeAfterReconnect) {
@@ -429,6 +432,7 @@ network = new ArenaNetwork({
       pending = [];
       renderer.clearLocalShotHistory(message.player?.lastFireIntentId);
       sendAccumulator = 0;
+      inputNetworkScheduler.reset();
       inputStepTimes.length = 0;
       localSpeedBoostUntil = 0;
       input.reset();
@@ -570,9 +574,10 @@ function reconcile(snapshot) {
   if (!finitePoint(authoritative)) return;
   const ack = Number.isSafeInteger(snapshot.you?.ack) ? snapshot.you.ack : 0;
   seq = Math.max(seq, ack);
-  pending = pending.filter((entry) => entry.seq > ack);
-  let replayed = { x: authoritative.x, y: authoritative.y };
-  for (const entry of pending) replayed = applyMovement(replayed, entry, INPUT_DT, authoritative);
+  const history = reconcilePredictionHistory(pending, ack, authoritative,
+    (position, entry) => applyMovement(position, entry, INPUT_DT, authoritative), snapshot.predictionCutoffAt);
+  pending = history.pending;
+  const replayed = history.replayed;
   if (!finitePoint(predicted)) predicted = replayed;
   else {
     const correctionX = predicted.x - replayed.x;
@@ -598,19 +603,32 @@ function currentWeaponDefinition(player) {
   return weaponDefinitions.find((item) => item.tier === player?.weaponTier) || weaponDefinitions[0];
 }
 
-function sendInput(sample, player) {
+function prepareLocalInput(sample, player) {
   const interpolationMs = Number.isFinite(serverRates.interpolationMs) ? serverRates.interpolationMs : 100;
   const viewAt = Math.max(0, Math.round(Date.now() - network.clockOffsetMs - interpolationMs));
   const message = { type: "input", seq: ++seq, moveX: finiteAxis(sample.moveX), moveY: finiteAxis(sample.moveY), aimX: finiteAxis(sample.aimX, 1), aimY: finiteAxis(sample.aimY), fire: Boolean(sample.fire), nuke: performance.now() < nukeQueuedUntil, viewAt };
+  Object.defineProperties(message, {
+    predictionAt: { value: performance.now(), enumerable: false },
+    transmitted: { value: false, writable: true, enumerable: false },
+    moveIntentActive: { value: sample.moveIntentActive, enumerable: false },
+  });
+  pending.push(message);
+  if (pending.length > 180) pending.shift();
+  return message;
+}
+
+function transmitPreparedInput(message, player, now) {
   if (fireProtocol === "intent-v1") {
     message.fireMode = "intent-v1";
     message.fireIntents = renderer.prepareLocalInput(message, player, currentWeaponDefinition(player), {
-      localNow: performance.now(),
+      localNow: now,
       serverNow: Date.now() - network.clockOffsetMs,
       speedMultiplier: turboActive(player) ? gameplay.speedMultiplier : 1,
       weaponState: localGeneratedWeaponState || latestSnapshot?.you?.weaponState,
     });
   } else renderer.captureLocalInputPose(message);
+  const decision = inputNetworkScheduler.decide(message, now);
+  if (!decision.send) return null;
   if (!network.sendInput(message)) {
     if (fireProtocol === "intent-v1") renderer.rollbackLocalInput(message.seq);
     return null;
@@ -622,8 +640,8 @@ function sendInput(sample, player) {
     // autofire continues without turning an 800 ms tap buffer into a burst.
     if (message.fireIntents.length) input.acknowledgeFire();
   }
-  pending.push(message);
-  if (pending.length > 90) pending.shift();
+  message.transmitted = true;
+  inputNetworkScheduler.recordSent(message, now, decision);
   return message;
 }
 
@@ -631,6 +649,7 @@ function updateHud(snapshot) {
   const player = snapshot?.players?.find((item) => item.id === localId);
   const satellitePositions = assets.satellites.map((satellite) => `${satellite.id}: ${satellite.x},${satellite.y}`).join("  ·  ");
   const inputVisual = input.getVisualState();
+  const networkInputStats = inputNetworkScheduler.stats(performance.now());
   const remotes = (snapshot?.players || []).filter((item) => item.id !== localId);
   const remoteSummary = remotes.length
     ? remotes.map((item) => `${item.name} @ ${item.x.toFixed(0)},${item.y.toFixed(0)} AIM ${Math.atan2(item.aimY, item.aimX).toFixed(2)} HP${item.hp} T${item.weaponTier} S${item.killScore}`).join(" · ")
@@ -656,7 +675,8 @@ function updateHud(snapshot) {
     `CONNECTION: ${connectionState.toUpperCase()}  ·  ARENA: ${ARENA_ID}`,
     `LOCAL ID: ${localId.slice(0, 8)}…  ·  NAME: ${playerName}`,
     `PLAYERS: ${snapshot?.players?.length ?? 0}  ·  PING: ${network.rtt.toFixed(1)}ms`,
-    `RATES: INPUT ${Math.min(INPUT_RATE, inputStepTimes.length)}/s · SNAP ${network.snapshotRate}/s · SERVER ${serverRates.tick}/${serverRates.snapshot}`,
+    `RATES: LOCAL ${networkInputStats.localHz}/s · SEND ${networkInputStats.sendHz}/s (${networkInputStats.averageSendHz.toFixed(1)} AVG) · SNAP ${network.snapshotRate}/s · SERVER ${serverRates.tick}/${serverRates.snapshot}`,
+    `NETWORK INPUTS: ${networkInputStats.totalSends} · IMMEDIATE ${networkInputStats.immediateSends} · PERIODIC ${networkInputStats.periodicSends} · FIRE INTENTS ${networkInputStats.fireIntentCount} · LAST ${networkInputStats.lastSendAgeMs?.toFixed(0) ?? "—"}ms`,
     `TICK: ${snapshot?.tick ?? "—"}  ·  POS: ${player ? `${player.x.toFixed(1)}, ${player.y.toFixed(1)}` : "—"}`,
     `SATELLITES: ${satellitePositions || "—"}`,
     `SATELLITE CONNECTED: ${player?.satelliteConnected ? "YES" : "NO"}  ·  CONNECT DISTANCE: ${assets.satelliteConnection.connectTolerance}`,
@@ -723,6 +743,8 @@ function frame(now) {
     sendAccumulator = timing.remainder;
     if (timing.consumed) {
       predicted = applyMovement(predicted, sample, INPUT_DT, player);
+      frameSample = prepareLocalInput(sample, player);
+      inputNetworkScheduler.noteLocalStep(now);
       sendFrameInput = true;
     }
     while (inputStepTimes.length && now - inputStepTimes[0] > 1000) inputStepTimes.shift();
@@ -759,7 +781,7 @@ function frame(now) {
     sendFrameInput && frameSample ? () => {
       // drawPlayer() has produced the exact current muzzle before this callback;
       // prediction, transmission, flash, and the projectile now share one pose.
-      if (sendInput(frameSample, framePlayer)) inputStepTimes.push(now);
+      if (transmitPreparedInput(frameSample, framePlayer, now)) inputStepTimes.push(now);
     } : null,
   );
   fpsFrames++;
@@ -839,7 +861,7 @@ leaveGame.addEventListener("click", () => {
 document.addEventListener("visibilitychange", () => { input.reset(); input.enabled = connectionState === "online" && joined && !document.hidden; network.setActive(!document.hidden); if (!document.hidden) previousFrame = performance.now(); });
 addEventListener("beforeunload", () => { identity.release(); network.close(); presenceNetwork.close(); });
 
-window.__DUSTY_ORBIT_MULTIPLAYER__ = { network, presenceNetwork, renderer, input, collisionEditor, lobby, getState: () => ({ applicationState, connectionState, joined, localId, playerName, authenticated, latestSnapshot, predicted, visualPredicted, predictionOffset: { ...predictionOffset }, pending: [...pending], seq, reconciliationError, maximumReconciliationError, input: input.getVisualState() }) };
+window.__DUSTY_ORBIT_MULTIPLAYER__ = { network, presenceNetwork, renderer, input, collisionEditor, lobby, getState: () => ({ applicationState, connectionState, joined, localId, playerName, authenticated, latestSnapshot, predicted, visualPredicted, predictionOffset: { ...predictionOffset }, pending: [...pending], seq, reconciliationError, maximumReconciliationError, networkInput: inputNetworkScheduler.stats(performance.now()), input: input.getVisualState() }) };
 network.connect(true);
 presenceNetwork.connect(true);
 requestAnimationFrame(frame);

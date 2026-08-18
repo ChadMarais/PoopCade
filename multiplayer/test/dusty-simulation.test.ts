@@ -74,6 +74,33 @@ test("a reconnect neutralizes stale movement and fire without resetting its inpu
   assert.equal(player.vx, 0);
 });
 
+test("authoritative movement retains sparse 10 Hz state and still neutralizes after the 300 ms safety timeout", () => {
+  const simulation = new DustyOrbitSimulation();
+  const player = simulation.addPlayer("10000000-0000-4000-8000-000000000026", "Guest-0026", 1000);
+  player.x = 400; player.y = 400;
+  for (let tick = 0; tick <= 9; tick++) {
+    const now = 1000 + tick * 100 / 3;
+    if (tick % 3 === 0) simulation.applyInput(player.id, input(tick + 1, 1, 0, 1, 0), now);
+    simulation.step(DUSTY_FIXED_DT, now);
+    assert.ok(player.vx > 0, `held movement stopped at tick ${tick}`);
+  }
+  for (let tick = 10; tick <= 18; tick++) simulation.step(DUSTY_FIXED_DT, 1000 + tick * 100 / 3);
+  assert.ok(player.vx > 0, "movement remains held through exactly 300 ms without a refresh");
+  simulation.step(DUSTY_FIXED_DT, 1000 + 19 * 100 / 3);
+  assert.equal(player.vx, 0, "missing refresh safely neutralizes movement after 300 ms");
+});
+
+test("late and duplicate sparse packets cannot overwrite a newer input sequence", () => {
+  const simulation = new DustyOrbitSimulation();
+  const player = simulation.addPlayer("10000000-0000-4000-8000-000000000027", "Guest-0027", 1000);
+  assert.equal(simulation.applyInput(player.id, input(10, 1, 0, 1, 0), 1000), true);
+  assert.equal(simulation.applyInput(player.id, input(9, -1, 0, -1, 0), 1001), false);
+  assert.equal(simulation.applyInput(player.id, input(10, -1, 0, -1, 0), 1002), false);
+  simulation.step(DUSTY_FIXED_DT, 1034);
+  assert.ok(player.vx > 0);
+  assert.equal(player.lastInputSeq, 10);
+});
+
 test("jittered held-fire intents keep every authoritative SMG round tied to its displayed aim", () => {
   const simulation = new DustyOrbitSimulation();
   const player = simulation.addPlayer("10000000-0000-4000-8000-000000000017", "Guest-0017", 1000);

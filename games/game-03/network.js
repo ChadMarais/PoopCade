@@ -106,6 +106,11 @@ export class ArenaNetwork {
   recordSnapshot(snapshot) {
     const now = performance.now();
     const epochNow = Date.now();
+    const estimatedOneWayMs = this.rtt > 0 ? Math.min(250, this.rtt / 2) : 50;
+    Object.defineProperties(snapshot, {
+      clientReceivedAt: { value: now, enumerable: false },
+      predictionCutoffAt: { value: now - estimatedOneWayMs, enumerable: false },
+    });
     this.lastSnapshotAt = now;
     this.snapshotTimes.push(now);
     while (this.snapshotTimes.length && now - this.snapshotTimes[0] > 1000) this.snapshotTimes.shift();

@@ -33,7 +33,7 @@ Map packages live in `games/game-03/maps/{map-id}/`. A package owns its terrain,
 
 - Server simulation: 30 Hz.
 - Snapshot broadcast: 15 Hz.
-- Client input intent: 30 Hz while visible and connected.
+- Client prediction: fixed 30 Hz while visible and connected. Input messages are change-driven with a 10 Hz active refresh, up to 15 Hz during heavy directional changes, immediate critical transitions/fire intents, and a 5-second true-idle refresh.
 - Input is neutralized after 300 ms without a fresh input message.
 - Disconnected players remain stationary for a 5-second reconnect grace period, then leave.
 - Otherwise-stale connections are removed after 15 seconds.

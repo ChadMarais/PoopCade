@@ -65,6 +65,16 @@ test("server clock offset is applied before choosing the interpolation window", 
   assert.ok(Math.abs(snapshot.players[0].x - 5) < .001);
 });
 
+test("snapshot receipt records a monotonic prediction cutoff without adding wire fields", () => {
+  const network = networkWithSnapshots([]);
+  network.rtt = 80;
+  const snapshot = { type: "snapshot", t: 1000, players: [], projectiles: [] };
+  network.recordSnapshot(snapshot);
+  assert.ok(snapshot.clientReceivedAt >= snapshot.predictionCutoffAt);
+  assert.ok(Math.abs(snapshot.clientReceivedAt - snapshot.predictionCutoffAt - 40) < .01);
+  assert.equal(JSON.stringify(snapshot).includes("predictionCutoffAt"), false);
+});
+
 test("remote movement extrapolates briefly instead of freezing between delayed snapshots", () => {
   const network = networkWithSnapshots([
     { type: "snapshot", t: 1000, players: [{ id: "remote", x: 100, y: 50, vx: 165, vy: 0, aimX: 1, aimY: 0, alive: true }], projectiles: [] },
