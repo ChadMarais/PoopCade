@@ -9,7 +9,7 @@ import { InputNetworkScheduler, reconcilePredictionHistory } from "./input-netwo
 import { claimSessionIdentity, resolvePoopcadePlayerIdentity } from "./identity.js?v=20260813-2";
 import { ArenaNetwork } from "./network.js?v=20260818-1";
 import { consumeFixedStep, convergeVisualPosition } from "./timing.js?v=20260813-2";
-import { DustyLobby } from "./lobby.js?v=20260817-4";
+import { DustyLobby } from "./lobby.js?v=20260818-1";
 import { presenceEndpoint, RECRUITMENT_HREF } from "./presence.js?v=20260817-1";
 import { DustyOrbitHighscoreTracker } from "./highscore.js?v=20260813-2";
 import { DustyOrbitAudio } from "./audio.js?v=20260817-5";

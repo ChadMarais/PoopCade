@@ -31,17 +31,36 @@ test("game header omits the redundant scores link while the gameplay HUD retains
   assert.match(html, /\.gameplay-hud[^}]*background:\s*rgba\(18,8,27,\.48\)/);
 });
 
-test("lobby clearly explains the weapon upgrade and death downgrade loop", async () => {
+test("weapon progression stays on the landing page instead of repeating in the lobby", async () => {
+  const [homepage, html, css] = await Promise.all([
+    readFile(new URL("../../index.html", import.meta.url), "utf8"),
+    readFile(new URL("../../games/game-03/index.html", import.meta.url), "utf8"),
+    readFile(new URL("../../games/game-03/lobby.css", import.meta.url), "utf8"),
+  ]);
+  assert.match(homepage, /START WITH A PATHETIC PEA SHOOTER/);
+  assert.doesNotMatch(html, /weapon-rules|YOUR GUN EARNS ITS WAY OUT OF THE GUTTER/);
+  assert.doesNotMatch(css, /\.weapon-rules|\.weapon-rule-steps/);
+});
+
+test("compact lobby renders the full character choice before JavaScript loads on every platform", async () => {
   const [html, css] = await Promise.all([
     readFile(new URL("../../games/game-03/index.html", import.meta.url), "utf8"),
     readFile(new URL("../../games/game-03/lobby.css", import.meta.url), "utf8"),
   ]);
-  assert.match(html, /class="lobby-panel weapon-rules"/);
-  assert.match(html, /START WITH A PATHETIC PEA SHOOTER/);
-  assert.match(html, /EVERY KILL: GUN LEVELS UP/);
-  assert.match(html, /EVERY DEATH: GUN LEVELS DOWN/);
-  assert.match(html, /Death costs one weapon tier, never below T1/);
-  assert.match(css, /\.weapon-rule-steps/);
+  const initialCharacterCards = html.match(/class="skin-card(?: selected)?"/g) || [];
+  assert.equal(initialCharacterCards.length, 6);
+  assert.match(html, /data-skin-preview src="\.\/assets\/characters\/moon-blob-01\/moon-blob-01\.mobile\.webp"/);
+  assert.match(html, /class="map-card selected"[\s\S]*LUNAR LIABILITY/);
+  assert.match(css, /\.lobby-grid \{[^}]*grid-template-columns:minmax\(0,1\.02fr\) minmax\(390px,\.98fr\)/);
+  assert.match(css, /\.selector-panel \{ grid-column:1; grid-row:2;/);
+  assert.match(css, /\.skin-rail \{ grid-column:2; grid-row:2; display:grid; grid-template-columns:repeat\(3,minmax\(0,1fr\)\)/);
+  assert.match(css, /\.skin-card strong,\.skin-card small \{ display:none; \}/);
+  assert.match(css, /\.skin-card img \{ width:68px; height:68px;/);
+  assert.match(html, /aria-label="Select Major Disappointment" title="Major Disappointment"/);
+  assert.match(css, /\.selector-panel>div:first-child \{ grid-column:1\/-1; display:flex;/);
+  assert.match(css, /\.selector-panel>div:first-child h2 \{ margin:0; white-space:nowrap; \}/);
+  assert.match(css, /\.roster-panel \{ grid-column:2; grid-row:1\/3;/);
+  assert.doesNotMatch(css, /@media\(max-width:520px\)[\s\S]*\.selector-panel\{[^}]*min-height:520px/);
 });
 
 test("localhost previews connect to the IPv4-bound local Worker", async () => {

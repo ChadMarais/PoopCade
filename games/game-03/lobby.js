@@ -156,6 +156,7 @@ export class DustyLobby {
       button.className = "skin-card";
       button.dataset.skinId = skin.id;
       button.setAttribute("aria-label", `Select ${skin.displayName}`);
+      button.title = skin.displayName;
       const image = document.createElement("img");
       image.src = mobileOptimizedAssetUrl(skin.sprite);
       image.alt = "";

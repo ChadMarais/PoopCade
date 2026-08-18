@@ -49,6 +49,6 @@ test("Murderball progression copy remains cheeky without profanity", async () =>
     readFile(new URL("../../games/game-03/index.html", import.meta.url), "utf8"),
   ]);
   assert.match(homepage, /START WITH A PATHETIC PEA SHOOTER/);
-  assert.match(lobby, /START WITH A PATHETIC PEA SHOOTER/);
+  assert.doesNotMatch(lobby, /START WITH A PATHETIC PEA SHOOTER/);
   assert.doesNotMatch(`${homepage}\n${lobby}`, /\bshit\b/i);
 });

@@ -7,7 +7,7 @@
   <meta name="description" content="Nebula Murderball, Poopcade's live multiplayer space free-for-all.">
   <title>NEBULA MURDERBALL — Poopcade Game 01</title>
   <script>if(new URLSearchParams(location.search).get('autojoin')==='1')document.documentElement.classList.add('arena-transition')</script>
-  <link rel="stylesheet" href="./lobby.css?v=20260815-1">
+  <link rel="stylesheet" href="./lobby.css?v=20260818-3">
   <style>
     :root { color-scheme: dark; font-family: ui-sans-serif, system-ui, sans-serif; }
     * { box-sizing: border-box; }
@@ -104,22 +104,24 @@
       <div class="lobby-profile"><strong data-lobby-player-name>Guest pilot</strong><p data-lobby-identity>CHECKING PROFILE</p></div>
     </header>
     <div class="lobby-grid">
-      <section class="lobby-panel weapon-rules" aria-labelledby="weaponRulesHeading">
-        <div class="weapon-rules-copy"><span class="eyebrow">HOW MURDERBALL WORKS</span><h2 id="weaponRulesHeading">YOUR GUN EARNS ITS WAY OUT OF THE GUTTER</h2><p>Climb from the Pea Shooter to the Plasma Cannon. Your weapon tier follows your body count.</p></div>
-        <ol class="weapon-rule-steps">
-          <li><b>T1</b><span><strong>START WITH A PATHETIC PEA SHOOTER</strong><small>Everybody begins with the galaxy’s least intimidating gun.</small></span></li>
-          <li><b>+1</b><span><strong>EVERY KILL: GUN LEVELS UP</strong><small>One kill earns one stronger weapon tier.</small></span></li>
-          <li><b>−1</b><span><strong>EVERY DEATH: GUN LEVELS DOWN</strong><small>Death costs one weapon tier, never below T1.</small></span></li>
-        </ol>
-      </section>
       <section class="lobby-panel map-panel" aria-labelledby="mapHeading">
         <div class="map-panel-heading"><div><span class="eyebrow">MAP SELECT</span><h2 id="mapHeading">PICK YOUR CRIME SCENE</h2></div><button class="quick-join-button" data-quick-join type="button">QUICK JOIN</button></div>
-        <div class="map-rail" data-map-cards aria-label="Available maps"></div>
+        <div class="map-rail" data-map-cards aria-label="Available maps">
+          <button class="map-card selected" type="button" aria-pressed="true" aria-label="Lunar Liability, connecting" style="background-image:url('/games/game-03/maps/lunar-liability/preview/dusty-orbit-lobby-preview.webp?v=20260817-1')"><span class="map-card-copy"><strong>LUNAR LIABILITY</strong><small>An abandoned relay outpost with rocks, guns, and absolutely no waiver form.</small><span>CONNECTING…</span></span></button>
+          <button class="map-card" type="button" aria-pressed="false" aria-label="Hell Moon, connecting" style="background-image:url('/games/game-03/maps/hell-moon/preview/hell-moon-lobby-preview-optimized.webp?v=20260817-1')"><span class="map-card-copy"><strong>HELL MOON</strong><small>Four fractured volcanic territories orbit a brutal central combat ring.</small><span>CONNECTING…</span></span></button>
+        </div>
       </section>
       <section class="lobby-panel selector-panel" aria-labelledby="characterHeading">
         <div><span class="eyebrow">CHARACTER SELECT</span><h2 id="characterHeading">PICK YOUR PROBLEM</h2></div>
-        <div class="character-stage"><i class="character-glow"></i><img data-skin-preview alt=""><div class="preview-copy"><h3 data-preview-name></h3><p data-preview-description></p></div></div>
-        <div class="skin-rail" data-skin-cards aria-label="Available character skins"></div>
+        <div class="character-stage"><i class="character-glow"></i><img data-skin-preview src="./assets/characters/moon-blob-01/moon-blob-01.mobile.webp" alt="Purple Nurple"><div class="preview-copy"><h3 data-preview-name>PURPLE NURPLE</h3><p data-preview-description>Small, purple, and alarmingly confident.</p></div></div>
+        <div class="skin-rail" data-skin-cards aria-label="Available character skins">
+          <button class="skin-card selected" type="button" aria-pressed="true" aria-label="Select Purple Nurple" title="Purple Nurple"><img src="./assets/characters/moon-blob-01/moon-blob-01.mobile.webp" alt=""><span><strong>PURPLE NURPLE</strong><small>Small, purple, and alarmingly confident.</small></span></button>
+          <button class="skin-card" type="button" aria-pressed="false" aria-label="Select Sir Pricks-a-Lot" title="Sir Pricks-a-Lot"><img src="./assets/characters/ivory-dart-01/ivory-dart-01.mobile.webp" alt=""><span><strong>SIR PRICKS-A-LOT</strong><small>Pointy, polished, and exhausting at parties.</small></span></button>
+          <button class="skin-card" type="button" aria-pressed="false" aria-label="Select Major Disappointment" title="Major Disappointment"><img src="./assets/characters/mint-tank-01/mint-tank-01.mobile.webp" alt=""><span><strong>MAJOR DISAPPOINTMENT</strong><small>Built like a fridge. Handles like a grievance.</small></span></button>
+          <button class="skin-card" type="button" aria-pressed="false" aria-label="Select The Probe-lem" title="The Probe-lem"><img src="./assets/characters/void-orb-01/void-orb-01.mobile.webp" alt=""><span><strong>THE PROBE-LEM</strong><small>A glowing HR incident with excellent posture.</small></span></button>
+          <button class="skin-card" type="button" aria-pressed="false" aria-label="Select Guac Norris" title="Guac Norris"><img src="./assets/characters/guac-norris-01/guac-norris-01.mobile.webp" alt=""><span><strong>GUAC NORRIS</strong><small>A war crime with a charging dock.</small></span></button>
+          <button class="skin-card" type="button" aria-pressed="false" aria-label="Select Boopert Einstein" title="Boopert Einstein"><img src="./assets/characters/boopert-einstein-01/boopert-einstein-01.mobile.webp" alt=""><span><strong>BOOPERT EINSTEIN</strong><small>One brain cell. It has a tiny helmet.</small></span></button>
+        </div>
       </section>
       <section class="lobby-panel roster-panel" aria-labelledby="rosterHeading">
         <div class="roster-heading"><div><span class="eyebrow">CURRENTLY CAUSING TROUBLE</span><h2 id="rosterHeading">WHO'S IN ORBIT?</h2></div><div class="lobby-counts"><div class="player-count"><span>IN ARENA</span><strong data-player-count>0 / 15</strong></div><div class="player-count"><span>ONLINE</span><strong data-online-count>0</strong></div></div></div>
@@ -165,6 +167,6 @@
   </div>
   <div id="loading" class="loading"><div><h1>NEBULA MURDERBALL</h1><p id="loadingText">LOADING MULTIPLAYER ASSETS…</p><div class="track"><div id="loadingBar" class="bar"></div></div></div></div>
   <a class="dusty-recruitment-toast" data-recruitment-toast href="/games/game-03/" hidden aria-live="polite"><strong>MURDERBALL INVITE</strong><span data-recruitment-copy></span><b>JOIN THEIR GAME →</b></a>
-  <script type="module" src="./game.js?v=20260818-1"></script>
+  <script type="module" src="./game.js?v=20260818-2"></script>
 </body>
 </html>
