@@ -524,7 +524,49 @@
   .shell:not(.menu-mode):not(.over-mode) .host.challenge-active .hostBubble{display:block;right:auto;left:50%;top:calc(100% + 4px);width:min(230px,72vw);transform:translate(-50%,5px);text-align:center}
   .shell:not(.menu-mode):not(.over-mode) .host.challenge-active .hostBubble.show{transform:translate(-50%,0)}
   @media(max-width:340px){.shell:not(.menu-mode):not(.over-mode) .host.challenge-active{width:118px;top:55%}}
-  @media(prefers-reduced-motion:reduce){.hostMachine,.host[data-reaction],.host[data-reaction] .hostMachine{animation:none!important}.host,.hostBubble{transition:none!important}}
+  /* Main-menu test chamber. Gameplay and game-over layouts keep their compact HUD styling. */
+  .shell.menu-mode{width:min(100vw,1080px);border-color:rgba(99,231,255,.08);background:radial-gradient(circle at 78% 36%,rgba(99,231,255,.1),transparent 25%),radial-gradient(circle at 18% 76%,rgba(255,78,145,.1),transparent 30%),linear-gradient(145deg,#0b0d16,#07080d 62%,#120913)}
+  .shell.menu-mode::before,.shell.menu-mode::after{opacity:.2}
+  .shell.menu-mode .startScreen{align-items:flex-start;justify-content:center;padding:max(82px,calc(env(safe-area-inset-top) + 70px)) 48% max(34px,env(safe-area-inset-bottom)) clamp(30px,6vw,70px);background:linear-gradient(90deg,rgba(6,7,11,.98) 0%,rgba(6,7,11,.91) 46%,rgba(6,7,11,.2) 72%,rgba(6,7,11,.7)),repeating-linear-gradient(90deg,transparent 0 69px,rgba(99,231,255,.025) 70px),repeating-linear-gradient(0deg,transparent 0 69px,rgba(99,231,255,.025) 70px);backdrop-filter:none;text-align:left;isolation:isolate}
+  .shell.menu-mode .startScreen::before{position:absolute;inset:18px;z-index:-1;content:"";border:1px solid rgba(99,231,255,.12);clip-path:polygon(0 0,33% 0,35% 8px,65% 8px,67% 0,100% 0,100% 100%,72% 100%,70% calc(100% - 8px),30% calc(100% - 8px),28% 100%,0 100%);pointer-events:none}
+  .shell.menu-mode .startScreen::after{position:absolute;left:0;right:0;bottom:7%;height:1px;z-index:-1;content:"";background:linear-gradient(90deg,transparent,var(--hot),var(--cyan),transparent);box-shadow:0 0 24px rgba(99,231,255,.34);pointer-events:none}
+  .startConsole{position:relative;width:min(390px,100%);padding:30px 30px 25px;border:1px solid rgba(99,231,255,.2);border-radius:3px 24px 3px 24px;background:linear-gradient(145deg,rgba(23,25,38,.94),rgba(10,11,17,.96));box-shadow:0 34px 90px rgba(0,0,0,.52),inset 0 1px 0 rgba(255,255,255,.06);text-align:left}
+  .startConsole::before{position:absolute;left:-1px;top:25px;width:3px;height:54px;content:"";background:linear-gradient(var(--hot),var(--purple));box-shadow:0 0 17px var(--hot)}
+  .menuProtocol{display:flex;align-items:center;gap:8px;margin-bottom:20px;color:#9ba0b5;font:900 9px/1 ui-monospace,monospace;letter-spacing:.17em;text-transform:uppercase}
+  .menuProtocol::before{width:8px;height:8px;content:"";border-radius:50%;background:var(--hot);box-shadow:0 0 13px var(--hot);animation:menuProtocolPulse 1.5s steps(2) infinite}
+  .shell.menu-mode .logo{font-size:clamp(76px,10vw,112px);line-height:.75;text-shadow:0 0 44px rgba(157,123,255,.16)}
+  .shell.menu-mode .tag{margin-top:17px;color:#eef1f8;font-size:18px;font-weight:900}
+  .shell.menu-mode .rules{margin:13px 0 18px;max-width:330px;color:#8f94a8;font:750 11px/1.55 ui-monospace,monospace}
+  .testTypes{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:19px}
+  .testTypes span{padding:8px 5px;border:1px solid rgba(255,255,255,.09);border-radius:7px;color:#858a9e;background:rgba(255,255,255,.025);font:850 7px/1 ui-monospace,monospace;letter-spacing:.1em;text-align:center;text-transform:uppercase}
+  .testTypes span:nth-child(1){border-color:rgba(99,231,255,.2);color:#9cefff}.testTypes span:nth-child(2){border-color:rgba(201,255,90,.18);color:#ddff96}.testTypes span:nth-child(3){border-color:rgba(255,78,145,.2);color:#ff98bf}
+  .shell.menu-mode .startBtn{position:relative;width:100%;min-height:58px;overflow:hidden;border:1px solid rgba(255,255,255,.6);border-radius:8px;color:#090a10;background:linear-gradient(105deg,var(--cyan),#fff 48%,var(--lime));font:1000 13px/1 ui-monospace,monospace;letter-spacing:.16em;box-shadow:0 15px 35px rgba(99,231,255,.16),inset 0 -4px 0 rgba(0,0,0,.12);cursor:pointer}
+  .shell.menu-mode .startBtn::after{position:absolute;inset:-50% auto -50% -30%;width:18%;content:"";background:rgba(255,255,255,.75);filter:blur(6px);transform:skewX(-18deg);animation:menuButtonScan 3s ease-in-out infinite}
+  .shell.menu-mode .startLinks{justify-content:flex-start;margin-top:12px}
+  .shell.menu-mode .secondaryLink{border-radius:7px;background:rgba(255,255,255,.025)}
+  .shell.menu-mode .tiny{margin-top:14px;color:#555b70;font:850 8px/1 ui-monospace,monospace}
+  .shell.menu-mode .host{right:clamp(45px,10vw,105px);top:50%;bottom:auto;width:clamp(230px,32vw,330px);transform:translateY(-50%);filter:drop-shadow(0 35px 38px rgba(0,0,0,.62)) drop-shadow(0 0 28px rgba(99,231,255,.12))}
+  .shell.menu-mode .host::before,.shell.menu-mode .host::after{position:absolute;z-index:-1;content:"";border-radius:50%;pointer-events:none}
+  .shell.menu-mode .host::before{inset:-18%;border:1px solid rgba(99,231,255,.15);background:conic-gradient(from 0deg,transparent,rgba(99,231,255,.08),transparent 28%);animation:hostRadar 10s linear infinite}
+  .shell.menu-mode .host::after{left:4%;right:4%;bottom:-17%;height:20%;background:rgba(99,231,255,.22);filter:blur(22px)}
+  .shell.menu-mode .hostBubble{left:50%;right:auto;top:calc(100% + 13px);width:min(250px,34vw);padding:11px 13px;border-radius:12px 12px 3px 12px;transform:translate(-50%,5px);text-align:center}
+  .shell.menu-mode .hostBubble.show{transform:translate(-50%,0)}
+  @keyframes menuProtocolPulse{50%{opacity:.35}}
+  @keyframes menuButtonScan{0%,62%{left:-30%;opacity:0}72%{opacity:.8}88%,100%{left:115%;opacity:0}}
+  @keyframes hostRadar{to{transform:rotate(360deg)}}
+  @media(max-width:700px){
+    .shell.menu-mode .startScreen{align-items:center;justify-content:flex-start;padding:max(220px,34vh) 18px max(24px,env(safe-area-inset-bottom));background:linear-gradient(180deg,rgba(6,7,11,.7),rgba(6,7,11,.97) 36%),repeating-linear-gradient(90deg,transparent 0 49px,rgba(99,231,255,.025) 50px)}
+    .shell.menu-mode .host{right:50%;top:max(35px,calc(env(safe-area-inset-top) + 22px));width:clamp(145px,32vw,190px);transform:translateX(50%)}
+    .shell.menu-mode .hostBubble{width:min(220px,62vw);top:calc(100% + 2px)}
+    .startConsole{width:min(420px,100%);padding:24px 22px 21px;text-align:center}
+    .menuProtocol{justify-content:center;margin-bottom:17px}
+    .shell.menu-mode .logo{font-size:clamp(64px,19vw,92px)}
+    .shell.menu-mode .rules{margin-inline:auto}
+    .shell.menu-mode .startLinks{justify-content:center}
+  }
+  @media(max-width:420px){.shell.menu-mode .startScreen{padding-top:max(205px,31vh)}.shell.menu-mode .host{width:132px}.startConsole{padding:21px 17px 18px}.shell.menu-mode .tag{font-size:15px}.testTypes span{font-size:6px}.shell.menu-mode .rules{font-size:10px}}
+  @media(max-height:650px) and (min-width:701px){.shell.menu-mode .startScreen{padding-top:64px;padding-bottom:22px}.startConsole{padding:21px 24px 18px}.shell.menu-mode .logo{font-size:72px}.shell.menu-mode .rules{margin-block:10px}.menuProtocol{margin-bottom:14px}.testTypes{margin-bottom:12px}.shell.menu-mode .host{width:220px}}
+  @media(prefers-reduced-motion:reduce){.hostMachine,.host[data-reaction],.host[data-reaction] .hostMachine,.shell.menu-mode .host::before,.menuProtocol::before,.shell.menu-mode .startBtn::after{animation:none!important}.host,.hostBubble{transition:none!important}}
 </style>
 </head>
 <body>
@@ -587,12 +629,16 @@
     </aside>
 
     <section class="startScreen" id="startScreen">
-      <div class="logo">NEXT<span class="dot">.</span></div>
-      <div class="tag">You’ll figure it out.</div>
-      <div class="rules">Tiny challenges.<br>Do what the machine says.<br>Preferably before it changes its mind.</div>
-      <button class="startBtn" id="startBtn">START</button>
-      <div class="startLinks"><a class="secondaryLink" href="/">← Poopcade</a><a class="secondaryLink" href="/leaderboard/next/">Leaderboard</a></div>
-      <div class="tiny">GAME 02 · POOPCADE</div>
+      <div class="startConsole">
+        <div class="menuProtocol">Assessment chamber online</div>
+        <div class="logo">NEXT<span class="dot">.</span></div>
+        <div class="tag">You’ll figure it out.</div>
+        <div class="rules">Tiny challenges. Do what the machine says. Preferably before it changes its mind.</div>
+        <div class="testTypes" aria-label="Challenge categories"><span>Reaction</span><span>Memory</span><span>Deception</span></div>
+        <button class="startBtn" id="startBtn">BEGIN TEST →</button>
+        <div class="startLinks"><a class="secondaryLink" href="/">← Poopcade</a><a class="secondaryLink" href="/leaderboard/next/">Leaderboard</a></div>
+        <div class="tiny">GAME 03 · POOPCADE // ONE LIFE ISSUED</div>
+      </div>
     </section>
 
     <section class="gameOver" id="gameOver">

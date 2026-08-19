@@ -754,27 +754,138 @@
       line-height: 1.55;
     }
 
-    #startOverlay { overflow-y: auto; }
+    #startOverlay {
+      overflow-y: auto;
+      background:
+        radial-gradient(circle at 14% 24%, rgba(88,231,255,.13), transparent 26%),
+        radial-gradient(circle at 86% 78%, rgba(255,79,216,.14), transparent 30%),
+        linear-gradient(120deg, rgba(4,4,16,.72), rgba(8,6,27,.48));
+      backdrop-filter: blur(5px);
+      isolation: isolate;
+    }
+    #startOverlay::before {
+      position: fixed;
+      inset: 0;
+      z-index: -1;
+      content: "";
+      opacity: .27;
+      background-image:
+        radial-gradient(circle, rgba(160,239,255,.85) 0 1px, transparent 1.5px),
+        linear-gradient(rgba(88,231,255,.035) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(88,231,255,.035) 1px, transparent 1px);
+      background-size: 47px 47px, 34px 34px, 34px 34px;
+      mask-image: linear-gradient(135deg, black, transparent 82%);
+      animation: menuStarDrift 22s linear infinite;
+      pointer-events: none;
+    }
     #startOverlay .panel {
-      width: min(480px, 100%);
+      position: relative;
+      width: min(1040px, 100%);
       margin: auto 0;
-      padding: clamp(20px, 4vw, 30px);
+      padding: 0;
+      overflow: hidden;
+      border-color: rgba(111,231,255,.24);
+      border-radius: 30px;
+      background: linear-gradient(135deg, rgba(25,25,61,.94), rgba(10,10,29,.96) 58%, rgba(24,12,46,.95));
+      box-shadow: 0 46px 130px rgba(0,0,0,.62), 0 0 70px rgba(88,231,255,.07), inset 0 1px 0 rgba(255,255,255,.11);
+      text-align: left;
     }
-    #startOverlay .menu-nav { margin-bottom: 8px; }
-    #startOverlay .hub-link { min-height: 34px; }
-    #startOverlay .eyebrow { margin-bottom: 6px; font-size: 10px; }
-    #startOverlay h1 {
-      font-size: clamp(24px, 5vw, 38px);
-      line-height: .95;
-      letter-spacing: -.055em;
+    #startOverlay .panel::before {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 0;
+      height: 3px;
+      content: "";
+      background: linear-gradient(90deg, var(--cyan), var(--violet) 52%, var(--pink));
+      box-shadow: 0 0 24px rgba(88,231,255,.6);
     }
-    #startOverlay .subtitle { margin-top: 10px; max-width: 410px; font-size: 13px; line-height: 1.4; }
-    #startOverlay .difficulty-wrap { margin: 14px 0 11px; }
-    #startOverlay .power-guide { gap: 6px; margin: 11px 0 13px; }
-    #startOverlay .power-guide-item { min-height: 50px; padding: 7px; }
-    #startOverlay .power-guide-icon { width: 30px; height: 30px; }
-    #startOverlay .primary { min-height: 49px; }
-    #startOverlay .hint { margin-top: 9px; }
+    .orbit-menu-layout { display: grid; grid-template-columns: minmax(300px,.88fr) minmax(430px,1.12fr); min-height: 620px; }
+    .orbit-menu-hero {
+      position: relative;
+      display: flex;
+      min-width: 0;
+      flex-direction: column;
+      padding: 28px clamp(24px,4vw,42px) 30px;
+      overflow: hidden;
+      border-right: 1px solid rgba(255,255,255,.09);
+      background: radial-gradient(circle at 50% 58%, rgba(88,231,255,.12), transparent 37%), linear-gradient(155deg, rgba(255,255,255,.035), transparent 62%);
+    }
+    .orbit-menu-hero::after {
+      position: absolute;
+      width: 440px;
+      height: 440px;
+      left: -240px;
+      bottom: -285px;
+      content: "";
+      border: 1px solid rgba(255,79,216,.17);
+      border-radius: 50%;
+      box-shadow: 0 0 80px rgba(255,79,216,.08), inset 0 0 90px rgba(139,108,255,.06);
+    }
+    .orbit-menu-loadout { display: flex; min-width: 0; flex-direction: column; padding: 32px clamp(24px,3.5vw,40px) 26px; }
+    #startOverlay .menu-nav { margin-bottom: auto; }
+    #startOverlay .hub-link { min-height: 36px; border-color: rgba(88,231,255,.22); background: rgba(88,231,255,.04); }
+    #startOverlay .eyebrow { margin: 34px 0 9px; color: var(--cyan); font: 900 10px/1 ui-monospace,monospace; letter-spacing: .25em; }
+    #startOverlay h1 { max-width: 390px; font-size: clamp(48px,6.5vw,78px); line-height: .82; letter-spacing: -.075em; }
+    #startOverlay .subtitle { margin: 17px 0 0; max-width: 350px; color: #c1c5df; font-size: 14px; line-height: 1.5; }
+    .orbit-menu-status { display: flex; align-items: center; gap: 8px; margin-top: 16px; color: #dce3f5; font: 900 9px/1 ui-monospace,monospace; letter-spacing: .14em; text-transform: uppercase; }
+    .orbit-menu-status::before { width: 8px; height: 8px; content: ""; border-radius: 50%; background: var(--good); box-shadow: 0 0 13px var(--good); animation: statusPulse 1.8s ease-in-out infinite; }
+    .orbit-visual { position: relative; width: min(310px,75%); aspect-ratio: 1; margin: 14px auto 0; }
+    .orbit-ring { position: absolute; inset: 9%; border: 1px solid rgba(88,231,255,.34); border-radius: 50%; box-shadow: 0 0 28px rgba(88,231,255,.09), inset 0 0 28px rgba(88,231,255,.05); animation: menuOrbit 12s linear infinite; }
+    .orbit-ring::before,.orbit-ring::after { position: absolute; content: ""; border-radius: 50%; }
+    .orbit-ring::before { inset: 18%; border: 1px dashed rgba(255,255,255,.19); }
+    .orbit-ring::after { width: 15px; height: 15px; left: 13%; top: 12%; background: var(--pink); box-shadow: 0 0 18px var(--pink), 0 0 42px rgba(255,79,216,.5); }
+    .orbit-core { position: absolute; inset: 36%; border: 1px solid rgba(255,255,255,.4); border-radius: 50%; background: radial-gradient(circle at 36% 30%, #fff, var(--cyan) 8%, #353070 46%, #0a0a1d 70%); box-shadow: 0 0 30px rgba(88,231,255,.44), 0 0 75px rgba(139,108,255,.22); }
+    .orbit-ship { position: absolute; left: 49%; top: 4%; width: 24px; height: 38px; clip-path: polygon(50% 0,100% 100%,50% 77%,0 100%); background: linear-gradient(90deg,var(--pink),white 48%,var(--cyan)); filter: drop-shadow(0 0 10px var(--cyan)); transform: translateX(-50%) rotate(12deg); }
+    .orbit-telemetry { display: grid; grid-template-columns: repeat(3,1fr); gap: 6px; margin-top: auto; }
+    .orbit-telemetry span { padding: 9px 6px; border: 1px solid rgba(255,255,255,.08); border-radius: 9px; color: #9298b8; background: rgba(255,255,255,.025); font: 850 8px/1 ui-monospace,monospace; letter-spacing: .12em; text-align: center; text-transform: uppercase; }
+    .orbit-telemetry b { display: block; margin-top: 5px; color: white; font-size: 10px; }
+    #startOverlay .difficulty-wrap { margin: 0 0 16px; }
+    #startOverlay .difficulty-title { margin-bottom: 10px; }
+    #startOverlay .difficulty-title strong { color: white; font: 950 11px/1 ui-monospace,monospace; letter-spacing: .16em; }
+    #startOverlay .difficulty-btn { min-height: 62px; border-radius: 12px; background: rgba(255,255,255,.025); }
+    #startOverlay .power-guide { grid-template-columns: repeat(2,1fr); gap: 7px; margin: 0 0 17px; }
+    #startOverlay .power-guide-item { min-height: 57px; padding: 8px; border-radius: 12px; background: rgba(255,255,255,.025); }
+    #startOverlay .power-guide-icon { width: 32px; height: 32px; border-radius: 9px; }
+    #startOverlay .primary { position: relative; min-height: 58px; overflow: hidden; border-radius: 14px; font: 1000 13px/1 ui-monospace,monospace; letter-spacing: .13em; box-shadow: 0 16px 38px rgba(88,231,255,.22), 0 0 35px rgba(255,79,216,.1); }
+    #startOverlay .primary::after { position: absolute; inset: -50% auto -50% -30%; width: 22%; content: ""; background: rgba(255,255,255,.46); filter: blur(7px); transform: skewX(-20deg); animation: menuSheen 3.2s ease-in-out infinite; }
+    #startOverlay .hint { margin: 11px auto 0; color: rgba(230,233,255,.48); font-size: 10px; line-height: 1.45; text-align: center; }
+    @keyframes menuOrbit { to { transform: rotate(360deg); } }
+    @keyframes menuStarDrift { to { background-position: 47px 94px, 0 34px, 34px 0; } }
+    @keyframes statusPulse { 50% { opacity: .48; transform: scale(.8); } }
+    @keyframes menuSheen { 0%,62% { left:-30%; opacity:0; } 72% { opacity:.7; } 88%,100% { left:115%; opacity:0; } }
+
+    @media (max-width: 860px) {
+      .orbit-menu-layout { grid-template-columns: 1fr; }
+      .orbit-menu-hero { min-height: 340px; border-right: 0; border-bottom: 1px solid rgba(255,255,255,.09); }
+      #startOverlay .menu-nav { margin-bottom: 16px; }
+      #startOverlay .eyebrow { margin-top: 10px; }
+      .orbit-visual { position: absolute; width: 270px; right: 2%; top: 45px; opacity: .72; }
+      #startOverlay h1,#startOverlay .subtitle,.orbit-menu-status { position: relative; z-index: 1; max-width: 55%; }
+      .orbit-telemetry { position: relative; z-index: 1; width: 55%; margin-top: auto; }
+    }
+
+    @media (max-width: 560px) {
+      #startOverlay { padding: 10px; }
+      #startOverlay .panel { border-radius: 22px; }
+      .orbit-menu-hero { min-height: 315px; padding: 18px; }
+      .orbit-menu-loadout { padding: 20px 16px 18px; }
+      #startOverlay .eyebrow { margin-top: 7px; font-size: 8px; }
+      #startOverlay h1 { max-width: 62%; font-size: clamp(40px,14vw,58px); }
+      #startOverlay .subtitle { max-width: 61%; font-size: 11px; }
+      .orbit-menu-status { font-size: 7px; }
+      .orbit-visual { width: 210px; right: -35px; top: 73px; }
+      .orbit-telemetry { width: 70%; }
+      .orbit-telemetry span { padding: 7px 3px; font-size: 6px; }
+      .orbit-telemetry b { font-size: 8px; }
+      #startOverlay .difficulty-btn { min-height: 55px; padding-inline: 4px; }
+      #startOverlay .difficulty-btn strong { font-size: 10px; }
+      #startOverlay .difficulty-btn span { font-size: 7px; }
+      #startOverlay .power-guide-item { grid-template-columns: 27px 1fr; min-height: 49px; padding: 6px; }
+      #startOverlay .power-guide-icon { width: 27px; height: 27px; font-size: 11px; }
+      #startOverlay .power-guide-item strong { font-size: 9px; }
+      #startOverlay .power-guide-item span { font-size: 8px; }
+    }
 
     @media (max-width: 520px) {
       .hud { grid-template-columns: 1fr auto 1fr; gap: 6px; }
@@ -801,6 +912,7 @@
 
     @media (prefers-reduced-motion: reduce) {
       *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; }
+      #startOverlay::before,.orbit-ring,.orbit-menu-status::before,#startOverlay .primary::after { animation: none !important; }
     }
   </style>
 </head>
@@ -856,13 +968,18 @@
 
   <div class="overlay" id="startOverlay">
     <div class="panel">
-      <div class="menu-nav"><a class="hub-link" href="/">← Poopcade</a></div>
-      <div class="eyebrow">One-button campaign</div>
-      <h1>ORBIT//SHIFT</h1>
-      <p class="subtitle">
-        Reverse your orbit. Thread the gaps. Survive the storm.
-      </p>
-      <div class="difficulty-wrap">
+      <div class="orbit-menu-layout">
+        <section class="orbit-menu-hero" aria-labelledby="orbitMenuTitle">
+          <div class="menu-nav"><a class="hub-link" href="/">← Poopcade</a></div>
+          <div class="eyebrow">One-button orbital campaign</div>
+          <h1 id="orbitMenuTitle">ORBIT//<br>SHIFT</h1>
+          <p class="subtitle">Reverse your orbit. Thread the gaps. Survive the storm.</p>
+          <div class="orbit-menu-status">Campaign systems ready</div>
+          <div class="orbit-visual" aria-hidden="true"><div class="orbit-ring"><i class="orbit-ship"></i></div><div class="orbit-core"></div></div>
+          <div class="orbit-telemetry" aria-hidden="true"><span>Control<b>1 button</b></span><span>Objective<b>7 levels</b></span><span>Style<b>Full orbit</b></span></div>
+        </section>
+        <section class="orbit-menu-loadout" aria-label="Campaign setup">
+          <div class="difficulty-wrap">
         <div class="difficulty-title">
           <strong>Difficulty</strong>
           <span>Higher risk = higher score</span>
@@ -878,8 +995,8 @@
             <strong>Hard</strong><span>Tighter & faster · ×1.35 score</span>
           </button>
         </div>
-      </div>
-      <div class="power-guide" aria-label="Power-up guide">
+          </div>
+          <div class="power-guide" aria-label="Power-up guide">
         <div class="power-guide-item" style="--power-color:#6ef7b1">
           <div class="power-guide-icon">◇</div><div><strong>Shield</strong><span>Blocks one hit. Stack up to three.</span></div>
         </div>
@@ -898,9 +1015,11 @@
         <div class="power-guide-item" style="--power-color:#ff5d5d">
           <div class="power-guide-icon">✹</div><div><strong>Bomb</strong><span>Detonates visible hazards. Gates count as passed.</span></div>
         </div>
+          </div>
+          <button class="primary" id="startBtn">LAUNCH CAMPAIGN →</button>
+          <div class="hint">One life to start · +1 life per cleared level · Full orbits earn STYLE</div>
+        </section>
       </div>
-      <button class="primary" id="startBtn">START CAMPAIGN</button>
-      <div class="hint">You start with one life. Every cleared level awards another. Complete a full orbit without reversing for a STYLE bonus.</div>
     </div>
   </div>
 
