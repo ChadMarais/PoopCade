@@ -43,6 +43,13 @@ test("the do-not-press round uses tempting button copy", () => {
   assert.doesNotMatch(next, /text:'DO NOT'/);
 });
 
+test("NEXT menu stays inside one mobile viewport without a scrolling content stack", () => {
+  assert.match(next, /\.shell\.menu-mode \.startScreen\{[^}]*overflow:hidden/);
+  assert.match(next, /grid-template-rows:auto 1fr auto/);
+  assert.match(next, /\.menuLaunch\{grid-column:1;grid-row:3;align-self:end/);
+  assert.doesNotMatch(next, /padding:max\(220px,34vh\)/);
+});
+
 test("Murderball progression copy remains cheeky without profanity", async () => {
   const [homepage, lobby] = await Promise.all([
     readFile(new URL("../../index.html", import.meta.url), "utf8"),
