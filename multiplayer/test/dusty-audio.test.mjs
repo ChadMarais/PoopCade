@@ -113,6 +113,15 @@ test("three shotgun pellets sharing one authoritative discharge play one sound",
   assert.deepEqual(FakeAudio.played, [DUSTY_AUDIO_FILES.weapons[5], DUSTY_AUDIO_FILES.weapons[5]]);
 });
 
+test("a rejoin clears shot deduplication when the server restarts fire intent ids", () => {
+  const audio = fresh();
+  assert.equal(audio.weaponFired({ playerId: "pilot", groupKey: "intent:1", tier: 1 }), true);
+  assert.equal(audio.weaponFired({ playerId: "pilot", groupKey: "intent:1", tier: 1 }), false);
+  audio.resetWeaponHistory();
+  assert.equal(audio.weaponFired({ playerId: "pilot", groupKey: "intent:1", tier: 1 }), true);
+  assert.equal(FakeAudio.played.length, 2);
+});
+
 test("weapon audio is emitted from the exact muzzle-materialization path", async () => {
   const renderer = await readFile(new URL("../../games/game-03/renderer.js", import.meta.url), "utf8");
   const materialize = renderer.slice(renderer.indexOf("  materializeShot("), renderer.indexOf("  emitWeaponAudioCue("));

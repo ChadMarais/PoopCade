@@ -1,6 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { DustyOrbitMultiplayerRenderer, nextEffectsQuality, renderScaleForViewport } from "../../games/game-03/renderer.js";
+import { DustyOrbitMultiplayerRenderer, cameraScaleForViewport, nextEffectsQuality, renderScaleForViewport } from "../../games/game-03/renderer.js";
+
+test("normal phones see more arena while tablets and foldables retain their framing", () => {
+  assert.equal(cameraScaleForViewport(390, 844, true), .86);
+  assert.equal(cameraScaleForViewport(844, 390, true), .86);
+  assert.equal(cameraScaleForViewport(768, 1024, true), 1);
+  assert.equal(cameraScaleForViewport(884, 1104, true), 1);
+  assert.equal(cameraScaleForViewport(390, 844, false), 1);
+});
 
 test("large high-DPI viewports stay inside the Murderball render-pixel budget", () => {
   assert.equal(renderScaleForViewport(1366, 768, 2), 1);

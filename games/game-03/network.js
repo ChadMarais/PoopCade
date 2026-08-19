@@ -2,6 +2,7 @@ const RETRY_DELAYS = [800, 1500, 2500];
 const SNAPSHOT_BUFFER_MS = 100;
 const MAX_EXTRAPOLATION_MS = 100;
 const POSITION_DISCONTINUITY = 120;
+export const CONNECTION_STALE_MS = 8000;
 
 function mix(a, b, amount) { return a + (b - a) * amount; }
 function mixAngle(before, after, amount) {
@@ -32,6 +33,7 @@ export class ArenaNetwork {
     this.clockOffsetMs = 0;
     this.pingTimer = null;
     this.reconnectTimer = null;
+    this.lastMessageAt = 0;
   }
 
   connect(resetRetries = true) {
@@ -49,12 +51,14 @@ export class ArenaNetwork {
     socket.addEventListener("open", () => {
       if (socket !== this.socket) return;
       this.retry = 0;
+      this.lastMessageAt = performance.now();
       this.onState("online");
       this.send({ type: "hello", sessionId: this.sessionId, name: this.name, presence: this.presence });
       this.startPing();
     });
     socket.addEventListener("message", (event) => {
       if (socket !== this.socket || typeof event.data !== "string") return;
+      this.lastMessageAt = performance.now();
       let message;
       try { message = JSON.parse(event.data); } catch { return; }
       if (!message || typeof message.type !== "string") return;
@@ -86,20 +90,44 @@ export class ArenaNetwork {
   setActive(active) {
     this.active = active;
     if (!active) return;
-    if (!this.socket || this.socket.readyState >= WebSocket.CLOSING) this.connect(true);
+    if (!this.socket || this.socket.readyState >= WebSocket.CLOSING || this.connectionIsStale()) this.connect(true);
+  }
+
+  connectionIsStale(now = performance.now()) {
+    return this.socket?.readyState === WebSocket.OPEN && this.lastMessageAt > 0 && now - this.lastMessageAt > CONNECTION_STALE_MS;
+  }
+
+  restartConnection(detail) {
+    if (this.manualClose || !this.active) return;
+    const staleSocket = this.socket;
+    this.socket = null;
+    this.clearTimers();
+    try { staleSocket?.close(4002, "Transport stalled"); } catch {}
+    this.onState("lost", detail);
+    this.connect(false);
   }
 
   send(message) {
     if (this.socket?.readyState !== WebSocket.OPEN || !this.active) return false;
-    this.socket.send(JSON.stringify(message));
-    return true;
+    try {
+      this.socket.send(JSON.stringify(message));
+      return true;
+    } catch {
+      this.restartConnection("The arena connection stopped responding.");
+      return false;
+    }
   }
 
   sendInput(input) { return this.send(input); }
 
   startPing() {
     this.pingTimer = setInterval(() => {
-      if (this.active) this.send({ type: "ping", nonce: performance.now().toFixed(3) });
+      if (!this.active) return;
+      if (this.connectionIsStale()) {
+        this.restartConnection("The arena connection stopped responding.");
+        return;
+      }
+      this.send({ type: "ping", nonce: performance.now().toFixed(3) });
     }, 2000);
   }
 
@@ -228,5 +256,6 @@ export class ArenaNetwork {
     this.snapshotRate = 0;
     this.clockOffsets = [];
     this.clockOffsetMs = 0;
+    this.lastMessageAt = 0;
   }
 }

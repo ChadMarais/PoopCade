@@ -106,6 +106,11 @@ export class DustyOrbitAudio {
 
   ready() { return Promise.allSettled(this.bufferLoads); }
 
+  resetWeaponHistory() {
+    this.playedShotGroups.clear();
+    this.shotGroupOrder.length = 0;
+  }
+
   unlock() {
     const context = this.audioContext;
     if (!context || context.state === "running" || typeof context.resume !== "function") return Promise.resolve(Boolean(context));

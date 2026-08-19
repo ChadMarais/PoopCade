@@ -3,16 +3,16 @@ import { CollisionEditor } from "./collision-editor.js?v=20260817-17";
 import { loadDustyOrbitAssets } from "./assets.js?v=20260817-7";
 import { PRODUCTION_ARENA_WSS } from "./config.js?v=20260812";
 import { MAP_CATALOG, mapCatalogEntry } from "./maps/catalog.js?v=20260817-4";
-import { DustyOrbitMultiplayerRenderer } from "./renderer.js?v=20260817-10";
+import { DustyOrbitMultiplayerRenderer } from "./renderer.js?v=20260819-1";
 import { InputController } from "./input.js?v=20260818-1";
 import { InputNetworkScheduler, reconcilePredictionHistory } from "./input-network.js?v=20260818-1";
 import { claimSessionIdentity, resolvePoopcadePlayerIdentity } from "./identity.js?v=20260813-2";
-import { ArenaNetwork } from "./network.js?v=20260818-1";
+import { ArenaNetwork } from "./network.js?v=20260819-1";
 import { consumeFixedStep, convergeVisualPosition } from "./timing.js?v=20260813-2";
 import { DustyLobby } from "./lobby.js?v=20260818-1";
 import { presenceEndpoint, RECRUITMENT_HREF } from "./presence.js?v=20260817-1";
 import { DustyOrbitHighscoreTracker } from "./highscore.js?v=20260813-2";
-import { DustyOrbitAudio } from "./audio.js?v=20260817-5";
+import { DustyOrbitAudio } from "./audio.js?v=20260819-1";
 import { makePanelDraggable } from "./draggable-panel.js?v=20260814-4";
 
 const INPUT_RATE = 30;
@@ -431,6 +431,7 @@ network = new ArenaNetwork({
       seq = Number.isSafeInteger(message.player?.lastInputSeq) ? message.player.lastInputSeq : 0;
       pending = [];
       renderer.clearLocalShotHistory(message.player?.lastFireIntentId);
+      audio.resetWeaponHistory();
       sendAccumulator = 0;
       inputNetworkScheduler.reset();
       inputStepTimes.length = 0;
@@ -823,6 +824,7 @@ function completeLeaveToLobby() {
   input.enabled = false;
   pending = [];
   renderer.clearLocalShotHistory();
+  audio.resetWeaponHistory();
   predicted = null;
   visualPredicted = null;
   latestSnapshot = null;

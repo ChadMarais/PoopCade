@@ -1,12 +1,30 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { ArenaNetwork } from "../../games/game-03/network.js";
+import { ArenaNetwork, CONNECTION_STALE_MS } from "../../games/game-03/network.js";
 
 function networkWithSnapshots(snapshots) {
   const network = new ArenaNetwork({ url: "ws://invalid", sessionId: "unused", name: "Guest-0000", onState() {}, onMessage() {} });
   network.snapshots = snapshots;
   return network;
 }
+
+test("a half-open mobile connection is recognized as stale", () => {
+  const network = networkWithSnapshots([]);
+  network.socket = { readyState: 1 };
+  network.lastMessageAt = 100;
+  assert.equal(network.connectionIsStale(100 + CONNECTION_STALE_MS), false);
+  assert.equal(network.connectionIsStale(101 + CONNECTION_STALE_MS), true);
+});
+
+test("a socket send failure is contained so it cannot kill the animation frame", () => {
+  const network = networkWithSnapshots([]);
+  network.active = true;
+  network.socket = { readyState: 1, send() { throw new Error("radio disappeared"); } };
+  let recovery = "";
+  network.restartConnection = (detail) => { recovery = detail; };
+  assert.equal(network.send({ type: "input" }), false);
+  assert.match(recovery, /stopped responding/);
+});
 
 test("a newly observed Dusty projectile starts at its spawn point and advances within the interpolation window", () => {
   const snapshots = [

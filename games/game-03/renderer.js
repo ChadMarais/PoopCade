@@ -16,6 +16,7 @@ const MAX_RENDER_SCALE = 1;
 const STATIC_CHUNK_SIZE = 512;
 const STATIC_CHUNK_SCALE = .75;
 const MAX_STATIC_CHUNKS = 48;
+const PHONE_CAMERA_SCALE = .86;
 const EFFECT_QUALITY_LEVELS = [.4, .7, 1];
 export function nextEffectsQuality(current, frameTimeMs, elapsedMs) {
   const index = Math.max(0, EFFECT_QUALITY_LEVELS.indexOf(current));
@@ -29,6 +30,10 @@ export function renderScaleForViewport(width, height, nativeScale = 1, qualitySc
   const nativeDpr = Math.min(MAX_RENDER_SCALE, Math.max(MIN_RENDER_SCALE, Number(nativeScale) || 1));
   const baseScale = Math.min(nativeDpr, Math.sqrt(MAX_RENDER_PIXELS / (safeWidth * safeHeight)));
   return Math.max(MIN_RENDER_SCALE, baseScale * clamp(Number(qualityScale) || 1, .7, 1));
+}
+export function cameraScaleForViewport(width, height, coarsePointer = false) {
+  const shortEdge = Math.min(Math.max(1, Number(width) || 1), Math.max(1, Number(height) || 1));
+  return coarsePointer && shortEdge <= 500 ? PHONE_CAMERA_SCALE : 1;
 }
 function drawNineSliceBoundary(ctx, overlay, x, y, width, height, inset) {
   const image = overlay.image;
@@ -246,7 +251,7 @@ export class DustyOrbitMultiplayerRenderer {
     this.debug = debug;
     this.debugFocus = debugFocus;
     this.camera = { x: 0, y: 0 };
-    this.viewport = { width: 1, height: 1, dpr: 1 };
+    this.viewport = { width: 1, height: 1, cssWidth: 1, cssHeight: 1, dpr: 1, cameraScale: 1 };
     this.playerScreen = { x: 0, y: 0 };
     this.effects = [];
     this.localProjectiles = new Map();
@@ -292,19 +297,24 @@ export class DustyOrbitMultiplayerRenderer {
     this.energyGlowSprite = buildEnergyGlowSprite();
     this.resize();
     addEventListener("resize", () => this.resize());
+    globalThis.visualViewport?.addEventListener?.("resize", () => this.resize());
   }
 
   resize() {
-    const width = Math.max(1, innerWidth);
-    const height = Math.max(1, innerHeight);
-    const dpr = renderScaleForViewport(width, height, devicePixelRatio || 1, this.renderQuality);
-    this.canvas.width = Math.round(width * dpr);
-    this.canvas.height = Math.round(height * dpr);
-    this.canvas.style.width = `${width}px`;
-    this.canvas.style.height = `${height}px`;
+    const cssWidth = Math.max(1, innerWidth);
+    const cssHeight = Math.max(1, innerHeight);
+    const coarsePointer = globalThis.matchMedia?.("(pointer: coarse)")?.matches === true;
+    const cameraScale = cameraScaleForViewport(cssWidth, cssHeight, coarsePointer);
+    const width = cssWidth / cameraScale;
+    const height = cssHeight / cameraScale;
+    const dpr = renderScaleForViewport(cssWidth, cssHeight, devicePixelRatio || 1, this.renderQuality);
+    this.canvas.width = Math.round(cssWidth * dpr);
+    this.canvas.height = Math.round(cssHeight * dpr);
+    this.canvas.style.width = `${cssWidth}px`;
+    this.canvas.style.height = `${cssHeight}px`;
     this.ctx.imageSmoothingEnabled = true;
     this.ctx.imageSmoothingQuality = "high";
-    this.viewport = { width, height, dpr };
+    this.viewport = { width, height, cssWidth, cssHeight, dpr, cameraScale };
   }
 
   updateAdaptiveQuality(delta, now = performance.now()) {
@@ -952,11 +962,11 @@ export class DustyOrbitMultiplayerRenderer {
     const now = performance.now();
     this.updateAdaptiveQuality(delta, now);
     const { ctx } = this;
-    const { width, height, dpr } = this.viewport;
+    const { width, height, dpr, cameraScale = 1 } = this.viewport;
     this.localPlayerId = localId;
     this.weaponPoses.clear();
     this.collisionEditor?.update(delta);
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.setTransform(dpr * cameraScale, 0, 0, dpr * cameraScale, 0, 0);
     const local = snapshot?.players?.find((player) => player.id === localId);
     this.updateUplink(Boolean(local?.satelliteConnected), Boolean(local?.alive));
     const focus = this.debug && this.debugFocus ? this.debugFocus : predicted || local || { x: this.assets.world.width / 2, y: this.assets.world.height / 2 };
@@ -966,7 +976,10 @@ export class DustyOrbitMultiplayerRenderer {
     this.camera.x += (targetX - this.camera.x) * blend;
     this.camera.y += (targetY - this.camera.y) * blend;
     const shake = this.getNukeScreenShake(now);
-    this.playerScreen = { x: focus.x - this.camera.x + shake.x, y: focus.y - this.camera.y + shake.y };
+    this.playerScreen = {
+      x: (focus.x - this.camera.x + shake.x) * cameraScale,
+      y: (focus.y - this.camera.y + shake.y) * cameraScale,
+    };
     this.prepareEffectFrame(now);
 
     ctx.fillStyle = "#371447";
