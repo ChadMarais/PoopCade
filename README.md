@@ -25,7 +25,7 @@ Poopcade is a static, mobile-first progressive web app containing small arcade g
 
 New games belong in their own directory under `games/`, with an `index.html` entry point. For example, a new game at `games/example/index.html` is available at `/games/example/`. Add its production route to the homepage and to the service worker's core or optional cache list as appropriate.
 
-Game 01 is the Nebula Murderball live multiplayer arena. It retains the stable `games/game-03/` implementation route so existing clients and backend imports remain compatible. Its separate Cloudflare Worker and Durable Object backend lives in `multiplayer/`; that directory is excluded from the static-assets upload and is deployed independently. ORBIT//SHIFT is Game 02 and NEXT. is Game 03.
+Game 01 is the Nebula Murderball live multiplayer arena. It retains the stable `games/game-03/` implementation route so existing clients and backend imports remain compatible. Its separate Cloudflare Worker and Durable Object backend lives in `multiplayer/`; that directory is excluded from the static-assets upload and is deployed independently. ORBIT//SHIFT is Game 02, NEXT. is Game 03, and BALLS OUT is Game 04.
 
 ## Run locally
 
@@ -43,13 +43,13 @@ When testing service-worker changes, use the browser's Application/Storage devel
 
 - `index.html` links the manifest, exposes the install prompt when supported, and registers the root-scoped service worker.
 - `manifest.webmanifest` defines standalone, portrait-first behavior and the intended production icon paths.
-- `service-worker.js` precaches the homepage, ORBIT//SHIFT, NEXT., and all three leaderboard pages. Navigations are network-first so updated HTML is preferred, with cached pages and the homepage as offline fallbacks. Same-origin static assets use stale-while-revalidate behavior, except Nebula Murderball resources, which are network-first to prevent incompatible multiplayer builds from being mixed by an older cache.
+- `service-worker.js` precaches the homepage, ORBIT//SHIFT, NEXT., BALLS OUT, and every leaderboard page. Navigations are network-first so updated HTML is preferred, with cached pages and the homepage as offline fallbacks. Same-origin static assets use stale-while-revalidate behavior, except Nebula Murderball resources, which are network-first to prevent incompatible multiplayer builds from being mixed by an older cache.
 - Missing optional icon files are ignored during service-worker installation, so they cannot prevent the offline shell from installing.
 - Supabase API, authentication, Edge Function, and leaderboard responses are never cached by the service worker.
 
 ## Accounts and leaderboards
 
-Guest play remains the default. Players may optionally sign in with Google, choose a separate public gamer name, save ORBIT//SHIFT, NEXT., and NEBULA MURDERBALL runs, and sync personal bests across devices. NEBULA MURDERBALL submits each newly reached positive arena-score high from the server-reported player snapshot, so a later death penalty cannot erase a previously saved best.
+Guest play remains the default. Players may optionally sign in with Google, choose a separate public gamer name, save ORBIT//SHIFT, NEXT., NEBULA MURDERBALL, and BALLS OUT runs, and sync personal bests across devices. NEBULA MURDERBALL submits each newly reached positive arena-score high from the server-reported player snapshot, so a later death penalty cannot erase a previously saved best.
 
 The NEBULA MURDERBALL Worker also submits a signed-in player's final authoritative arena score when the player deliberately leaves or is removed after the inactivity timeout. This closes sessions that otherwise have no game-over event; guest sessions remain analytics-only.
 
@@ -85,7 +85,7 @@ The repository is configured for Cloudflare Workers Static Assets:
 - Worker JavaScript entry point: none
 - Static asset directory: repository root (`.`)
 - Upload exclusions: `.assetsignore` (including `android/` and `supabase/` source)
-- Production routes include `/`, `/games/orbit-shift/`, `/games/next/`, `/games/game-03/`, the overall `/leaderboard/`, `/leaderboard/orbit-shift/`, `/leaderboard/next/`, `/leaderboard/dusty-orbit/`, and `/account/`. Nebula Murderball launches directly without a development-mode query parameter.
+- Production routes include `/`, `/games/orbit-shift/`, `/games/next/`, `/games/balls-out/`, `/games/game-03/`, the overall `/leaderboard/`, `/leaderboard/orbit-shift/`, `/leaderboard/next/`, `/leaderboard/dusty-orbit/`, `/leaderboard/balls-out/`, and `/account/`. Nebula Murderball launches directly without a development-mode query parameter.
 - Custom response headers: `_headers`
 
 No Content Security Policy is set yet because the current homepage and game use inline CSS and JavaScript, and the game uses WebAudio. A CSP should be designed and tested separately rather than added in a way that breaks the application.

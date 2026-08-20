@@ -19,18 +19,27 @@ test("overall leaderboard ranks best per-game placements with rank points", () =
   assert.match(migration, /pt\.rank_points desc/);
 });
 
+test("BALLS OUT migration adds the fourth placement column", () => {
+  const migration = read("supabase/migrations/20260820120000_add_balls_out.sql");
+  assert.match(migration, /values \('balls-out', 'BALLS OUT', true\)/);
+  assert.match(migration, /balls_out_rank bigint/);
+  assert.match(migration, /gp\.slug = 'balls-out'/);
+});
+
 test("every leaderboard provides direct navigation to all boards", () => {
   const pages = [
     "leaderboard/index.html",
     "leaderboard/orbit-shift/index.html",
     "leaderboard/next/index.html",
     "leaderboard/dusty-orbit/index.html",
+    "leaderboard/balls-out/index.html",
   ];
   const expected = [
     'href="/leaderboard/"',
     'href="/leaderboard/orbit-shift/"',
     'href="/leaderboard/next/"',
     'href="/leaderboard/dusty-orbit/"',
+    'href="/leaderboard/balls-out/"',
   ];
   for (const page of pages) {
     const html = read(page);

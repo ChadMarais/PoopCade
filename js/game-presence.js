@@ -4,6 +4,7 @@ const PRESENCE_ROOM = "poopcade-game-presence-v1";
 const SINGLE_PLAYER_ROUTES = new Map([
   ["/games/orbit-shift/", "orbit-shift"],
   ["/games/next/", "next"],
+  ["/games/balls-out/", "balls-out"],
 ]);
 
 function playerKey() {

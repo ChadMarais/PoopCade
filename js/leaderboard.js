@@ -71,10 +71,11 @@ function renderOverallRows(body, entries) {
     addCell(row, `#${entry.rank}`, "rank-cell");
     addCell(row, entry.display_name, "name-cell");
     addCell(row, Number(entry.rank_points).toLocaleString(), "score-cell");
-    addCell(row, `${Number(entry.games_ranked)}/${Number(entry.total_games) || 3}`, "difficulty-cell");
+    addCell(row, `${Number(entry.games_ranked)}/${Number(entry.total_games) || 4}`, "difficulty-cell");
     addCell(row, formatRank(entry.dusty_orbit_rank), "level-cell");
     addCell(row, formatRank(entry.orbit_shift_rank), "level-cell");
     addCell(row, formatRank(entry.next_rank), "level-cell");
+    addCell(row, formatRank(entry.balls_out_rank), "level-cell");
     body.append(row);
   });
 }
@@ -113,7 +114,9 @@ async function renderOwnBest(page, difficulty, gameSlug) {
       ? `Challenge ${best.level} reached`
       : gameSlug === "dusty-orbit"
         ? `${Math.max(0, Number(best.level) - 1).toLocaleString()} total kills in that arena session`
-        : `${best.difficulty} · Level ${best.level}`;
+        : gameSlug === "balls-out"
+          ? `Wave ${best.level} reached`
+          : `${best.difficulty} · Level ${best.level}`;
   } catch {
     setVisible(signedOut, true);
   }

@@ -4,7 +4,7 @@ const PRODUCTION_ORIGIN = "https://poopcade.com";
 const MAX_BODY_BYTES = 16_384;
 const MAX_DURATION_MS = 6 * 60 * 60 * 1000;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const GAME_SLUGS = new Set(["orbit-shift", "next", "dusty-orbit"]);
+const GAME_SLUGS = new Set(["orbit-shift", "next", "dusty-orbit", "balls-out"]);
 const ORBIT_DIFFICULTIES = new Set(["Easy", "Medium", "Hard"]);
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL");
@@ -25,7 +25,7 @@ const supabaseAdmin = createClient(supabaseUrl, serverCredential, {
 });
 
 type RunPayload = {
-  gameSlug: "orbit-shift" | "next" | "dusty-orbit";
+  gameSlug: "orbit-shift" | "next" | "dusty-orbit" | "balls-out";
   clientRunId: string;
   score: number;
   difficulty: "Easy" | "Medium" | "Hard" | "Standard" | "Arena";
@@ -111,7 +111,7 @@ function validatePayload(value: unknown): { data?: RunPayload; error?: string } 
     if (durationMs < 400 || score > Math.floor(durationMs / 250) + 2) {
       return { error: "NEXT. run is not plausible for the submitted duration." };
     }
-  } else {
+  } else if (gameSlug === "dusty-orbit") {
     const kills = level - 1;
     if (difficulty !== "Arena") return { error: "NEBULA MURDERBALL difficulty must be Arena." };
     if (score > 100_000 || kills > 100_000 || gates > 100_000 || styleBonuses !== 0 || score > kills) {
@@ -119,6 +119,17 @@ function validatePayload(value: unknown): { data?: RunPayload; error?: string } 
     }
     if (durationMs < 1_000 || kills > Math.floor(durationMs / 100) + 5 || gates > Math.floor(durationMs / 250) + 5) {
       return { error: "NEBULA MURDERBALL run is not plausible for the submitted duration." };
+    }
+  } else {
+    if (difficulty !== "Standard") return { error: "BALLS OUT difficulty must be Standard." };
+    if (score > 100_000_000 || level > 999 || gates > 10_000 || styleBonuses > 100_000) {
+      return { error: "BALLS OUT run values are outside the accepted range." };
+    }
+    if (durationMs < 1_000 || level > Math.floor(durationMs / 1_000) + 2 || gates > Math.floor(durationMs / 10_000) + 2 || styleBonuses > Math.floor(durationMs / 500) + 2) {
+      return { error: "BALLS OUT run is not plausible for the submitted duration." };
+    }
+    if (score > Math.max(50_000, durationMs * 250)) {
+      return { error: "BALLS OUT score is not plausible for the submitted duration." };
     }
   }
 

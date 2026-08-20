@@ -153,6 +153,20 @@
     .next-face::before { position:absolute;left:16px;right:16px;top:13px;height:8px;content:"";border-left:13px solid var(--cyan);border-right:13px solid var(--cyan);filter:drop-shadow(0 0 6px rgba(82,239,255,.7)); }
     .next-face::after { position:absolute;left:50%;bottom:10px;width:24px;height:8px;content:"";border-top:3px solid var(--pink);transform:translateX(-50%) rotate(6deg); }
 
+    .balls-card { border-color:rgba(95,248,255,.28);background:linear-gradient(135deg,#120925 0%,#070713 54%,#071927 100%);box-shadow:0 28px 78px rgba(0,0,0,.42),0 0 54px rgba(95,248,255,.07),inset 0 1px rgba(255,255,255,.1); }
+    .balls-card::before { background:radial-gradient(circle at 88% 24%,rgba(95,248,255,.19),transparent 27%),radial-gradient(circle at 78% 100%,rgba(255,61,191,.18),transparent 34%),linear-gradient(105deg,transparent 56%,rgba(139,92,246,.08)); }
+    .balls-card .game-label { color:#c8ff4d; }
+    .balls-card .game-title { text-shadow:0 0 30px rgba(95,248,255,.12); }
+    .balls-card .game-title i { color:#ff3dbf;text-shadow:0 0 28px rgba(255,61,191,.42); }
+    .balls-card .button.primary { background:linear-gradient(100deg,#c8ff4d,#5ff8ff); }
+    .balls-card .button.secondary { border-color:rgba(255,61,191,.38);color:#ff82d3;background:rgba(255,61,191,.06); }
+    .balls-visual { position:absolute;right:-14px;bottom:-19px;z-index:-1;width:225px;height:190px;pointer-events:none;opacity:.52;filter:drop-shadow(0 0 22px rgba(95,248,255,.18));transform:rotate(-4deg); }
+    .balls-bricks { position:absolute;inset:11px 10px auto;display:grid;grid-template-columns:repeat(6,1fr);gap:5px;perspective:240px; }
+    .balls-bricks span { height:19px;border:1px solid rgba(255,255,255,.48);border-radius:4px;background:linear-gradient(160deg,#fff 0 8%,var(--brick) 14% 72%,#130624);box-shadow:0 0 12px color-mix(in srgb,var(--brick) 70%,transparent),inset 0 -4px rgba(0,0,0,.25);transform:translateZ(calc(var(--row)*-3px)); }
+    .balls-bricks span:nth-child(4n+1){--brick:#5ff8ff}.balls-bricks span:nth-child(4n+2){--brick:#ff3dbf}.balls-bricks span:nth-child(4n+3){--brick:#8b5cf6}.balls-bricks span:nth-child(4n){--brick:#c8ff4d}
+    .balls-paddle { position:absolute;left:45px;right:12px;bottom:21px;height:15px;border:2px solid rgba(255,255,255,.72);border-radius:999px;background:linear-gradient(90deg,#ff3dbf,#fff 42%,#5ff8ff);box-shadow:0 0 20px rgba(95,248,255,.5);transform:skewX(-12deg); }
+    .balls-ball { position:absolute;right:67px;bottom:59px;width:18px;height:18px;border:3px solid #fff;border-radius:50%;background:#5ff8ff;box-shadow:0 0 9px #fff,0 0 26px #5ff8ff,0 0 44px #ff3dbf;animation:tile-ball 1.65s cubic-bezier(.4,0,.6,1) infinite alternate; }
+
     .dusty-card { border-color: rgba(255,124,214,.38); background: linear-gradient(118deg,#151129 0%,#21113d 48%,#0b1725 100%); box-shadow: 0 28px 80px rgba(0,0,0,.42),0 0 54px rgba(217,45,255,.09),inset 0 1px 0 rgba(255,255,255,.12); }
     .dusty-card::before { z-index: -1; background: radial-gradient(circle at 82% 48%,rgba(255,43,220,.28),transparent 22%),radial-gradient(circle at 93% 13%,rgba(82,239,255,.18),transparent 25%),linear-gradient(90deg,transparent 54%,rgba(3,5,17,.12)); }
     .dusty-card::after { position: absolute; inset: 0; z-index: -1; content: ""; pointer-events: none; opacity: .24; background-image: radial-gradient(circle,rgba(255,255,255,.85) 0 1px,transparent 1.5px); background-size: 43px 43px; mask-image: linear-gradient(90deg,transparent 20%,#000); }
@@ -192,6 +206,7 @@
     @keyframes blink { 50% { opacity: .35; transform: scale(.78); } }
     @keyframes orbit { to { transform: rotate(332deg); } }
     @keyframes dusty-hover { 50% { transform: translateY(-10px) rotate(2deg) scale(1.025); } }
+    @keyframes tile-ball { to { transform:translate(-82px,-72px) scale(.78);filter:hue-rotate(95deg); } }
 
     @media (min-width: 481px) and (max-width: 800px) {
       .shell { width: min(calc(100% - 40px),var(--max)); }
@@ -354,6 +369,20 @@
             </div>
           </div>
           <div class="next-watermark" aria-hidden="true"><span class="next-face"></span></div>
+        </article>
+        <article class="game-card balls-card">
+          <div class="game-live-count" data-currently-playing="balls-out" data-state="loading" role="status" aria-live="polite"><span>Currently playing:</span><strong data-currently-playing-value>—</strong></div>
+          <div class="game-copy">
+            <span class="game-label">Game 04 · Single player</span>
+            <h3 class="game-title">BALLS <i>OUT</i></h3>
+            <p class="game-description">Neon breakout with weaponized power-ups, escalating arcade chaos, and absolutely nothing unexpected whatsoever.</p>
+            <ul class="meta" aria-label="Game attributes"><li>Breakout</li><li>Power-ups</li><li>Trust issues</li></ul>
+            <div class="game-actions">
+              <a class="button primary" href="./games/balls-out/">Play now <span aria-hidden="true">→</span></a>
+              <a class="button secondary" href="/leaderboard/balls-out/">Leaderboard</a>
+            </div>
+          </div>
+          <div class="balls-visual" aria-hidden="true"><div class="balls-bricks"><span style="--row:1"></span><span style="--row:1"></span><span style="--row:1"></span><span style="--row:1"></span><span style="--row:1"></span><span style="--row:1"></span><span style="--row:2"></span><span style="--row:2"></span><span style="--row:2"></span><span style="--row:2"></span><span style="--row:2"></span><span style="--row:2"></span><span style="--row:3"></span><span style="--row:3"></span><span style="--row:3"></span><span style="--row:3"></span><span style="--row:3"></span><span style="--row:3"></span></div><span class="balls-ball"></span><span class="balls-paddle"></span></div>
         </article>
       </div>
     </section>

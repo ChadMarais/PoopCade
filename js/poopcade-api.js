@@ -24,11 +24,16 @@ export function submitDustyOrbitRun(run) {
   return submitGameRun("dusty-orbit", run);
 }
 
+export function submitBallsOutRun(run) {
+  return submitGameRun("balls-out", run);
+}
+
 export const PoopcadeAPI = Object.freeze({
   getCurrentUser,
   submitOrbitShiftRun,
   submitNextRun,
   submitDustyOrbitRun,
+  submitBallsOutRun,
 });
 
 window.PoopcadeAPI = PoopcadeAPI;
