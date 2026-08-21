@@ -21,14 +21,22 @@ test("dynamic music engine defines all six approved stage identities", async () 
   assert.doesNotThrow(() => new vm.Script(source));
 });
 
-test("music is quantized, density-limited, and aggregates brick destruction", async () => {
+test("music has a 4/4 sixteenth-note clock, phrase memory, voice limits, and destruction aggregation", async () => {
   const source = await read("games/balls-out/dynamic-music.js");
+  assert.match(source, /class MusicalClock/);
+  assert.match(source, /STEPS_PER_BAR = 16/);
+  assert.match(source, /BARS_PER_PHRASE = 4/);
+  assert.match(source, /class ArrangementEngine/);
+  assert.match(source, /melodyBuffer:\[\]/);
+  assert.match(source, /drumPattern:/);
+  assert.match(source, /bassPattern:/);
   assert.match(source, /quantized\(divisions=4\)/);
   assert.match(source, /maxVoices=22/);
   assert.match(source, /percussionTimes\.length>=8/);
-  assert.match(source, /setTimeout\(\(\)=>this\.flushDestroyed\(\),72\)/);
+  assert.match(source, /setTimeout\(\(\)=>\{this\.timer=0;.*\},72\)/);
   assert.match(source, /duckForScare\(duration=\.9\)/);
   assert.match(source, /createDynamicsCompressor/);
+  assert.match(source, /sidechain\(time\)/);
 });
 
 test("gameplay emits semantic music events without depending on audio callbacks", async () => {
@@ -90,4 +98,28 @@ test("dynamic music event methods run safely against the Web Audio contract", as
     music.onLifeLost();
     music.onGameOver();
   });
+
+  const composed=new sandbox.window.DynamicMusicEngine(new AudioContext(),{worldWidth:1000});
+  composed.running=true;
+  const voicesBeforeMicroEvents=composed.voiceCount;
+  composed.onPaddleHit({vx:500,vy:-500});
+  composed.onWallHit({x:800},"top");
+  composed.onObstacleHit({x:300});
+  composed.onBrickHit({x:400,y:120,w:60,maxHp:2});
+  assert.equal(composed.voiceCount,voicesBeforeMicroEvents,"micro events must update composition rather than perform notes");
+
+  composed.consumeDestroyed([
+    {x:100,y:120,tough:1,speed:600},
+    {x:480,y:180,tough:1,speed:620},
+    {x:850,y:220,tough:2,speed:640},
+  ]);
+  assert.equal(composed.composition.melodyBuffer.length,1,"a destruction burst becomes one melody input");
+  composed.evolveMotif();
+  assert.ok(composed.composition.motif.length>=3&&composed.composition.motif.length<=8);
+
+  composed.onSmashEvent("LASER DISCO");
+  assert.equal(composed.composition.section,"CALM","a major event must not switch sections off-grid");
+  assert.equal(composed.arrangement.applyAt({step:1,absoluteStep:1,bar:0}),false);
+  assert.equal(composed.arrangement.applyAt({step:4,absoluteStep:4,bar:0}),true);
+  assert.equal(composed.composition.section,"DROP");
 });
