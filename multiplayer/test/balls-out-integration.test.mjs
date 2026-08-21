@@ -50,3 +50,15 @@ test("BALLS OUT inline game script parses as JavaScript", async () => {
   assert.ok(scripts.length > 0);
   for (const source of scripts) new vm.Script(source);
 });
+
+test("BALLS OUT gates each wave behind a held serve and limits jump scares by wave", async () => {
+  const game = await read("games/balls-out/index.html");
+  assert.match(game, /function prepareWaveServe\(\)/);
+  assert.match(game, /CLICK OR TAP TO LAUNCH/);
+  assert.match(game, /state\.wave>=2&&state\.wave>=nextScareWave/);
+  assert.match(game, /lastScareWave===state\.wave/);
+  assert.match(game, /nextScareWave=state\.wave\+\(Math\.random\(\)<\.5\?2:3\)/);
+  assert.match(game, /jumpscare\.style\.left=offsetX\+'px'/);
+  assert.match(game, /jumpscare\.style\.width=WORLD_W\*scale\+'px'/);
+  assert.doesNotMatch(game, /desynchronized\s*:\s*true/);
+});

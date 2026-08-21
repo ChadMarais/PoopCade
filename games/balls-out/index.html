@@ -22,7 +22,7 @@
   body{touch-action:none}
   #app{position:relative;width:100vw;height:100dvh;overflow:hidden;background:#030207}
   #gameWrap{position:absolute;inset:0 0 var(--control-h) 0;overflow:hidden;background:#030207}
-  canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none}
+  canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none;backface-visibility:hidden}
   .overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:24px;background:linear-gradient(180deg,rgba(3,2,8,.34),rgba(3,2,8,.82));backdrop-filter:blur(9px);z-index:20}
   .card{width:min(540px,92vw);padding:30px 28px;border-radius:28px;background:linear-gradient(180deg,rgba(27,18,56,.94),rgba(8,6,18,.97));border:1px solid rgba(255,255,255,.13);box-shadow:0 30px 90px rgba(0,0,0,.58),inset 0 1px rgba(255,255,255,.07);text-align:center}
   h1{margin:0;font-size:clamp(48px,11vw,90px);line-height:.86;letter-spacing:-.065em;font-weight:1000;text-shadow:0 0 26px rgba(95,248,255,.28),0 0 50px rgba(255,61,191,.22)}
@@ -54,7 +54,7 @@
   .gameControl.danger:hover{border-color:rgba(255,86,111,.55);color:#ff8b9d}
 
   /* Rare in-run jumpscares use the locally bundled production image. */
-  #jumpscare{position:absolute;inset:0;z-index:55;display:grid;place-items:center;overflow:hidden;pointer-events:none;opacity:0;background:#000;will-change:opacity,filter}
+  #jumpscare{position:absolute;left:0;top:0;width:100%;height:100%;z-index:55;display:grid;place-items:center;overflow:hidden;pointer-events:none;opacity:0;background:#000;will-change:opacity,filter}
   #jumpscare.active{opacity:1;animation:scareFrame .68s steps(1,end) both}
   #jumpscare::before,#jumpscare::after{content:"";position:absolute;inset:-10%;pointer-events:none;z-index:2}
   #jumpscare::before{background:repeating-linear-gradient(0deg,rgba(255,255,255,.11) 0 1px,transparent 1px 5px);mix-blend-mode:screen;opacity:.34;animation:scareNoise .055s steps(2,end) infinite}
@@ -147,7 +147,9 @@
   'use strict';
 
   const canvas = document.getElementById('game');
-  const ctx = canvas.getContext('2d', { alpha:false, desynchronized:true });
+  // Let the browser synchronize presentation with its compositor. A desynchronized
+  // context can visibly tear or flash on some browser/GPU combinations.
+  const ctx = canvas.getContext('2d', { alpha:false });
   const gameWrap = document.getElementById('gameWrap');
   const controlDeck = document.getElementById('controlDeck');
   const controlTrack = document.getElementById('controlTrack');
@@ -197,11 +199,11 @@
   const TRAIL_MAX = isCoarse ? 7 : 10;
 
   let cssW=1, cssH=1, dpr=1, WORLD_H=1500, scale=1, offsetX=0, offsetY=0;
-  let running=false, playerPaused=false, pausedForWave=false, accumulator=0, lastTime=performance.now(), elapsed=0;
+  let running=false, playerPaused=false, pausedForWave=false, awaitingLaunch=false, accumulator=0, lastTime=performance.now(), elapsed=0;
   let clientRunId=null, runStartedAt=0, runPausedAt=0, totalPausedMs=0, submissionStarted=false;
   let shake=0, bgPulse=0, screenFlash=0, screenFlashColor='#ffffff', huePhase=0;
   let brickId=0, toastTimer=0, bannerTimer=0;
-  let scareTimer=999, scareActive=0, scareFreeze=0, lastScareType=-1, scareCount=0;
+  let scareTimer=Infinity, scareActive=0, scareFreeze=0, scareCount=0, lastScareWave=0, nextScareWave=2;
   let controlTrackWidth=0,lastThumbPx=-999;
   let audioCtx=null, sfxBus=null, sfxCompressor=null, jumpscareBus=null, jumpscareCompressor=null, music=null, muted=false, lastHitSound=0;
   let screamBuffer=null, screamLoadPromise=null;
@@ -239,6 +241,7 @@
     const aspect=Math.min(16/9,Math.max(4/3,cssH/cssW));
     WORLD_H=WORLD_W*aspect;
     scale=Math.min(cssW/WORLD_W,cssH/WORLD_H); offsetX=(cssW-WORLD_W*scale)/2; offsetY=(cssH-WORLD_H*scale)/2;
+    jumpscare.style.left=offsetX+'px';jumpscare.style.top=offsetY+'px';jumpscare.style.width=WORLD_W*scale+'px';jumpscare.style.height=WORLD_H*scale+'px';
     paddle.y=WORLD_H*.87;
     gravityWell.y=Math.min(gravityWell.y,WORLD_H*.65);
     controlTrackWidth=0; updateControlThumb();
@@ -252,12 +255,17 @@
 
   // Desktop pointer follows the cursor. Mobile gameplay input lives on the dedicated control deck.
   canvas.addEventListener('pointermove',e=>{ if(running && !isCoarse) paddle.targetX=screenToWorldX(e.clientX); });
-  canvas.addEventListener('pointerdown',e=>{ if(running && !isCoarse) paddle.targetX=screenToWorldX(e.clientX); });
+  canvas.addEventListener('pointerdown',e=>{
+    if(!running)return;
+    if(!isCoarse)paddle.targetX=screenToWorldX(e.clientX);
+    launchServe();
+  });
   canvas.addEventListener('contextmenu',e=>e.preventDefault());
 
   let deckPointer=null, deckStartX=0, deckStartPaddleX=0;
   controlTrack.addEventListener('pointerdown',e=>{
     if(!running) return;
+    launchServe();
     deckPointer=e.pointerId; deckStartX=e.clientX; deckStartPaddleX=paddle.targetX;
     controlTrack.setPointerCapture?.(e.pointerId); e.preventDefault();
   });
@@ -272,6 +280,7 @@
 
   document.addEventListener('keydown',e=>{
     if((e.key==='Escape'||e.key.toLowerCase()==='p')&&running){e.preventDefault();playerPaused?resumeGame():pauseGame();return;}
+    if((e.code==='Space'||e.code==='Enter')&&running&&awaitingLaunch&&!playerPaused){e.preventDefault();launchServe();return;}
     if(e.code==='Space' && running && !playerPaused && state.smashReady){e.preventDefault();activateSmash();}
     if(e.key.toLowerCase()==='m'){muted=!muted; updateSoundButton();music?.setMuted(muted);}
   });
@@ -357,35 +366,34 @@
     return `<img src="${SCARE_IMAGE}" alt="" draggable="false">`;
   }
 
-  function scheduleNextScare(first=false){
-    scareTimer=first?rand(9,30):rand(35,110);
+  function prepareScareForWave(){
+    scareTimer=state.wave>=2&&state.wave>=nextScareWave?rand(9,30):Infinity;
   }
   function hideJumpscare(){
     scareActive=0;scareFreeze=0;jumpscare.className='';jumpscare.setAttribute('aria-hidden','true');scareVisual.innerHTML='';scareCaption.textContent='';
   }
   function triggerJumpscare(){
-    if(!running||pausedForWave)return;
+    if(!running||pausedForWave||awaitingLaunch||state.wave<2||lastScareWave===state.wave||state.wave<nextScareWave)return;
     scareVisual.innerHTML=scareMarkup();
     scareCaption.textContent=Math.random()<.12?SCARE_CAPTIONS[Math.floor(Math.random()*SCARE_CAPTIONS.length)]:'';
     jumpscare.className='active';jumpscare.setAttribute('aria-hidden','false');
-    scareActive=rand(.58,.72);scareFreeze=scareActive+.07;scareCount++;shake=Math.max(shake,28);flash('#ffffff',.92);sfx('scare');
-    scheduleNextScare(false);
+    scareActive=rand(.58,.72);scareFreeze=scareActive+.07;scareCount++;lastScareWave=state.wave;nextScareWave=state.wave+(Math.random()<.5?2:3);scareTimer=Infinity;shake=Math.max(shake,28);flash('#ffffff',.92);sfx('scare');
   }
   function updateJumpscare(dt){
     if(scareActive>0){scareActive=Math.max(0,scareActive-dt);if(scareActive===0){jumpscare.className='';jumpscare.setAttribute('aria-hidden','true');scareVisual.innerHTML='';scareCaption.textContent='';}}
-    if(!running||pausedForWave||scareActive>0)return;
+    if(!running||pausedForWave||awaitingLaunch||state.wave<2||lastScareWave===state.wave||scareActive>0)return;
     scareTimer-=dt;if(scareTimer<=0)triggerJumpscare();
   }
 
   function startGame(){
-    ensureAudio(); startOverlay.classList.add('hidden'); gameOverOverlay.classList.add('hidden'); hideJumpscare(); scheduleNextScare(true); scareCount=0; lastScareType=-1;
+    ensureAudio(); startOverlay.classList.add('hidden'); gameOverOverlay.classList.add('hidden'); hideJumpscare(); scareCount=0;lastScareWave=0;nextScareWave=Math.random()<.5?2:3;scareTimer=Infinity;
     clientRunId=crypto.randomUUID?.()||null;runStartedAt=performance.now();runPausedAt=0;totalPausedMs=0;submissionStarted=false;musicUpdateTimer=0;scoreSaveStatus.textContent='';scoreSaveStatus.dataset.state='idle';
     Object.assign(state,{score:0,wave:1,lives:3,comboCount:0,comboMult:1,comboTimer:0,smash:0,smashReady:false,waveStartTime:performance.now()/1000,pityCounter:0,lifePity:0,lifeDropCooldown:0,scoreRiskMult:1,smashCycle:0});
     state.modifiers={unit:0,pew:0,bigBall:0,boom:0,shotgun:0,magnet:0,chain:0,fart:0,worm:0,laserBall:0};
     state.effects={tinyHands:0,angry:0,portal:0,gravity:0,ohDear:0,panic:0,brickpocalypse:0,laserDisco:0};
     balls.length=bricks.length=obstacles.length=pickups.length=lasers.length=particles.length=explosions.length=shockwaves.length=floaters.length=gasClouds.length=pendingStorm.length=0;
     paddle.targetX=paddle.x=WORLD_W/2; paddle.laserTimer=paddle.shotgunTimer=paddle.fartTimer=0; updatePaddleWidth();
-    buildWave(1); spawnBall(true,0); running=true;playerPaused=false;pausedForWave=false;pauseOverlay.classList.add('hidden');gameControls.classList.add('active');state.waveStartTime=performance.now()/1000; updateSmashButton(); showToast('WAVE 1');music?.start(stageTheme().name,1);
+    buildWave(1);running=true;playerPaused=false;pausedForWave=false;pauseOverlay.classList.add('hidden');gameControls.classList.add('active');prepareWaveServe();updateSmashButton();showToast('WAVE 1 · CLICK OR TAP TO LAUNCH');music?.start(stageTheme().name,1);
   }
 
   function endGame(){
@@ -422,6 +430,17 @@
     else angle=-Math.PI/2+(Math.random()-.5)*1.2+angleOffset;
     const sp=ballBaseSpeed()*speedFactor;
     const b=makeBall(xOverride??paddle.x,yOverride??(paddle.y-34),Math.cos(angle)*sp,Math.sin(angle)*sp,opts);balls.push(b);burst(b.x,b.y,COLORS.cyan,10,180);return b;
+  }
+  function prepareWaveServe(){
+    balls.length=0;const b=makeBall(paddle.x,paddle.y-34,0,0);b.held=true;balls.push(b);awaitingLaunch=true;scareTimer=Infinity;anchorServeBall();
+  }
+  function anchorServeBall(){
+    const b=balls.find(ball=>ball.held);if(!b)return;b.x=paddle.x;b.y=paddle.y-paddle.h/2-b.r-2;b.vx=0;b.vy=0;b.trail.length=0;
+  }
+  function launchServe(){
+    if(!running||playerPaused||pausedForWave||!awaitingLaunch)return;
+    const b=balls.find(ball=>ball.held);if(!b)return;
+    const side=Math.random()<.5?-1:1,angle=-Math.PI/2+side*rand(.35,.50),sp=ballBaseSpeed();b.held=false;b.vx=Math.cos(angle)*sp;b.vy=Math.sin(angle)*sp;awaitingLaunch=false;state.waveStartTime=performance.now()/1000;prepareScareForWave();burst(b.x,b.y,COLORS.cyan,10,180);music?.onBallRelaunch();
   }
 
   function updatePaddleWidth(){
@@ -526,6 +545,7 @@
     if(scareFreeze>0){scareFreeze=Math.max(0,scareFreeze-dt);return;}
 
     paddle.lastX=paddle.x; const desired=clamp(paddle.targetX,paddle.w/2,WORLD_W-paddle.w/2); const follow=1-Math.exp(-dt/.042); paddle.x+=(desired-paddle.x)*follow; paddle.vx=(paddle.x-paddle.lastX)/Math.max(dt,.0001);
+    if(awaitingLaunch){anchorServeBall();return;}
     if(state.comboTimer>0){state.comboTimer-=dt;if(state.comboTimer<=0)resetCombo();}
 
     updatePortalsAndGravity(dt); updateBalls(dt); updateLasers(dt); updateGas(dt); updatePickups(dt); updateAutoWeapons(dt); processDeferredBrickHits();
@@ -534,6 +554,7 @@
   }
 
   function updateTimedEffects(dt){
+    if(awaitingLaunch)return;
     let widthDirty=false;
     for(const k of Object.keys(state.effects)){if(state.effects[k]>0){state.effects[k]=Math.max(0,state.effects[k]-dt);if((k==='tinyHands'||k==='ohDear')&&state.effects[k]===0)widthDirty=true;}}
     state.scoreRiskMult=state.effects.tinyHands>0?3:1;
@@ -542,7 +563,7 @@
   }
 
   function updatePendingStorm(dt){
-    if(!running||!pendingStorm.length)return;
+    if(!running||awaitingLaunch||!pendingStorm.length)return;
     for(let i=pendingStorm.length-1;i>=0;i--){const s=pendingStorm[i];s.delay-=dt;if(s.delay<=0){spawnStormBall();pendingStorm.splice(i,1);}}
   }
 
@@ -764,7 +785,7 @@
 
   function startNextWave(){
     if(pausedForWave||!running)return;pausedForWave=true;const now=performance.now()/1000,clear=Math.max(0,30-(now-state.waveStartTime));state.score+=Math.round(500*state.wave+clear*20*state.wave);showEvent(`WAVE ${state.wave} CLEAR`,500);flash('#5ff8ff',.25);music?.onWaveClear(state.wave);
-    setTimeout(()=>{if(!running)return;state.wave++;state.lifeDropCooldown=Math.max(0,state.lifeDropCooldown-1);const retained=Math.min(4,Math.max(1,balls.filter(b=>!b.chungus).length));balls.length=0;lasers.length=0;pickups.length=0;gasClouds.length=0;buildWave(state.wave);for(let i=0;i<retained;i++)spawnBall(true,(i-(retained-1)/2)*.12);state.waveStartTime=performance.now()/1000;pausedForWave=false;showToast(`WAVE ${state.wave} · ${stageTheme().name}`);music?.onWaveStart(stageTheme().name,state.wave);},950);
+    setTimeout(()=>{if(!running)return;state.wave++;state.lifeDropCooldown=Math.max(0,state.lifeDropCooldown-1);balls.length=0;lasers.length=0;pickups.length=0;gasClouds.length=0;buildWave(state.wave);pausedForWave=false;prepareWaveServe();showToast(`WAVE ${state.wave} · CLICK OR TAP TO LAUNCH`);music?.onWaveStart(stageTheme().name,state.wave);},950);
   }
   function resetPowerupsOnDeath(){
     state.modifiers={unit:0,pew:0,bigBall:0,boom:0,shotgun:0,magnet:0,chain:0,fart:0,worm:0,laserBall:0};
@@ -852,7 +873,7 @@
 
   function render(){
     ctx.setTransform(dpr,0,0,dpr,0,0);ctx.fillStyle='#020106';ctx.fillRect(0,0,cssW,cssH);ctx.save();ctx.translate(offsetX,offsetY);ctx.scale(scale,scale);if(shake>0)ctx.translate(rand(-shake/2,shake/2),rand(-shake/2,shake/2));
-    drawBackground();drawHUD();drawPortalsGravity();drawBricks();drawObstacles();drawPickups();drawGas();drawLasers();drawPaddle();drawBalls();drawEffects();drawFloaters();drawTimedLabels();
+    drawBackground();drawHUD();drawPortalsGravity();drawBricks();drawObstacles();drawPickups();drawGas();drawLasers();drawPaddle();drawBalls();drawEffects();drawFloaters();drawTimedLabels();drawLaunchPrompt();
     if(screenFlash>0){ctx.save();ctx.globalAlpha=Math.min(.55,screenFlash*.38);ctx.fillStyle=screenFlashColor;ctx.fillRect(0,0,WORLD_W,WORLD_H);ctx.restore();}
     ctx.restore();
     updateControlThumb();
@@ -1103,6 +1124,11 @@
       const timeout=setTimeout(()=>resolve(null),1500);
       window.addEventListener('poopcade-api-ready',()=>{clearTimeout(timeout);resolve(window.PoopcadeAPI||null);},{once:true});
     });
+  }
+
+  function drawLaunchPrompt(){
+    if(!running||!awaitingLaunch)return;
+    ctx.save();ctx.textAlign='center';ctx.textBaseline='middle';ctx.font='1000 24px system-ui,sans-serif';ctx.fillStyle='#ffffff';ctx.shadowBlur=20;ctx.shadowColor=COLORS.cyan;ctx.fillText('CLICK OR TAP TO LAUNCH',WORLD_W/2,paddle.y-92);ctx.shadowBlur=0;ctx.font='800 13px system-ui,sans-serif';ctx.fillStyle='rgba(255,255,255,.62)';ctx.fillText('MOVE THE PADDLE TO AIM YOUR SERVE',WORLD_W/2,paddle.y-64);ctx.restore();
   }
   async function submitCompletedRun(){
     if(submissionStarted||!clientRunId)return;
