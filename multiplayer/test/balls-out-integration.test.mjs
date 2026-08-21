@@ -22,7 +22,11 @@ test("BALLS OUT is registered across game, scoring, leaderboard, presence, and o
   assert.match(game, /jumpscare-scream\.mp3/);
   assert.match(game, /id="pauseButton"/);
   assert.match(game, /id="endRunButton"/);
+  assert.match(game, /Your run writes the soundtrack/);
+  assert.match(game, /THE GAME DROPS THE BEAT/);
   assert.match(homepage, /Game 04 · Single player/);
+  assert.match(homepage, /live electronic banger/);
+  assert.match(homepage, /Live soundtrack/);
   assert.match(api, /submitGameRun\("balls-out", run\)/);
   assert.match(presence, /\["\/games\/balls-out\/", "balls-out"\]/);
   assert.match(worker, /'\/games\/balls-out\/index\.html'/);
