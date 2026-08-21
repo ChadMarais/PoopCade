@@ -39,7 +39,7 @@ test("cross-map auto-join hides the lobby before modules and artwork load", asyn
 
 test("Murderball cache fallback never ignores version query strings", async () => {
   const source = await import("node:fs/promises").then(({ readFile }) => readFile(new URL("../../service-worker.js", import.meta.url), "utf8"));
-  assert.match(source, /shell-v28/);
+  assert.match(source, /shell-v29/);
   assert.match(source, /new Request\(request, \{ cache: 'no-store' \}\)/);
   assert.doesNotMatch(source, /caches\.match\(request, \{ ignoreSearch: true \}\)/);
   assert.match(source, /if \(request\.mode === 'navigate'\).*caches\.match\('\/index\.html'\)/);

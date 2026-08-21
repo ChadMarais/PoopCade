@@ -68,7 +68,7 @@
   @keyframes scareNoise{0%{transform:translate(0,0)}25%{transform:translate(8px,-4px)}50%{transform:translate(-6px,3px)}75%{transform:translate(4px,6px)}}
 
   #version{position:absolute;left:10px;bottom:8px;z-index:2;font-size:10px;color:rgba(255,255,255,.22);pointer-events:none}
-  #musicDebug{position:absolute;left:10px;top:10px;z-index:60;margin:0;padding:8px 10px;border:1px solid rgba(95,248,255,.3);border-radius:8px;color:#bffcff;background:rgba(0,0,0,.78);font:10px/1.45 ui-monospace,monospace;pointer-events:none;white-space:pre-wrap}
+  #musicDebug{position:absolute;left:10px;top:10px;z-index:60;max-width:calc(100% - 20px);margin:0;padding:8px 10px;border:1px solid rgba(95,248,255,.3);border-radius:8px;color:#bffcff;background:rgba(0,0,0,.82);font:10px/1.45 ui-monospace,monospace;pointer-events:none;white-space:pre-wrap}
   #gameOverStats{margin:18px 0 22px;font-size:18px;line-height:1.65}
 
   #controlDeck{display:none;position:absolute;left:0;right:0;bottom:0;height:calc(104px + env(safe-area-inset-bottom));padding:12px 18px calc(12px + env(safe-area-inset-bottom));background:linear-gradient(180deg,#0b0718,#05030c);border-top:1px solid rgba(95,248,255,.16);box-shadow:0 -14px 40px rgba(0,0,0,.48);z-index:30;touch-action:none;user-select:none}
@@ -207,7 +207,7 @@
   let controlTrackWidth=0,lastThumbPx=-999;
   let audioCtx=null, sfxBus=null, sfxCompressor=null, jumpscareBus=null, jumpscareCompressor=null, music=null, muted=false, lastHitSound=0;
   let screamBuffer=null, screamLoadPromise=null;
-  let lastMusicDebug=0,musicUpdateTimer=0;
+  let lastMusicDebug=0,musicUpdateTimer=0,pendingSmashTimer=0;
   let bestScore = Number(localStorage.getItem('ballsOutBest') || 0);
 
   const state = {
@@ -279,6 +279,9 @@
   controlTrack.addEventListener('pointerup',releaseDeck); controlTrack.addEventListener('pointercancel',releaseDeck);
 
   document.addEventListener('keydown',e=>{
+    if(musicDebugEnabled&&/^Digit[1-7]$/.test(e.code)){
+      ensureAudio();const kind=['LOW','MEDIUM','HIGH','EXPLOSION','MULTIBALL','SMASH','DEATH'][Number(e.code.slice(-1))-1];music?.debugTrigger(kind);e.preventDefault();return;
+    }
     if((e.key==='Escape'||e.key.toLowerCase()==='p')&&running){e.preventDefault();playerPaused?resumeGame():pauseGame();return;}
     if((e.code==='Space'||e.code==='Enter')&&running&&awaitingLaunch&&!playerPaused){e.preventDefault();launchServe();return;}
     if(e.code==='Space' && running && !playerPaused && state.smashReady){e.preventDefault();activateSmash();}
@@ -386,6 +389,7 @@
   }
 
   function startGame(){
+    if(pendingSmashTimer){clearTimeout(pendingSmashTimer);pendingSmashTimer=0;}
     ensureAudio(); startOverlay.classList.add('hidden'); gameOverOverlay.classList.add('hidden'); hideJumpscare(); scareCount=0;lastScareWave=0;nextScareWave=Math.random()<.5?2:3;scareTimer=Infinity;
     clientRunId=crypto.randomUUID?.()||null;runStartedAt=performance.now();runPausedAt=0;totalPausedMs=0;submissionStarted=false;musicUpdateTimer=0;scoreSaveStatus.textContent='';scoreSaveStatus.dataset.state='idle';
     Object.assign(state,{score:0,wave:1,lives:3,comboCount:0,comboMult:1,comboTimer:0,smash:0,smashReady:false,waveStartTime:performance.now()/1000,pityCounter:0,lifePity:0,lifeDropCooldown:0,scoreRiskMult:1,smashCycle:0});
@@ -397,7 +401,7 @@
   }
 
   function endGame(){
-    if(!running)return;if(playerPaused&&runPausedAt){totalPausedMs+=performance.now()-runPausedAt;runPausedAt=0;}running=false;playerPaused=false; hideJumpscare(); smashButton.classList.remove('ready');gameControls.classList.remove('active');pauseOverlay.classList.add('hidden');music?.onGameOver();
+    if(!running)return;if(pendingSmashTimer){clearTimeout(pendingSmashTimer);pendingSmashTimer=0;}if(playerPaused&&runPausedAt){totalPausedMs+=performance.now()-runPausedAt;runPausedAt=0;}running=false;playerPaused=false; hideJumpscare(); smashButton.classList.remove('ready');gameControls.classList.remove('active');pauseOverlay.classList.add('hidden');music?.onGameOver();
     if(state.score>bestScore){bestScore=Math.floor(state.score);localStorage.setItem('ballsOutBest',String(bestScore));updateBestDisplay();}
     statsEl.innerHTML=`<strong>${Math.floor(state.score).toLocaleString()}</strong> points<br>Reached <strong>Wave ${state.wave}</strong><br><span style="color:#aaa4c0;font-size:14px">Local best: ${Math.floor(bestScore).toLocaleString()}</span>`;
     gameOverOverlay.classList.remove('hidden');
@@ -539,8 +543,8 @@
     if(playerPaused)return;
     elapsed+=dt;bgPulse+=dt;huePhase+=dt;
     updateTimedEffects(dt); updatePendingStorm(dt); updateEffects(dt); updateJumpscare(dt);
-    musicUpdateTimer+=dt;if(running&&music&&musicUpdateTimer>=.1){musicUpdateTimer=0;music.update({balls:balls.length,combo:state.comboMult,effects:{...state.modifiers,...state.effects}});}
-    if(musicDebugEnabled&&music&&elapsed-lastMusicDebug>.25){lastMusicDebug=elapsed;const d=music.debugState();musicDebugEl.textContent=`${d.theme} · ${d.bpm} BPM\nINTENSITY ${d.intensity} · VOICES ${d.voices}\nBALLS ${d.balls} · COMBO x${d.combo}\nROOT ${d.root} · SCALE ${d.scale.join(',')}`;}
+    musicUpdateTimer+=dt;if(running&&music&&musicUpdateTimer>=.1){musicUpdateTimer=0;music.update({balls:balls.length,combo:state.comboMult,smashReady:state.smashReady,effects:{...state.modifiers,...state.effects}});}
+    if(musicDebugEnabled&&music&&elapsed-lastMusicDebug>.25){lastMusicDebug=elapsed;const d=music.debugState();musicDebugEl.textContent=`BPM ${d.bpm} · BAR ${d.bar} · STEP ${d.step}\nSTATE ${d.section} · ENERGY ${d.energy} · DENSITY ${d.density}\nBALLS ${d.balls} · COMBO x${d.combo} · VOICES ${d.voices}\nCURRENT PHRASE\n${d.phraseText}\n1 LOW · 2 MED · 3 HIGH · 4 BOOM · 5 MULTI · 6 SMASH · 7 DEATH`;}
     if(!running||pausedForWave)return;
     if(scareFreeze>0){scareFreeze=Math.max(0,scareFreeze-dt);return;}
 
@@ -732,7 +736,7 @@
     showEvent('NUCLEAR OPTION',1100);flash('#fff6a0',1.3);shake=18;sfx('nuke');
     const alive=bricks.filter(b=>b.alive).sort(()=>Math.random()-.5);
     const count=Math.min(28,Math.max(8,Math.ceil(alive.length*.26)));
-    music?.onExplosion(count,{x:WORLD_W/2,y:WORLD_H*.45},2.2);
+    music?.onExplosion(count,{x:WORLD_W/2,y:WORLD_H*.45},2.2,'nuclear');
     for(const br of alive.slice(0,count))deferredBrickHits.push({brick:br,damage:3,cause:'nuclear',x:br.x+br.w/2,y:br.y+br.h/2});
     spawnBlastVisual(WORLD_W/2,WORLD_H*.45,COLORS.yellow,230,1.8);
     spawnBlastVisual(WORLD_W*.28,WORLD_H*.39,COLORS.orange,120,.9);
@@ -748,7 +752,7 @@
     if(!br.alive)return;br.alive=false;const cx=br.x+br.w/2,cy=br.y+br.h/2,base=br.maxHp===3?450:br.maxHp===2?250:100;bumpCombo();const chaosBonus=1+Math.min(.30,Math.max(0,balls.length-1)*.03),panicScore=state.effects.panic>0?3:1,points=Math.round(base*state.comboMult*chaosBonus*state.scoreRiskMult*panicScore);state.score+=points;
     if(!['smash','smashChain'].includes(cause))state.smash=Math.min(100,state.smash+(br.maxHp===3?2.8:br.maxHp===2?2.2:1.6));if(state.smash>=100){state.smash=100;state.smashReady=true;updateSmashButton();}
     if(!['smash','smashChain','nuclear'].includes(cause))maybeDrop(br);
-    burst(cx,cy,brickColor(br),br.maxHp===3?24:16,br.maxHp===3?320:250);floaters.push({x:cx,y:cy,text:`+${points}`,life:1,color:'#fff'});shake=Math.max(shake,br.maxHp===3?4.8:3.2);sfx('break');music?.onBrickDestroyed(br,{x:cx,y:cy});
+    burst(cx,cy,brickColor(br),br.maxHp===3?24:16,br.maxHp===3?320:250);floaters.push({x:cx,y:cy,text:`+${points}`,life:1,color:'#fff'});shake=Math.max(shake,br.maxHp===3?4.8:3.2);sfx('break');music?.onBrickDestroyed(br,{x:cx,y:cy},cause,state.comboMult);
 
     const boom=effectiveStacks('boom');
     if(boom>0&&!['boom','chainBoom','smashChain','smash','nuclear'].includes(cause)){
@@ -773,7 +777,7 @@
   function createExplosion(x,y,radius,damage=1,cause='boom',chain=false){
     const color=cause==='smashChain'?COLORS.magenta:cause==='chainBoom'?COLORS.cyan:COLORS.violet;
     spawnBlastVisual(x,y,color,radius,cause==='smashChain'?1.05:.85);
-    music?.onExplosion(Math.max(1,Math.round(radius/18)),{x,y},radius/72);
+    music?.onExplosion(Math.max(1,Math.round(radius/18)),{x,y},radius/72,cause);
     for(const br of bricks){if(!br.alive)continue;const cx=br.x+br.w/2,cy=br.y+br.h/2;if(Math.hypot(cx-x,cy-y)<=radius)deferredBrickHits.push({brick:br,damage,cause:(cause==='boom'?'boom':cause),x:cx,y:cy});}
   }
   function processDeferredBrickHits(){
@@ -796,6 +800,7 @@
     updatePaddleWidth();
   }
   function loseLife(){
+    if(pendingSmashTimer){clearTimeout(pendingSmashTimer);pendingSmashTimer=0;}
     state.lives--;resetCombo();sfx('life');music?.onLifeLost();
     if(state.lives<=0){endGame();return;}
     resetPowerupsOnDeath();
@@ -806,7 +811,11 @@
   function updateSmashButton(){smashButton.classList.toggle('ready',running&&!playerPaused&&state.smashReady);}
   const smashEvents=['BALL STORM','BRICKPOCALYPSE','LASER DISCO','BIG CHUNGUS','PANIC MODE'];
   function activateSmash(){
-    if(!running||playerPaused||!state.smashReady||scareActive>0)return;state.smash=0;state.smashReady=false;updateSmashButton();const name=smashEvents[state.smashCycle%smashEvents.length];state.smashCycle++;showEvent(name,950);bgPulse+=4;shake=14;flash(name==='PANIC MODE'?'#ff3dbf':'#ffffff',.65);sfx('smash');music?.onSmashEvent(name);
+    if(!running||playerPaused||!state.smashReady||scareActive>0||pendingSmashTimer)return;state.smash=0;state.smashReady=false;updateSmashButton();const name=smashEvents[state.smashCycle%smashEvents.length];state.smashCycle++;showEvent(name,950);bgPulse+=.8;const cue=music?.onSmashEvent(name),delay=Math.max(0,cue?.delayMs||0);
+    if(delay>24)pendingSmashTimer=setTimeout(()=>{pendingSmashTimer=0;if(running)landSmash(name);},delay);else landSmash(name);
+  }
+  function landSmash(name){
+    bgPulse+=4;shake=14;flash(name==='PANIC MODE'?'#ff3dbf':'#ffffff',.65);sfx('smash');
     if(name==='BALL STORM'){const room=MAX_BALLS-balls.length,count=Math.min(room,8+Math.floor(Math.random()*5));for(let i=0;i<count;i++)pendingStorm.push({delay:i*.055});}
     else if(name==='BRICKPOCALYPSE')state.effects.brickpocalypse=6;
     else if(name==='LASER DISCO')state.effects.laserDisco=7;
