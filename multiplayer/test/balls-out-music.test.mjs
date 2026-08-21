@@ -37,6 +37,9 @@ test("music has a 4/4 sixteenth-note clock, phrase memory, voice limits, and des
   assert.match(source, /duckForScare\(duration=\.9\)/);
   assert.match(source, /createDynamicsCompressor/);
   assert.match(source, /sidechain\(time\)/);
+  assert.match(source, /section!==SECTIONS\.CALM&&section!==SECTIONS\.RELEASE/);
+  const waveStart = source.match(/onWaveStart\([^\n]+/)[0];
+  assert.doesNotMatch(waveStart, /padChord/, "the sustained pad must not play at wave start");
 });
 
 test("gameplay emits semantic music events without depending on audio callbacks", async () => {
@@ -114,7 +117,7 @@ test("dynamic music event methods run safely against the Web Audio contract", as
     {x:850,y:220,tough:2,speed:640},
   ]);
   assert.equal(composed.composition.melodyBuffer.length,1,"a destruction burst becomes one melody input");
-  composed.evolveMotif();
+  composed.evolveBar();
   assert.ok(composed.composition.motif.length>=3&&composed.composition.motif.length<=8);
 
   composed.onSmashEvent("LASER DISCO");
