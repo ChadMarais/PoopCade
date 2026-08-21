@@ -37,9 +37,10 @@ test("music has a 4/4 sixteenth-note clock, phrase memory, voice limits, and des
   assert.match(source, /duckForScare\(duration=\.9\)/);
   assert.match(source, /createDynamicsCompressor/);
   assert.match(source, /sidechain\(time\)/);
-  assert.match(source, /section!==SECTIONS\.CALM&&section!==SECTIONS\.RELEASE/);
+  assert.match(source, /section===SECTIONS\.BUILD\|\|section===SECTIONS\.DROP/);
   const waveStart = source.match(/onWaveStart\([^\n]+/)[0];
   assert.doesNotMatch(waveStart, /padChord/, "the sustained pad must not play at wave start");
+  assert.doesNotMatch(waveStart, /riser|pluck|bassPulse/, "wave start must use percussion instead of synth sweeps");
 });
 
 test("gameplay emits semantic music events without depending on audio callbacks", async () => {
